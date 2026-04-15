@@ -5,6 +5,8 @@ import SignatureCanvas from 'react-signature-canvas'
 import { getFormInstance } from '../api/forms'
 import { approveForm, rejectForm, sendBackForm, getPendingApprovals } from '../api/approvals'
 import { useAuth } from '../context/AuthContext'
+import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
 import Card, { CardHeader } from '../components/ui/Card'
 import Badge from '../components/ui/Badge'
 import Button from '../components/ui/Button'
@@ -24,12 +26,11 @@ function ChainStep({ step, isLast }) {
   const isSentBack = step.status === 'Sent Back' || step.status === 'sent_back' || step.status === 'SendBack'
   const isSkipped  = step.status === 'Skipped'  || step.status === 'skipped'
 
-  const ringCls = isApproved ? 'bg-emerald-100 text-emerald-600 ring-1 ring-emerald-300'
-                : isRejected ? 'bg-red-100 text-red-600 ring-1 ring-red-300'
-                : isSentBack ? 'bg-orange-100 text-orange-600 ring-1 ring-orange-300'
-                : isActive   ? 'bg-amber-100 text-amber-600 ring-2 ring-amber-300'
-                : isSkipped  ? 'bg-slate-100 text-slate-400 ring-1 ring-slate-200'
-                :              'bg-slate-100 text-slate-400 ring-1 ring-slate-200'
+  const ringCls = isApproved ? 'bg-emerald-100 text-emerald-600 ring-1 ring-emerald-300 dark:bg-emerald-900/40 dark:text-emerald-400 dark:ring-emerald-700'
+                : isRejected ? 'bg-red-100 text-red-600 ring-1 ring-red-300 dark:bg-red-900/40 dark:text-red-400 dark:ring-red-700'
+                : isSentBack ? 'bg-orange-100 text-orange-600 ring-1 ring-orange-300 dark:bg-orange-900/40 dark:text-orange-400 dark:ring-orange-700'
+                : isActive   ? 'bg-amber-100 text-amber-600 ring-2 ring-amber-300 dark:bg-amber-900/40 dark:text-amber-400 dark:ring-amber-600'
+                :              'bg-muted text-muted-foreground ring-1 ring-border'
 
   const Icon = isApproved ? CheckCircle2
              : isRejected ? AlertCircle
@@ -40,38 +41,38 @@ function ChainStep({ step, isLast }) {
   return (
     <div className="flex gap-4">
       <div className="flex flex-col items-center">
-        <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${ringCls}`}>
+        <div className={cn('w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0', ringCls)}>
           <Icon size={15} />
         </div>
-        {!isLast && <div className="w-px flex-1 min-h-6 bg-slate-200 my-1" />}
+        {!isLast && <div className="w-px flex-1 min-h-6 bg-border my-1" />}
       </div>
       <div className="pb-4 flex-1">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <p className={`text-sm font-semibold ${isActive ? 'text-slate-900' : 'text-slate-700'}`}>
+            <p className={cn('text-sm font-semibold', isActive ? 'text-foreground' : 'text-foreground/80')}>
               {step.step_label || `Step ${step.step_order}`}
             </p>
             {step.approver && (
-              <p className="text-xs text-slate-500">{step.approver.name}</p>
+              <p className="text-xs text-muted-foreground">{step.approver.name}</p>
             )}
             {step.delegated_from && (
-              <p className="text-xs text-amber-600">Acting for {step.delegated_from.name}</p>
+              <p className="text-xs text-amber-500">Acting for {step.delegated_from.name}</p>
             )}
           </div>
           <div className="flex-shrink-0">
             {isActive
-              ? <span className="text-xs font-semibold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">Awaiting decision</span>
+              ? <span className="text-xs font-semibold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full dark:bg-amber-900/40 dark:text-amber-400">Awaiting decision</span>
               : <Badge label={step.status} />
             }
           </div>
         </div>
         {step.signed_at && (
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="text-xs text-muted-foreground mt-0.5">
             {new Date(step.signed_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
           </p>
         )}
         {step.notes && (
-          <div className="mt-1.5 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-600 italic">
+          <div className="mt-1.5 bg-muted/50 border border-border rounded-lg px-3 py-2 text-xs text-muted-foreground italic">
             "{step.notes}"
           </div>
         )}
@@ -92,52 +93,50 @@ function VersionHistory({ versions, currentVersion }) {
     <Card>
       <button
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-5 py-3.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+        className="w-full flex items-center justify-between px-5 py-3.5 text-sm font-semibold text-foreground hover:bg-muted/40 transition-colors rounded-xl"
       >
         <div className="flex items-center gap-2">
-          <History size={15} className="text-slate-400" />
+          <History size={15} className="text-muted-foreground" />
           Version History
-          <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">
+          <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">
             {versions.length} versions
           </span>
         </div>
-        <span className="text-xs text-slate-400">{open ? 'Collapse ▲' : 'Expand ▼'}</span>
+        <span className="text-xs text-muted-foreground">{open ? 'Collapse ▲' : 'Expand ▼'}</span>
       </button>
 
       {open && (
-        <div className="border-t border-slate-100 divide-y divide-slate-100">
+        <div className="border-t border-border divide-y divide-border">
           {sorted.map(ver => {
             const isCurrent = ver.version_number === currentVersion
             const sentBackStep = ver.approval_instances?.find(
               a => a.status === 'sent_back' || a.status === 'Sent Back' || a.status === 'SendBack'
             )
             return (
-              <div key={ver.id} className={`px-5 py-3 ${isCurrent ? 'bg-brand-50' : ''}`}>
+              <div key={ver.id} className={cn('px-5 py-3', isCurrent && 'bg-primary/5')}>
                 <div className="flex items-center gap-2 mb-1">
-                  <span className={`text-xs font-bold px-2 py-0.5 rounded ${
-                    isCurrent ? 'bg-brand-600 text-white' : 'bg-slate-200 text-slate-600'
-                  }`}>
+                  <span className={cn('text-xs font-bold px-2 py-0.5 rounded',
+                    isCurrent ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
+                  )}>
                     v{ver.version_number}
                   </span>
-                  {isCurrent && <span className="text-xs text-brand-600 font-medium">Current</span>}
-                  <span className="text-xs text-slate-400 ml-auto">
+                  {isCurrent && <span className="text-xs text-primary font-medium">Current</span>}
+                  <span className="text-xs text-muted-foreground ml-auto">
                     {ver.created_at && new Date(ver.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                   </span>
                 </div>
-
                 {ver.change_notes && (
-                  <p className="text-xs text-slate-600 italic">Submitter note: "{ver.change_notes}"</p>
+                  <p className="text-xs text-muted-foreground italic">Submitter note: "{ver.change_notes}"</p>
                 )}
-
                 {sentBackStep && (
-                  <div className="mt-1.5 flex items-start gap-1.5 bg-orange-50 border border-orange-200 rounded px-2.5 py-1.5">
+                  <div className="mt-1.5 flex items-start gap-1.5 bg-orange-50 border border-orange-200 rounded px-2.5 py-1.5 dark:bg-orange-900/20 dark:border-orange-800">
                     <RotateCcw size={11} className="text-orange-500 mt-0.5 flex-shrink-0" />
                     <div>
-                      <p className="text-xs text-orange-800 font-medium">
+                      <p className="text-xs text-orange-800 font-medium dark:text-orange-300">
                         Sent back by {sentBackStep.approver?.name || 'approver'}
                       </p>
                       {sentBackStep.notes && (
-                        <p className="text-xs text-orange-700 italic mt-0.5">"{sentBackStep.notes}"</p>
+                        <p className="text-xs text-orange-700 italic mt-0.5 dark:text-orange-400">"{sentBackStep.notes}"</p>
                       )}
                     </div>
                   </div>
@@ -174,17 +173,20 @@ function SignatureCapture({ value, onChange }) {
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <label className="text-sm font-medium text-slate-700 flex items-center gap-1.5">
-          <PenTool size={14} className="text-slate-400" />
-          Signature <span className="text-red-500">*</span>
+        <label className="text-sm font-medium text-foreground flex items-center gap-1.5">
+          <PenTool size={14} className="text-muted-foreground" />
+          Signature <span className="text-destructive ml-0.5">*</span>
         </label>
         {signed && (
-          <button onClick={handleClear} className="text-xs text-slate-400 hover:text-red-500 flex items-center gap-1 transition-colors">
+          <button onClick={handleClear} className="text-xs text-muted-foreground hover:text-destructive flex items-center gap-1 transition-colors">
             <Trash2 size={11} /> Clear
           </button>
         )}
       </div>
-      <div className="border-2 border-dashed border-slate-300 rounded-lg bg-slate-50 overflow-hidden relative hover:border-brand-400 transition-colors">
+      <div className={cn(
+        'border-2 border-dashed rounded-lg bg-muted/20 overflow-hidden relative transition-colors',
+        signed ? 'border-border' : 'border-muted-foreground/30 hover:border-primary/60'
+      )}>
         <SignatureCanvas
           ref={sigRef}
           onEnd={handleEnd}
@@ -195,16 +197,16 @@ function SignatureCapture({ value, onChange }) {
             style: { touchAction: 'none' }
           }}
           backgroundColor="transparent"
-          penColor="#1e293b"
+          penColor="currentColor"
         />
         {!signed && (
-          <p className="absolute inset-0 flex items-center justify-center text-xs text-slate-400 pointer-events-none select-none">
+          <p className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground pointer-events-none select-none">
             Sign here with your mouse or touch
           </p>
         )}
       </div>
       {!signed && (
-        <p className="text-xs text-red-500">A signature is required to proceed.</p>
+        <p className="text-xs text-destructive">A signature is required to proceed.</p>
       )}
     </div>
   )
@@ -213,18 +215,10 @@ function SignatureCapture({ value, onChange }) {
 // ── Approver fields section ───────────────────────────────────────────────────
 
 function ApproverFields({ fields, fieldValues, myHierarchyLevel, onChange }) {
-  // Match fields assigned to this approver's level
-  const LEVEL_MAP = {
-    manager:    'line_manager',
-    sn_manager: 'sn_manager',
-    hod:        'hod',
-  }
+  const LEVEL_MAP = { manager: 'line_manager', sn_manager: 'sn_manager', hod: 'hod' }
   const myFilledBy = LEVEL_MAP[myHierarchyLevel] || null
 
-  const myFields = fields.filter(f =>
-    f.filled_by === myFilledBy || f.filled_by === 'any'
-  )
-
+  const myFields = fields.filter(f => f.filled_by === myFilledBy || f.filled_by === 'any')
   if (!myFields.length) return null
 
   return (
@@ -285,22 +279,18 @@ export default function ApprovalAction() {
     refetchInterval: 15_000
   })
 
-  // Get hierarchy_level for this user+form from the pending queue cache
   const { data: pending = [] } = useQuery({
     queryKey: ['approvals', 'pending'],
     queryFn: () => getPendingApprovals().then(r => r.data),
   })
-  const pendingItem = pending.find(p => p.form_instance_id === formInstanceId)
+  const pendingItem      = pending.find(p => p.form_instance_id === formInstanceId)
   const myHierarchyLevel = pendingItem?.hierarchy_level || null
 
   const mutation = useMutation({
     mutationFn: () => {
-      if (action === 'approve' && !signature) {
-        throw new Error('Signature is required.')
-      }
-      if ((action === 'reject' || action === 'send_back') && !notes.trim()) {
+      if (action === 'approve' && !signature) throw new Error('Signature is required.')
+      if ((action === 'reject' || action === 'send_back') && !notes.trim())
         throw new Error('Notes are required when rejecting or sending back.')
-      }
 
       const fieldValuesArr = Object.entries(approverValues).map(([form_field_id, value]) => ({
         form_field_id, value: value != null ? String(value) : ''
@@ -314,20 +304,24 @@ export default function ApprovalAction() {
     onSuccess: () => {
       qc.invalidateQueries(['approvals'])
       qc.invalidateQueries(['dashboard'])
+      toast.success(
+        action === 'approve'   ? 'Request approved.' :
+        action === 'reject'    ? 'Request rejected.' :
+                                 'Request returned for correction.'
+      )
       navigate('/approvals')
     },
     onError: (err) => {
-      setError(err.message || err.response?.data?.detail || 'Action failed.')
+      const msg = err.message || err.response?.data?.detail || 'Action failed.'
+      setError(msg)
+      toast.error(msg)
     }
   })
 
-  const handleConfirm = () => {
-    setError('')
-    mutation.mutate()
-  }
+  const handleConfirm = () => { setError(''); mutation.mutate() }
 
   if (isLoading) return <div className="flex justify-center py-20"><Spinner /></div>
-  if (!instance) return <p className="text-slate-500 p-8">Form not found.</p>
+  if (!instance) return <p className="text-muted-foreground p-8">Form not found.</p>
 
   const currentVersion = instance.versions?.find(v => v.version_number === instance.current_version)
                       || instance.versions?.[instance.current_version - 1]
@@ -345,25 +339,27 @@ export default function ApprovalAction() {
 
       {/* Back + title */}
       <div className="flex items-center gap-3">
-        <button onClick={() => navigate('/approvals')}
-          className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors">
+        <button
+          onClick={() => navigate('/approvals')}
+          className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground transition-colors"
+        >
           <ChevronLeft size={20} />
         </button>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-xl font-bold text-slate-900 truncate">
+            <h1 className="text-xl font-bold text-foreground truncate">
               {instance.form_definition?.name || 'Form'}
             </h1>
             <Badge label={instance.current_status} />
             {instance.current_version > 1 && (
-              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-medium">
+              <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded font-medium">
                 v{instance.current_version} — revised
               </span>
             )}
           </div>
-          <p className="text-sm text-slate-500 mt-0.5">
+          <p className="text-sm text-muted-foreground mt-0.5">
             {instance.reference_number}
-            {instance.creator?.name && <span> · Submitted by <strong>{instance.creator.name}</strong></span>}
+            {instance.creator?.name && <span> · Submitted by <strong className="text-foreground">{instance.creator.name}</strong></span>}
           </p>
         </div>
       </div>
@@ -383,23 +379,23 @@ export default function ApprovalAction() {
         </Card>
       )}
 
-      {/* 2. Version history (collapsed by default) */}
+      {/* 2. Version history */}
       <VersionHistory versions={instance.versions} currentVersion={instance.current_version} />
 
       {/* 3. Form data */}
       <Card>
         <CardHeader title="Request Details" subtitle={`Version ${instance.current_version}`} />
         {fieldValues.length === 0 ? (
-          <p className="px-6 pb-6 text-sm text-slate-400">No field data available.</p>
+          <p className="px-6 pb-6 text-sm text-muted-foreground">No field data available.</p>
         ) : (
-          <div className="divide-y divide-slate-50">
+          <div className="divide-y divide-border/50">
             {fieldValues
               .filter(fv => fv.form_field?.filled_by === 'initiator' || !fv.form_field?.filled_by)
               .map(fv => (
                 <div key={fv.id} className="grid grid-cols-5 gap-4 px-6 py-3 text-sm">
-                  <span className="col-span-2 text-slate-500 font-medium">{fv.form_field?.field_label}</span>
-                  <span className="col-span-3 text-slate-800 break-words">
-                    {fv.value || <span className="text-slate-300">—</span>}
+                  <span className="col-span-2 text-muted-foreground font-medium">{fv.form_field?.field_label}</span>
+                  <span className="col-span-3 text-foreground break-words">
+                    {fv.value || <span className="text-muted-foreground/40">—</span>}
                   </span>
                 </div>
               ))}
@@ -427,26 +423,24 @@ export default function ApprovalAction() {
           <div className="p-6 space-y-5">
 
             {myStep.delegated_from && (
-              <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 dark:bg-amber-900/20 dark:border-amber-800 dark:text-amber-400">
                 You are acting on behalf of <strong>{myStep.delegated_from.name}</strong> under an active delegation.
               </div>
             )}
 
-            {/* Signature — always shown */}
             <SignatureCapture value={signature} onChange={setSignature} />
 
-            {/* Action buttons (pre-selection) */}
+            {/* Action buttons */}
             {!action && (
               <div className="flex flex-wrap gap-3 pt-1">
-                <Button onClick={() => { setAction('approve'); setError('') }}
-                  className="bg-emerald-600 hover:bg-emerald-700 border-emerald-600 text-white">
-                  <Check size={15} className="mr-1.5" /> Approve
+                <Button variant="success" onClick={() => { setAction('approve'); setError('') }}>
+                  <Check size={15} /> Approve
                 </Button>
-                <Button variant="danger" onClick={() => { setAction('reject'); setError('') }}>
-                  <X size={15} className="mr-1.5" /> Reject
+                <Button variant="destructive" onClick={() => { setAction('reject'); setError('') }}>
+                  <X size={15} /> Reject
                 </Button>
-                <Button variant="secondary" onClick={() => { setAction('send_back'); setError('') }}>
-                  <RotateCcw size={15} className="mr-1.5" /> Send Back for Correction
+                <Button variant="outline" onClick={() => { setAction('send_back'); setError('') }}>
+                  <RotateCcw size={15} /> Send Back for Correction
                 </Button>
               </div>
             )}
@@ -454,11 +448,11 @@ export default function ApprovalAction() {
             {/* Confirmation flow */}
             {action && (
               <div className="space-y-4">
-                <div className={`rounded-lg px-4 py-2.5 text-sm font-medium flex items-center gap-2 ${
-                  action === 'approve'   ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' :
-                  action === 'reject'    ? 'bg-red-50 text-red-800 border border-red-200' :
-                                          'bg-orange-50 text-orange-800 border border-orange-200'
-                }`}>
+                <div className={cn('rounded-lg px-4 py-2.5 text-sm font-medium flex items-center gap-2', {
+                  'bg-emerald-50 text-emerald-800 border border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-800': action === 'approve',
+                  'bg-red-50 text-red-800 border border-red-200 dark:bg-red-900/20 dark:text-red-300 dark:border-red-800': action === 'reject',
+                  'bg-orange-50 text-orange-800 border border-orange-200 dark:bg-orange-900/20 dark:text-orange-300 dark:border-orange-800': action === 'send_back',
+                })}>
                   {action === 'approve'   && <><Check size={15} /> Approving this request</>}
                   {action === 'reject'    && <><X size={15} /> Rejecting this request — permanent, no appeal</>}
                   {action === 'send_back' && <><RotateCcw size={15} /> Returning to submitter from step 1</>}
@@ -477,7 +471,7 @@ export default function ApprovalAction() {
                 />
 
                 {error && (
-                  <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2.5 text-sm text-red-700 flex items-center gap-2">
+                  <div className="bg-destructive/10 border border-destructive/30 rounded-lg px-3 py-2.5 text-sm text-destructive flex items-center gap-2">
                     <AlertCircle size={14} className="flex-shrink-0" /> {error}
                   </div>
                 )}
@@ -486,11 +480,8 @@ export default function ApprovalAction() {
                   <Button
                     onClick={handleConfirm}
                     loading={mutation.isPending}
-                    className={
-                      action === 'approve'   ? 'bg-emerald-600 hover:bg-emerald-700 border-emerald-600 text-white' :
-                      action === 'reject'    ? 'bg-red-600 hover:bg-red-700 border-red-600 text-white' :
-                      'bg-orange-500 hover:bg-orange-600 border-orange-500 text-white'
-                    }
+                    variant={action === 'approve' ? 'success' : action === 'reject' ? 'destructive' : 'default'}
+                    className={action === 'send_back' ? 'bg-orange-500 hover:bg-orange-600 text-white' : ''}
                   >
                     {action === 'approve'   ? 'Confirm Approval' :
                      action === 'reject'    ? 'Confirm Rejection' :
@@ -508,9 +499,9 @@ export default function ApprovalAction() {
 
       {/* No active step — view only */}
       {!isPending && (
-        <div className="text-center py-8 bg-white rounded-xl border border-slate-200">
-          <p className="text-sm text-slate-500">
-            This form is <strong>{instance.current_status}</strong> — no action required.
+        <div className="text-center py-8 bg-card rounded-xl border border-border">
+          <p className="text-sm text-muted-foreground">
+            This form is <strong className="text-foreground">{instance.current_status}</strong> — no action required.
           </p>
         </div>
       )}

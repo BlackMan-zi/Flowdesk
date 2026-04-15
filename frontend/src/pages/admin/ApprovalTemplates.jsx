@@ -5,6 +5,8 @@ import {
   updateApprovalTemplate, deleteApprovalTemplate
 } from '../../api/forms'
 import { listUsers, listRoles, listDepartments } from '../../api/users'
+import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
 import Card from '../../components/ui/Card'
 import Table from '../../components/ui/Table'
 import Button from '../../components/ui/Button'
@@ -14,10 +16,10 @@ import Spinner from '../../components/ui/Spinner'
 import Badge from '../../components/ui/Badge'
 import {
   Plus, Trash2, Search, X, Pencil, AlertTriangle,
-  ChevronDown, Check, GripVertical
+  ChevronDown, Check, GripVertical, GitBranch
 } from 'lucide-react'
 
-// ── Token-based match (word-order independent) ────────────────────────────────
+// ── Token search ──────────────────────────────────────────────────────────────
 
 function tokenMatch(query, ...fields) {
   const tokens = query.toLowerCase().split(/\s+/).filter(Boolean)
@@ -35,8 +37,6 @@ function ApproverCombobox({ step, onStepChange, users, roles, deptMap, hideSubmi
   const dropdownRef = useRef(null)
   const inputRef    = useRef(null)
 
-  // ── Open / position ───────────────────────────────────────────────────────
-
   const openDropdown = () => {
     const r = triggerRef.current?.getBoundingClientRect()
     if (r) {
@@ -51,21 +51,14 @@ function ApproverCombobox({ step, onStepChange, users, roles, deptMap, hideSubmi
     setTimeout(() => inputRef.current?.focus(), 20)
   }
 
-  // ── Close on outside click or scroll ──────────────────────────────────────
-
   useEffect(() => {
     if (!open) return
-
     const onClickOutside = (e) => {
       if (triggerRef.current?.contains(e.target)) return
       if (dropdownRef.current?.contains(e.target)) return
-      setOpen(false)
-      setQuery('')
+      setOpen(false); setQuery('')
     }
-
     const onScroll = () => { setOpen(false); setQuery('') }
-
-    // 'click' fires AFTER element onClick, so option selection completes first
     document.addEventListener('click', onClickOutside)
     document.addEventListener('scroll', onScroll, true)
     return () => {
@@ -74,12 +67,10 @@ function ApproverCombobox({ step, onStepChange, users, roles, deptMap, hideSubmi
     }
   }, [open])
 
-  // ── Options ───────────────────────────────────────────────────────────────
-
   const STANDARD = [
-    { id: 'manager',    label: 'Line Manager',         sublabel: "Submitter's direct manager",         role_type: 'Hierarchy',            hierarchy_level: 'manager',    role_id: null, specific_user_id: null },
-    { id: 'sn_manager', label: 'SN Manager',           sublabel: "Manager's manager (second-level)",   role_type: 'Hierarchy',            hierarchy_level: 'sn_manager', role_id: null, specific_user_id: null },
-    { id: 'hod',        label: 'Head of Department',   sublabel: 'HOD',                                role_type: 'Hierarchy',            hierarchy_level: 'hod',        role_id: null, specific_user_id: null },
+    { id: 'manager',    label: 'Line Manager',       sublabel: "Submitter's direct manager",        role_type: 'Hierarchy',            hierarchy_level: 'manager',    role_id: null, specific_user_id: null },
+    { id: 'sn_manager', label: 'SN Manager',         sublabel: "Manager's manager (second-level)",  role_type: 'Hierarchy',            hierarchy_level: 'sn_manager', role_id: null, specific_user_id: null },
+    { id: 'hod',        label: 'Head of Department', sublabel: 'HOD',                               role_type: 'Hierarchy',            hierarchy_level: 'hod',        role_id: null, specific_user_id: null },
     ...(!hideSubmission ? [{ id: 'selected', label: 'Selected at Submission', sublabel: 'Submitter picks when submitting', role_type: 'SelectedAtSubmission', hierarchy_level: null, role_id: null, specific_user_id: null }] : []),
   ]
 
@@ -91,9 +82,7 @@ function ApproverCombobox({ step, onStepChange, users, roles, deptMap, hideSubmi
         label: r.name,
         sublabel: `${r.role_category} — signs by whoever holds this position`,
         role_type: r.role_category,
-        hierarchy_level: null,
-        role_id: r.id,
-        specific_user_id: null,
+        hierarchy_level: null, role_id: r.id, specific_user_id: null,
       })),
     [roles]
   )
@@ -110,23 +99,17 @@ function ApproverCombobox({ step, onStepChange, users, roles, deptMap, hideSubmi
         sublabel: [deptStr, u.email].filter(Boolean).join(' · '),
         searchText: `${u.name} ${u.email} ${deptStr} ${u.roles?.map(r => r.name).join(' ') || ''}`,
         role_type: 'SpecificUser',
-        hierarchy_level: null,
-        role_id: null,
-        specific_user_id: u.id,
+        hierarchy_level: null, role_id: null, specific_user_id: u.id,
       }
     }),
     [users, deptMap]
   )
-
-  // ── Filtering ─────────────────────────────────────────────────────────────
 
   const q = query.trim()
   const filteredStandard = q ? STANDARD.filter(o => tokenMatch(q, o.label, o.sublabel)) : STANDARD
   const filteredRoles    = q ? roleOptions.filter(o => tokenMatch(q, o.label, o.sublabel)) : roleOptions
   const filteredUsers    = q ? userOptions.filter(o => tokenMatch(q, o.label, o.sublabel, o.searchText)) : userOptions
   const hasResults = filteredStandard.length + filteredRoles.length + filteredUsers.length > 0
-
-  // ── Display label for trigger ─────────────────────────────────────────────
 
   const display = useMemo(() => {
     const rt = step.role_type
@@ -146,51 +129,46 @@ function ApproverCombobox({ step, onStepChange, users, roles, deptMap, hideSubmi
     return { label: null, sub: null }
   }, [step, users, roles])
 
-  // ── Select ────────────────────────────────────────────────────────────────
-
   const select = (opt) => {
-    // Call parent updater directly with the full patch
     onStepChange({
       role_type:        opt.role_type       ?? '',
       hierarchy_level:  opt.hierarchy_level ?? '',
       role_id:          opt.role_id         ?? '',
       specific_user_id: opt.specific_user_id ?? '',
     })
-    setQuery('')
-    setOpen(false)
+    setQuery(''); setOpen(false)
   }
 
   const isSelected = (opt) => {
-    if (opt.role_type === 'Hierarchy')           return step.role_type === 'Hierarchy' && step.hierarchy_level === opt.hierarchy_level
+    if (opt.role_type === 'Hierarchy')            return step.role_type === 'Hierarchy' && step.hierarchy_level === opt.hierarchy_level
     if (opt.role_type === 'SelectedAtSubmission') return step.role_type === 'SelectedAtSubmission'
     if (opt.role_type === 'SpecificUser')         return step.specific_user_id === opt.specific_user_id
     return step.role_id === opt.role_id
   }
 
-  // ── Render ────────────────────────────────────────────────────────────────
-
   return (
-    // position:relative wrapper so the fixed dropdown knows where to start
     <div style={{ position: 'relative' }}>
-      {/* Trigger */}
       <button
         ref={triggerRef}
         type="button"
         onClick={openDropdown}
-        className={`w-full flex items-center gap-2 border rounded-lg px-3 py-2 bg-white text-left transition-colors
-          ${open ? 'border-brand-500 ring-2 ring-brand-200' : 'border-slate-300 hover:border-slate-400'}`}
+        className={cn(
+          'w-full flex items-center gap-2 border rounded-md px-3 py-2 bg-background text-left transition-colors',
+          open ? 'border-ring ring-1 ring-ring' : 'border-input hover:border-ring/60'
+        )}
       >
-        <Search size={13} className="text-slate-400 flex-shrink-0" />
+        <Search size={13} className="text-muted-foreground flex-shrink-0" />
         <span className="flex-1 min-w-0">
           {display.label
-            ? <><span className="block text-sm font-medium text-slate-800 truncate">{display.label}</span>
-                {display.sub && <span className="block text-xs text-slate-400 truncate">{display.sub}</span>}</>
-            : <span className="text-sm text-slate-400">Search by position, name, department…</span>}
+            ? <>
+                <span className="block text-sm font-medium text-foreground truncate">{display.label}</span>
+                {display.sub && <span className="block text-xs text-muted-foreground truncate">{display.sub}</span>}
+              </>
+            : <span className="text-sm text-muted-foreground">Search by position, name, department…</span>}
         </span>
-        <ChevronDown size={13} className={`text-slate-400 flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown size={13} className={cn('text-muted-foreground flex-shrink-0 transition-transform', open && 'rotate-180')} />
       </button>
 
-      {/* Dropdown — position:fixed escapes overflow clipping from modal */}
       {open && (
         <div
           ref={dropdownRef}
@@ -203,21 +181,21 @@ function ApproverCombobox({ step, onStepChange, users, roles, deptMap, hideSubmi
             zIndex: 9999,
             maxHeight: 300,
           }}
-          className="bg-white border border-slate-200 rounded-xl shadow-2xl flex flex-col overflow-hidden"
+          className="bg-popover border border-border rounded-xl shadow-2xl flex flex-col overflow-hidden"
         >
-          {/* Search */}
-          <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-100 bg-slate-50 flex-shrink-0">
-            <Search size={13} className="text-slate-400 flex-shrink-0" />
+          {/* Search input */}
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/30 flex-shrink-0">
+            <Search size={13} className="text-muted-foreground flex-shrink-0" />
             <input
               ref={inputRef}
               type="text"
               value={query}
               onChange={e => setQuery(e.target.value)}
-              placeholder="Type position, name, department or unit…"
-              className="flex-1 text-sm outline-none bg-transparent placeholder-slate-400"
+              placeholder="Type position, name, department…"
+              className="flex-1 text-sm outline-none bg-transparent text-foreground placeholder:text-muted-foreground"
             />
             {query && (
-              <button onClick={() => setQuery('')} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => setQuery('')} className="text-muted-foreground hover:text-foreground">
                 <X size={12} />
               </button>
             )}
@@ -225,30 +203,27 @@ function ApproverCombobox({ step, onStepChange, users, roles, deptMap, hideSubmi
 
           {/* Options */}
           <div className="overflow-y-auto flex-1">
-            {!hasResults && <p className="text-xs text-slate-400 text-center py-5">No match for "{query}"</p>}
-
+            {!hasResults && <p className="text-xs text-muted-foreground text-center py-5">No match for "{query}"</p>}
             {filteredStandard.length > 0 && (
-              <Group label="Standard Hierarchy">
+              <ComboGroup label="Standard Hierarchy">
                 {filteredStandard.map(opt => (
-                  <Opt key={opt.id} opt={opt} selected={isSelected(opt)} onSelect={() => select(opt)} />
+                  <ComboOpt key={opt.id} opt={opt} selected={isSelected(opt)} onSelect={() => select(opt)} />
                 ))}
-              </Group>
+              </ComboGroup>
             )}
-
             {filteredRoles.length > 0 && (
-              <Group label="Positions / Roles">
+              <ComboGroup label="Positions / Roles">
                 {filteredRoles.map(opt => (
-                  <Opt key={opt.id} opt={opt} selected={isSelected(opt)} onSelect={() => select(opt)} />
+                  <ComboOpt key={opt.id} opt={opt} selected={isSelected(opt)} onSelect={() => select(opt)} />
                 ))}
-              </Group>
+              </ComboGroup>
             )}
-
             {filteredUsers.length > 0 && (
-              <Group label="Specific Person">
+              <ComboGroup label="Specific Person">
                 {filteredUsers.map(opt => (
-                  <Opt key={opt.id} opt={opt} selected={isSelected(opt)} onSelect={() => select(opt)} />
+                  <ComboOpt key={opt.id} opt={opt} selected={isSelected(opt)} onSelect={() => select(opt)} />
                 ))}
-              </Group>
+              </ComboGroup>
             )}
           </div>
         </div>
@@ -257,28 +232,30 @@ function ApproverCombobox({ step, onStepChange, users, roles, deptMap, hideSubmi
   )
 }
 
-function Group({ label, children }) {
+function ComboGroup({ label, children }) {
   return (
     <div>
-      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 pt-2.5 pb-1">{label}</p>
+      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider px-3 pt-2.5 pb-1">{label}</p>
       {children}
     </div>
   )
 }
 
-function Opt({ opt, selected, onSelect }) {
+function ComboOpt({ opt, selected, onSelect }) {
   return (
     <button
       type="button"
       onClick={onSelect}
-      className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors
-        ${selected ? 'bg-brand-50 text-brand-700' : 'hover:bg-slate-50 text-slate-700'}`}
+      className={cn(
+        'w-full flex items-center gap-3 px-3 py-2 text-left transition-colors',
+        selected ? 'bg-primary/10 text-primary' : 'hover:bg-accent text-foreground'
+      )}
     >
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium truncate">{opt.label}</p>
-        {opt.sublabel && <p className="text-xs text-slate-400 truncate">{opt.sublabel}</p>}
+        {opt.sublabel && <p className="text-xs text-muted-foreground truncate">{opt.sublabel}</p>}
       </div>
-      {selected && <Check size={13} className="text-brand-600 flex-shrink-0" />}
+      {selected && <Check size={13} className="text-primary flex-shrink-0" />}
     </button>
   )
 }
@@ -294,27 +271,27 @@ function StepCard({ step, onStepChange, onRemove, users, roles, deptMap,
       onDragEnter={onDragEnter}
       onDragEnd={onDragEnd}
       onDragOver={e => e.preventDefault()}
-      className={`border rounded-xl bg-white shadow-sm transition-all select-none
-        ${isDragOver ? 'border-brand-400 ring-2 ring-brand-200 opacity-70' : 'border-slate-200'}`}
+      className={cn(
+        'border rounded-xl bg-card shadow-sm transition-all select-none',
+        isDragOver ? 'border-primary ring-2 ring-primary/20 opacity-70' : 'border-border'
+      )}
     >
-      {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 border-b border-slate-100 rounded-t-xl cursor-grab active:cursor-grabbing">
-        <GripVertical size={14} className="text-slate-300 flex-shrink-0" />
-        <span className="text-xs font-bold text-slate-500 bg-white border border-slate-200 rounded-full px-2 py-0.5">
+      <div className="flex items-center gap-2 px-3 py-2 bg-muted/40 border-b border-border rounded-t-xl cursor-grab active:cursor-grabbing">
+        <GripVertical size={14} className="text-muted-foreground/50 flex-shrink-0" />
+        <span className="text-xs font-bold text-muted-foreground bg-background border border-border rounded-full px-2 py-0.5">
           Step {step.step_order}
         </span>
         <div className="flex-1" />
-        <button type="button" onClick={onRemove} className="p-1 text-slate-300 hover:text-red-500 rounded transition-colors">
+        <button type="button" onClick={onRemove} className="p-1 text-muted-foreground/50 hover:text-destructive rounded transition-colors">
           <Trash2 size={13} />
         </button>
       </div>
 
-      {/* Body */}
       <div className="p-3 space-y-2.5">
         <div>
-          <p className="text-xs font-medium text-slate-600 mb-1">
+          <p className="text-xs font-medium text-foreground mb-1">
             Approver *
-            <span className="ml-1.5 font-normal text-slate-400">— choose a position so approval still works if the person changes</span>
+            <span className="ml-1.5 font-normal text-muted-foreground">— choose a position so approval still works if the person changes</span>
           </p>
           <ApproverCombobox
             step={step}
@@ -326,25 +303,25 @@ function StepCard({ step, onStepChange, onRemove, users, roles, deptMap,
         </div>
 
         <div>
-          <p className="text-xs font-medium text-slate-600 mb-1">
-            Step Label <span className="font-normal text-slate-400">(optional — auto-filled from approver if blank)</span>
+          <p className="text-xs font-medium text-foreground mb-1">
+            Step Label <span className="font-normal text-muted-foreground">(optional — auto-filled from approver if blank)</span>
           </p>
           <input
             type="text"
             value={step.step_label}
             onChange={e => onStepChange({ step_label: e.target.value })}
             placeholder="e.g. CFO Sign-off, HR Clearance…"
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+            className="w-full border border-input rounded-md px-3 py-2 text-sm bg-background text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           />
         </div>
 
         <div className="flex items-center gap-5 pt-0.5">
-          <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer select-none">
+          <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
             <input type="checkbox" checked={step.skip_if_missing}
               onChange={e => onStepChange({ skip_if_missing: e.target.checked })} className="rounded" />
             Skip if approver not found
           </label>
-          <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer select-none">
+          <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
             <input type="checkbox" checked={step.delegation_allowed}
               onChange={e => onStepChange({ delegation_allowed: e.target.checked })} className="rounded" />
             Allow delegation
@@ -368,11 +345,10 @@ function CCRow({ cc, onCCChange, onRemove, users, roles, deptMap }) {
           roles={roles}
           deptMap={deptMap}
           hideSubmission
-          placeholder="Search by position, name, department…"
         />
       </div>
       <button type="button" onClick={onRemove}
-        className="mt-1 p-1.5 text-slate-300 hover:text-red-500 rounded transition-colors flex-shrink-0">
+        className="mt-1 p-1.5 text-muted-foreground/50 hover:text-destructive rounded transition-colors flex-shrink-0">
         <Trash2 size={13} />
       </button>
     </div>
@@ -397,7 +373,7 @@ function buildPayload(form) {
         delegation_allowed: s.delegation_allowed,
       })),
     cc_recipients: form.cc_recipients
-      .filter(cc => cc.role_type)   // skip rows where the user hasn't selected anything
+      .filter(cc => cc.role_type)
       .map(cc => ({
         role_type:        cc.role_type,
         hierarchy_level:  cc.role_type === 'Hierarchy' ? cc.hierarchy_level : null,
@@ -414,9 +390,7 @@ const EMPTY_STEP = {
   role_type: '', hierarchy_level: '', role_id: '', specific_user_id: '',
   skip_if_missing: false, delegation_allowed: true,
 }
-const EMPTY_CC = {
-  role_type: '', hierarchy_level: '', role_id: '', specific_user_id: '', label: ''
-}
+const EMPTY_CC = { role_type: '', hierarchy_level: '', role_id: '', specific_user_id: '', label: '' }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
@@ -457,8 +431,6 @@ export default function AdminApprovalTemplates() {
     [departments]
   )
 
-  // ── Step management ───────────────────────────────────────────────────────
-
   const addStep = () => setForm(p => ({
     ...p,
     steps: [...p.steps, { ...EMPTY_STEP, step_order: p.steps.length + 1 }]
@@ -469,30 +441,17 @@ export default function AdminApprovalTemplates() {
     steps: p.steps.filter((_, idx) => idx !== i).map((s, idx) => ({ ...s, step_order: idx + 1 }))
   }))
 
-  // Each StepCard gets a dedicated updater that closes over i
   const makeStepUpdater = (i) => (patch) => setForm(p => {
     const steps = p.steps.map((s, idx) => idx === i ? { ...s, ...patch } : s)
     return { ...p, steps }
   })
 
-  // ── CC recipient management ───────────────────────────────────────────────
-
-  const addCC = () => setForm(p => ({
-    ...p,
-    cc_recipients: [...p.cc_recipients, { ...EMPTY_CC }]
-  }))
-
-  const removeCC = (i) => setForm(p => ({
-    ...p,
-    cc_recipients: p.cc_recipients.filter((_, idx) => idx !== i)
-  }))
-
+  const addCC    = () => setForm(p => ({ ...p, cc_recipients: [...p.cc_recipients, { ...EMPTY_CC }] }))
+  const removeCC = (i) => setForm(p => ({ ...p, cc_recipients: p.cc_recipients.filter((_, idx) => idx !== i) }))
   const makeCCUpdater = (i) => (patch) => setForm(p => {
     const cc_recipients = p.cc_recipients.map((c, idx) => idx === i ? { ...c, ...patch } : c)
     return { ...p, cc_recipients }
   })
-
-  // ── Drag to reorder ───────────────────────────────────────────────────────
 
   const handleDragStart = (i) => { dragIdx.current = i }
   const handleDragEnter = (i) => setDragOver(i)
@@ -510,12 +469,7 @@ export default function AdminApprovalTemplates() {
     })
   }
 
-  // ── Modal open/close ──────────────────────────────────────────────────────
-
-  const openCreate = () => {
-    setEditing(null); setForm(EMPTY); setError(''); setModalOpen(true)
-  }
-
+  const openCreate = () => { setEditing(null); setForm(EMPTY); setError(''); setModalOpen(true) }
   const openEdit = (t) => {
     setEditing(t)
     setForm({
@@ -544,30 +498,36 @@ export default function AdminApprovalTemplates() {
     setModalOpen(true)
   }
 
-  // ── Mutations ─────────────────────────────────────────────────────────────
-
   const saveMutation = useMutation({
     mutationFn: () => {
       const payload = buildPayload(form)
       return editing ? updateApprovalTemplate(editing.id, payload) : createApprovalTemplate(payload)
     },
-    onSuccess: () => { qc.invalidateQueries(['approval-templates']); setModalOpen(false); setForm(EMPTY) },
+    onSuccess: () => {
+      qc.invalidateQueries(['approval-templates'])
+      setModalOpen(false)
+      setForm(EMPTY)
+      toast.success(editing ? `"${editing.name}" updated.` : `Template "${form.name}" created.`)
+    },
     onError: (err) => {
       const detail = err.response?.data?.detail
-      if (Array.isArray(detail)) {
-        setError('Validation error — make sure every approver and recipient has a selection.')
-      } else {
-        setError(detail || 'Save failed.')
-      }
+      const msg = Array.isArray(detail)
+        ? 'Validation error — make sure every approver and recipient has a selection.'
+        : (detail || 'Save failed.')
+      setError(msg)
+      toast.error(msg)
     }
   })
 
   const deleteMutation = useMutation({
     mutationFn: (id) => deleteApprovalTemplate(id),
-    onSuccess: () => { qc.invalidateQueries(['approval-templates']); setDeleteTarget(null) }
+    onSuccess: () => {
+      qc.invalidateQueries(['approval-templates'])
+      setDeleteTarget(null)
+      toast.success('Template deleted.')
+    },
+    onError: () => toast.error('Delete failed.')
   })
-
-  // ── List search ───────────────────────────────────────────────────────────
 
   const filtered = useMemo(() => {
     if (!search.trim()) return templates
@@ -577,10 +537,8 @@ export default function AdminApprovalTemplates() {
     ))
   }, [templates, search])
 
-  // ── Table ─────────────────────────────────────────────────────────────────
-
   const stepSummary = (t) => {
-    if (!t.steps?.length) return <span className="text-slate-400 text-xs">No steps</span>
+    if (!t.steps?.length) return <span className="text-muted-foreground text-xs">No steps</span>
     return (
       <div className="flex flex-wrap gap-1">
         {t.steps.slice().sort((a, b) => a.step_order - b.step_order).map((s, i) => {
@@ -599,43 +557,58 @@ export default function AdminApprovalTemplates() {
 
   const columns = [
     { key: 'name',    label: 'Template Name' },
-    { key: 'steps',   label: 'Steps', render: stepSummary },
-    { key: 'cc',      label: 'CC', render: r => r.cc_recipients?.length
-        ? <span className="text-xs text-slate-600">{r.cc_recipients.length} recipient{r.cc_recipients.length !== 1 ? 's' : ''}</span>
-        : <span className="text-slate-400 text-xs">—</span>
+    { key: 'steps',   label: 'Steps',   render: stepSummary },
+    { key: 'cc',      label: 'CC',      render: r => r.cc_recipients?.length
+        ? <span className="text-xs text-muted-foreground">{r.cc_recipients.length} recipient{r.cc_recipients.length !== 1 ? 's' : ''}</span>
+        : <span className="text-muted-foreground text-xs">—</span>
     },
     { key: 'restart', label: 'Restart on Correction', render: r => <Badge label={r.restart_on_correction ? 'Yes' : 'No'} /> },
     { key: 'actions', label: '', render: r => (
       <div className="flex gap-1">
-        <Button size="sm" variant="ghost" onClick={() => openEdit(r)}><Pencil size={13} className="mr-1" /> Edit</Button>
-        <Button size="sm" variant="ghost" onClick={() => setDeleteTarget(r)} className="text-red-500 hover:text-red-700">
-          <Trash2 size={13} className="mr-1" /> Delete
+        <Button size="sm" variant="ghost" onClick={() => openEdit(r)}>
+          <Pencil size={13} /> Edit
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => setDeleteTarget(r)} className="text-destructive hover:text-destructive/80">
+          <Trash2 size={13} /> Delete
         </Button>
       </div>
     )}
   ]
 
-  // ── Render ────────────────────────────────────────────────────────────────
-
   return (
-    <div className="max-w-5xl space-y-4">
+    <div className="max-w-5xl space-y-5">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-slate-900">Approval Templates</h1>
-        <Button onClick={openCreate}><Plus size={14} className="mr-1" /> New Template</Button>
+        <div>
+          <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
+            <GitBranch size={20} className="text-muted-foreground" />
+            Approval Templates
+          </h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {templates.length} template{templates.length !== 1 ? 's' : ''}
+          </p>
+        </div>
+        <Button onClick={openCreate}>
+          <Plus size={14} /> New Template
+        </Button>
       </div>
 
+      {/* Search */}
       <div className="relative max-w-sm">
-        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-        <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+        <input
+          type="text"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
           placeholder="Search by name, step label, role…"
-          className="w-full pl-9 pr-8 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white" />
+          className="w-full pl-9 pr-8 h-9 border border-input rounded-md text-sm bg-background text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        />
         {search && (
-          <button onClick={() => setSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+          <button onClick={() => setSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
             <X size={14} />
           </button>
         )}
       </div>
-      {search && <p className="text-xs text-slate-500 -mt-2">{filtered.length} of {templates.length} templates</p>}
+      {search && <p className="text-xs text-muted-foreground -mt-2">{filtered.length} of {templates.length} templates</p>}
 
       <Card>
         {isLoading
@@ -644,28 +617,44 @@ export default function AdminApprovalTemplates() {
         }
       </Card>
 
-      {/* ── Create / Edit Modal ── */}
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)}
-        title={editing ? `Edit — ${editing.name}` : 'New Approval Template'} size="xl">
+      {/* Create / Edit Modal */}
+      <Modal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title={editing ? `Edit — ${editing.name}` : 'New Approval Template'}
+        size="xl"
+      >
         <div className="space-y-5">
           <div className="grid grid-cols-2 gap-3">
-            <Input label="Template Name *" value={form.name}
-              onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
-            <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer pt-6 select-none">
-              <input type="checkbox" checked={form.restart_on_correction}
-                onChange={e => setForm(p => ({ ...p, restart_on_correction: e.target.checked }))} className="rounded" />
+            <Input
+              label="Template Name *"
+              value={form.name}
+              onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
+            />
+            <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer pt-6 select-none">
+              <input
+                type="checkbox"
+                checked={form.restart_on_correction}
+                onChange={e => setForm(p => ({ ...p, restart_on_correction: e.target.checked }))}
+                className="rounded"
+              />
               Restart approval on correction
             </label>
           </div>
-          <Textarea label="Description" value={form.description}
-            onChange={e => setForm(p => ({ ...p, description: e.target.value }))} rows={2} />
+
+          <Textarea
+            label="Description"
+            value={form.description}
+            onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
+            rows={2}
+          />
 
           {/* Steps */}
           <div>
-            <p className="text-sm font-semibold text-slate-700 mb-3">
+            <p className="text-sm font-semibold text-foreground mb-3">
               Approval Steps
               {form.steps.length > 0 && (
-                <span className="ml-2 text-xs font-normal text-slate-400">
+                <span className="ml-2 text-xs font-normal text-muted-foreground">
                   {form.steps.length} step{form.steps.length !== 1 ? 's' : ''} · drag <GripVertical size={11} className="inline" /> to reorder
                 </span>
               )}
@@ -687,33 +676,29 @@ export default function AdminApprovalTemplates() {
                   isDragOver={dragOver === i}
                 />
               ))}
-
               {form.steps.length === 0 && (
-                <div className="py-8 border border-dashed border-slate-200 rounded-xl text-center">
-                  <p className="text-sm text-slate-400">No steps yet. Add your first approval step below.</p>
+                <div className="py-8 border border-dashed border-border rounded-xl text-center">
+                  <p className="text-sm text-muted-foreground">No steps yet. Add your first approval step below.</p>
                 </div>
               )}
             </div>
 
-            {/* Add Step at bottom */}
             <button
               type="button"
               onClick={addStep}
-              className="mt-3 w-full flex items-center justify-center gap-2 py-2.5 border-2 border-dashed border-slate-300 rounded-xl text-sm text-slate-500 hover:border-brand-400 hover:text-brand-600 transition-colors"
+              className="mt-3 w-full flex items-center justify-center gap-2 py-2.5 border-2 border-dashed border-border rounded-xl text-sm text-muted-foreground hover:border-primary/50 hover:text-primary transition-colors"
             >
               <Plus size={15} /> Add Step
             </button>
           </div>
 
           {/* CC Recipients */}
-          <div className="border-t border-slate-100 pt-4">
-            <div className="flex items-center justify-between mb-2">
-              <div>
-                <p className="text-sm font-semibold text-slate-700">Copy Recipients</p>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  People who receive a copy of the completed document but play no role in approval.
-                </p>
-              </div>
+          <div className="border-t border-border pt-4">
+            <div className="mb-2">
+              <p className="text-sm font-semibold text-foreground">Copy Recipients</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                People who receive a copy of the completed document but play no role in approval.
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -728,49 +713,57 @@ export default function AdminApprovalTemplates() {
                   deptMap={deptMap}
                 />
               ))}
-
               {form.cc_recipients.length === 0 && (
-                <p className="text-xs text-slate-400 py-2">No copy recipients set.</p>
+                <p className="text-xs text-muted-foreground py-2">No copy recipients set.</p>
               )}
             </div>
 
             <button
               type="button"
               onClick={addCC}
-              className="mt-2 flex items-center gap-1.5 text-sm text-slate-500 hover:text-brand-600 transition-colors"
+              className="mt-2 flex items-center gap-1.5 text-sm text-muted-foreground hover:text-primary transition-colors"
             >
               <Plus size={14} /> Add recipient
             </button>
             {form.cc_recipients.some(cc => !cc.role_type) && (
-              <p className="mt-1.5 text-xs text-amber-600">Rows with no selection will be ignored on save.</p>
+              <p className="mt-1.5 text-xs text-amber-500">Rows with no selection will be ignored on save.</p>
             )}
           </div>
 
-          {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>}
+          {error && (
+            <p className="text-sm text-destructive bg-destructive/10 border border-destructive/30 rounded-lg px-3 py-2">
+              {error}
+            </p>
+          )}
 
           <div className="flex gap-3 pt-1">
             <Button onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
               {editing ? 'Save Changes' : 'Create Template'}
             </Button>
-            <Button variant="secondary" onClick={() => setModalOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setModalOpen(false)}>Cancel</Button>
           </div>
         </div>
       </Modal>
 
-      {/* ── Delete confirmation ── */}
+      {/* Delete confirmation */}
       <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Delete Template" size="sm">
         <div className="space-y-4">
           <div className="flex items-start gap-3">
-            <AlertTriangle size={20} className="text-red-500 flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-slate-700">
+            <AlertTriangle size={20} className="text-destructive flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-foreground">
               Are you sure you want to delete <span className="font-semibold">"{deleteTarget?.name}"</span>?
               This cannot be undone.
             </p>
           </div>
           <div className="flex gap-3">
-            <Button onClick={() => deleteMutation.mutate(deleteTarget.id)} loading={deleteMutation.isPending}
-              className="bg-red-600 hover:bg-red-700 text-white border-red-600">Delete</Button>
-            <Button variant="secondary" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={() => deleteMutation.mutate(deleteTarget.id)}
+              loading={deleteMutation.isPending}
+            >
+              Delete
+            </Button>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
           </div>
         </div>
       </Modal>
