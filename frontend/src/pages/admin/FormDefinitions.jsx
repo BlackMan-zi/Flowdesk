@@ -264,11 +264,22 @@ export default function AdminFormDefinitions() {
       return editing ? updateFormDefinition(editing.id, payload) : createFormDefinition(payload)
     },
     onSuccess: (res) => {
-      qc.invalidateQueries(['form-definitions'])
+      const updated = res.data
+      // Update the cache immediately so the table reflects changes without
+      // waiting for a round-trip refetch (fixes stale-display bug).
+      qc.setQueryData(['form-definitions'], (old) => {
+        if (!Array.isArray(old)) return old
+        return editing
+          ? old.map(item => item.id === editing.id ? updated : item)
+          : [...old, updated]
+      })
+      // Also invalidate so a background refetch picks up any server-side
+      // changes (e.g. related data like approval_template name).
+      qc.invalidateQueries({ queryKey: ['form-definitions'] })
       setModalOpen(false)
       toast.success(editing
-        ? `"${res.data.name}" updated successfully`
-        : `"${res.data.name}" created — open Design Layout to add fields`
+        ? `"${updated.name}" updated successfully`
+        : `"${updated.name}" created — open Design Layout to add fields`
       )
     },
     onError: (err) => {
@@ -284,7 +295,10 @@ export default function AdminFormDefinitions() {
   const deleteMutation = useMutation({
     mutationFn: (id) => deleteFormDefinition(id),
     onSuccess: () => {
-      qc.invalidateQueries(['form-definitions'])
+      qc.setQueryData(['form-definitions'], (old) =>
+        Array.isArray(old) ? old.filter(item => item.id !== deleteTarget?.id) : old
+      )
+      qc.invalidateQueries({ queryKey: ['form-definitions'] })
       toast.success(`"${deleteTarget?.name}" deleted`)
       setDeleteTarget(null)
       setDeleteError('')

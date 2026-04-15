@@ -118,7 +118,10 @@ def update_form_definition(
     ).first()
     if not form_def:
         raise HTTPException(status_code=404, detail="Form definition not found")
-    for field, value in payload.model_dump(exclude_none=True).items():
+    updates = payload.model_dump(exclude_none=True)
+    if 'code_suffix' in updates:
+        updates['code_suffix'] = updates['code_suffix'].upper()
+    for field, value in updates.items():
         setattr(form_def, field, value)
     db.commit()
     db.refresh(form_def)
