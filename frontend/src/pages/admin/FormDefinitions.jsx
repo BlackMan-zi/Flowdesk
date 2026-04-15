@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
+import { toast } from 'sonner'
 import {
   listFormDefinitions, createFormDefinition, updateFormDefinition, deleteFormDefinition,
   listApprovalTemplates
@@ -9,13 +10,12 @@ import { listDepartments } from '../../api/users'
 import { Card, CardContent } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Badge } from '../../components/ui/Badge'
-import { Input } from '../../components/ui/Input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../../components/ui/Modal'
 import { Alert } from '../../components/ui/alert'
 import { cn } from '../../lib/utils'
 import {
   Plus, LayoutTemplate, Settings, Search, X, Trash2, AlertTriangle,
-  ChevronDown, Building2, CheckSquare, Square, Eye, EyeOff, FolderOpen
+  Building2, Eye, EyeOff, FolderOpen
 } from 'lucide-react'
 
 // ── Department multi-select picker ────────────────────────────────────────────
@@ -230,31 +230,65 @@ export default function AdminFormDefinitions() {
     setModalOpen(true)
   }
 
+  // ── Validation ────────────────────────────────────────────────────────────────
+  const validate = () => {
+    if (!form.name.trim()) return 'Form Name is required.'
+    if (!form.code_suffix.trim()) return 'Code Suffix is required.'
+    if (form.visibility === 'specific_departments' && form.visible_department_ids.length === 0)
+      return 'Select at least one department when visibility is restricted.'
+    return null
+  }
+
+  const handleSave = () => {
+    const err = validate()
+    if (err) { setError(err); return }
+    saveMutation.mutate()
+  }
+
   const saveMutation = useMutation({
     mutationFn: () => {
       const payload = {
-        ...form,
-        approval_template_id: form.approval_template_id || null,
+        name: form.name.trim(),
+        description: form.description.trim() || null,
+        code_suffix: form.code_suffix.trim().toUpperCase(),
+        visibility: form.visibility,
+        // Send [] (not null) when switching back to all_users so the backend
+        // clears the field even with exclude_none=True on the PATCH endpoint.
         visible_department_ids: form.visibility === 'specific_departments'
           ? form.visible_department_ids
-          : null,
-        fields: form.fields.map((f, idx) => ({
-          ...f,
-          display_order: idx,
-          options: f.options
-            ? (typeof f.options === 'string' ? f.options.split(',').map(s => s.trim()) : f.options)
-            : null
-        }))
+          : [],
+        allow_backdating: form.allow_backdating,
+        allow_attachments: form.allow_attachments,
+        approval_template_id: form.approval_template_id || null,
       }
       return editing ? updateFormDefinition(editing.id, payload) : createFormDefinition(payload)
     },
-    onSuccess: () => { qc.invalidateQueries(['form-definitions']); setModalOpen(false) },
-    onError: (err) => setError(err.response?.data?.detail || 'Save failed.')
+    onSuccess: (res) => {
+      qc.invalidateQueries(['form-definitions'])
+      setModalOpen(false)
+      toast.success(editing
+        ? `"${res.data.name}" updated successfully`
+        : `"${res.data.name}" created — open Design Layout to add fields`
+      )
+    },
+    onError: (err) => {
+      const detail = err.response?.data?.detail
+      const msg = Array.isArray(detail)
+        ? detail.map(d => d.msg).join(', ')
+        : detail || 'Save failed. Please try again.'
+      setError(msg)
+      toast.error('Save failed')
+    }
   })
 
   const deleteMutation = useMutation({
     mutationFn: (id) => deleteFormDefinition(id),
-    onSuccess: () => { qc.invalidateQueries(['form-definitions']); setDeleteTarget(null); setDeleteError('') },
+    onSuccess: () => {
+      qc.invalidateQueries(['form-definitions'])
+      toast.success(`"${deleteTarget?.name}" deleted`)
+      setDeleteTarget(null)
+      setDeleteError('')
+    },
     onError: (err) => setDeleteError(err.response?.data?.detail || 'Delete failed.')
   })
 
@@ -538,7 +572,7 @@ export default function AdminFormDefinitions() {
 
           <DialogFooter>
             <Button variant="secondary" onClick={() => setModalOpen(false)}>Cancel</Button>
-            <Button onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
+            <Button onClick={handleSave} loading={saveMutation.isPending}>
               {editing ? 'Save Changes' : 'Create Form'}
             </Button>
           </DialogFooter>
