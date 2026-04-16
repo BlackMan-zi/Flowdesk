@@ -11,7 +11,11 @@ import {
   DollarSign, Zap, Table2, Circle, Plus, HelpCircle,
   Paperclip, Search, ChevronUp, ToggleLeft, Workflow,
   ZoomIn, ZoomOut, Maximize2, SlidersHorizontal, FileDigit,
-  FilePlus, FileX
+  FilePlus, FileX,
+  AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal,
+  AlignStartVertical, AlignCenterVertical, AlignEndVertical,
+  AlignHorizontalDistributeCenter, AlignVerticalDistributeCenter,
+  AlignHorizontalSpaceBetween, AlignVerticalSpaceBetween,
 } from 'lucide-react'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -462,6 +466,74 @@ function FTBtn({ ft, pendingType, onSelect }) {
   )
 }
 
+// ── Alignment toolbar ─────────────────────────────────────────────────────────
+
+function AlignBtn({ Icon, title, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      className="flex items-center justify-center w-7 h-7 rounded hover:bg-brand-100 hover:text-brand-700 text-brand-600 transition-colors flex-shrink-0"
+    >
+      <Icon size={14} />
+    </button>
+  )
+}
+
+function AlignmentBar({ count, onAlign, onDeselect }) {
+  if (count < 2) return null
+  return (
+    <div className="flex-shrink-0 flex items-center gap-1 px-3 py-1.5 bg-brand-50 border-b border-brand-200 overflow-x-auto">
+      <span className="text-xs font-semibold text-brand-700 mr-1 flex-shrink-0">{count} selected</span>
+
+      <div className="w-px h-4 bg-brand-200 mx-1 flex-shrink-0" />
+
+      {/* Horizontal alignment */}
+      <AlignBtn Icon={AlignStartHorizontal}   title="Align left edges"             onClick={() => onAlign('left')} />
+      <AlignBtn Icon={AlignCenterHorizontal}  title="Align horizontal centers"     onClick={() => onAlign('centerH')} />
+      <AlignBtn Icon={AlignEndHorizontal}     title="Align right edges"            onClick={() => onAlign('right')} />
+
+      <div className="w-px h-4 bg-brand-200 mx-1 flex-shrink-0" />
+
+      {/* Vertical alignment */}
+      <AlignBtn Icon={AlignStartVertical}     title="Align top edges"              onClick={() => onAlign('top')} />
+      <AlignBtn Icon={AlignCenterVertical}    title="Align vertical centers"       onClick={() => onAlign('middleV')} />
+      <AlignBtn Icon={AlignEndVertical}       title="Align bottom edges"           onClick={() => onAlign('bottom')} />
+
+      <div className="w-px h-4 bg-brand-200 mx-1 flex-shrink-0" />
+
+      {/* Distribute */}
+      <AlignBtn Icon={AlignHorizontalDistributeCenter} title="Distribute horizontally (equal spacing)" onClick={() => onAlign('distributeH')} />
+      <AlignBtn Icon={AlignVerticalDistributeCenter}   title="Distribute vertically (equal spacing)"   onClick={() => onAlign('distributeV')} />
+
+      <div className="w-px h-4 bg-brand-200 mx-1 flex-shrink-0" />
+
+      {/* Match size */}
+      <button
+        onClick={() => onAlign('sameWidth')}
+        title="Match widths"
+        className="flex items-center gap-1 px-2 h-7 rounded hover:bg-brand-100 hover:text-brand-700 text-brand-600 text-[10px] font-medium transition-colors flex-shrink-0"
+      >
+        W=
+      </button>
+      <button
+        onClick={() => onAlign('sameHeight')}
+        title="Match heights"
+        className="flex items-center gap-1 px-2 h-7 rounded hover:bg-brand-100 hover:text-brand-700 text-brand-600 text-[10px] font-medium transition-colors flex-shrink-0"
+      >
+        H=
+      </button>
+
+      <button
+        onClick={onDeselect}
+        className="ml-auto flex items-center gap-1 text-[10px] text-brand-500 hover:text-brand-800 flex-shrink-0"
+      >
+        <X size={10} /> Deselect all
+      </button>
+    </div>
+  )
+}
+
 // ── Page navigation bar ───────────────────────────────────────────────────────
 
 function PageNav({ numPages, currentPage, onChangePage, fields, onAddPage, onDeletePage, pageTemplates }) {
@@ -571,7 +643,7 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
   const pdfDoc      = pageTemplates[currentPage]?.doc || pageTemplates[1]?.doc || null
   const pdfPageCount = pageTemplates[1]?.pageCount || 0  // pages in the main (page-1) PDF
   const [fields, setFields]         = useState(initialFields)
-  const [selectedId, setSelectedId] = useState(null)
+  const [selectedIds, setSelectedIds] = useState([])   // multi-select
   const [pendingType, setPendingType] = useState(null)
   const [saving, setSaving]         = useState(false)
   const [uploading, setUploading]   = useState(false)
@@ -587,8 +659,9 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
   const scrollContainerRef = useRef(null)
   const canvasRef           = useRef(null)
   const fileInputRef        = useRef(null)
-  // Ref to current fields so alignment code can read without closure staleness
+  // Refs so move/align callbacks can read current state without stale closures
   const fieldsRef           = useRef(initialFields)
+  const selectedIdsRef      = useRef([])
   const [availableWidth, setAvailableWidth] = useState(0)
 
   // Measure outer scroll container width
@@ -599,8 +672,9 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
     return () => obs.disconnect()
   }, [])
 
-  // Keep fieldsRef current for alignment guide calculation
+  // Keep refs current for move/align callbacks
   useEffect(() => { fieldsRef.current = fields }, [fields])
+  useEffect(() => { selectedIdsRef.current = selectedIds }, [selectedIds])
 
   // Base canvas width = available scroll area (minus outer p-6 padding + 8px canvas margin) capped at 850
   const BASE_MAX = 850
@@ -732,7 +806,8 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
       setDrawDrag({ startX: x, startY: y, currentX: x, currentY: y })
       return
     }
-    setSelectedId(null)
+    // Click on empty canvas — deselect all unless Shift held
+    if (!e.shiftKey) setSelectedIds([])
   }, [pendingType, getRelativePos])
 
   const startFieldMove = useCallback((e, fieldId) => {
@@ -740,11 +815,31 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
     if (pendingType) return
     e.preventDefault()
     const { x, y } = getRelativePos(e)
-    const field = fields.find(f => f.id === fieldId)
+    const currentFields = fieldsRef.current
+    const field = currentFields.find(f => f.id === fieldId)
     if (!field) return
-    setSelectedId(fieldId)
-    setMoveDrag({ fieldId, startX: x, startY: y, origX: field.x_pct, origY: field.y_pct })
-  }, [pendingType, fields, getRelativePos])
+
+    // Shift/Ctrl click: toggle in/out of selection; don't start drag
+    if (e.shiftKey || e.ctrlKey || e.metaKey) {
+      setSelectedIds(prev =>
+        prev.includes(fieldId) ? prev.filter(id => id !== fieldId) : [...prev, fieldId]
+      )
+      return
+    }
+
+    // Determine the active selection: keep multi-selection if drag target is already in it
+    const currentSel = selectedIdsRef.current
+    const activeSel = currentSel.includes(fieldId) ? currentSel : [fieldId]
+    setSelectedIds(activeSel)
+
+    // Snapshot original positions of all fields in the active selection
+    const origPositions = {}
+    currentFields.forEach(f => {
+      if (activeSel.includes(f.id)) origPositions[f.id] = { x: f.x_pct, y: f.y_pct }
+    })
+
+    setMoveDrag({ fieldId, startX: x, startY: y, origPositions })
+  }, [pendingType, getRelativePos])
 
   const startFieldResize = useCallback((e, fieldId) => {
     e.preventDefault(); e.stopPropagation()
@@ -764,12 +859,31 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
       const movingField   = currentFields.find(f => f.id === moveDrag.fieldId)
       if (!movingField) return
 
+      const currentSel = selectedIdsRef.current
+      const isGroup = currentSel.length > 1 && currentSel.includes(moveDrag.fieldId)
+
+      if (isGroup) {
+        // ── Group move: move all selected fields together, no guides ─────────────
+        setAlignGuides({ v: [], h: [] })
+        setFields(fs => fs.map(f => {
+          const orig = moveDrag.origPositions?.[f.id]
+          if (!orig) return f
+          return {
+            ...f,
+            x_pct: Math.min(100 - f.width_pct, Math.max(0, orig.x + dx)),
+            y_pct: Math.min(100 - f.height_pct, Math.max(0, orig.y + dy)),
+          }
+        }))
+        return
+      }
+
+      // ── Single field move with alignment guides ──────────────────────────────
       const mW = movingField.width_pct
       const mH = movingField.height_pct
-      const rawX = Math.min(100 - mW, Math.max(0, moveDrag.origX + dx))
-      const rawY = Math.min(100 - mH, Math.max(0, moveDrag.origY + dy))
+      const origPos = moveDrag.origPositions?.[moveDrag.fieldId] || { x: movingField.x_pct, y: movingField.y_pct }
+      const rawX = Math.min(100 - mW, Math.max(0, origPos.x + dx))
+      const rawY = Math.min(100 - mH, Math.max(0, origPos.y + dy))
 
-      // ── Alignment guide calculation ───────────────────────────────────────────
       const others = currentFields.filter(
         f => f.id !== moveDrag.fieldId && (f.page_number || 1) === (movingField.page_number || 1) && f.x_pct != null
       )
@@ -778,7 +892,6 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
       let snapX = rawX
       let snapY = rawY
 
-      // 3 edge/center positions for each axis
       const mXoffsets = [0, mW / 2, mW]
       const mYoffsets = [0, mH / 2, mH]
 
@@ -843,7 +956,7 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
           page_number: currentPage,
           x_pct: x0, y_pct: y0, width_pct: w, height_pct: h,
         }])
-        setSelectedId(tempId)
+        setSelectedIds([tempId])
         setPendingType(null)
       }
     }
@@ -852,7 +965,63 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
   }, [drawDrag, pendingType, fields, currentPage, getRelativePos, formDef])
 
   const updateField = (id, changes) => setFields(fs => fs.map(f => f.id === id ? { ...f, ...changes } : f))
-  const deleteField = (id) => { setFields(fs => fs.filter(f => f.id !== id)); setSelectedId(null) }
+  const deleteField = (id) => {
+    setFields(fs => fs.filter(f => f.id !== id))
+    setSelectedIds(prev => prev.filter(sid => sid !== id))
+  }
+
+  // ── Alignment operations ──────────────────────────────────────────────────────
+  const alignFields = (op) => {
+    const sel = fields.filter(f => selectedIds.includes(f.id))
+    if (sel.length < 2) return
+
+    const minX   = Math.min(...sel.map(f => f.x_pct))
+    const maxX   = Math.max(...sel.map(f => f.x_pct + f.width_pct))
+    const minY   = Math.min(...sel.map(f => f.y_pct))
+    const maxY   = Math.max(...sel.map(f => f.y_pct + f.height_pct))
+    const centerX = (minX + maxX) / 2
+    const centerY = (minY + maxY) / 2
+
+    // Reference field (last selected) for match-size operations
+    const ref = sel[sel.length - 1]
+
+    // Sort helpers for distribute
+    const sortedH = [...sel].sort((a, b) => a.x_pct - b.x_pct)
+    const sortedV = [...sel].sort((a, b) => a.y_pct - b.y_pct)
+
+    setFields(fs => fs.map(f => {
+      if (!selectedIds.includes(f.id)) return f
+      switch (op) {
+        case 'left':      return { ...f, x_pct: minX }
+        case 'centerH':   return { ...f, x_pct: centerX - f.width_pct / 2 }
+        case 'right':     return { ...f, x_pct: maxX - f.width_pct }
+        case 'top':       return { ...f, y_pct: minY }
+        case 'middleV':   return { ...f, y_pct: centerY - f.height_pct / 2 }
+        case 'bottom':    return { ...f, y_pct: maxY - f.height_pct }
+        case 'sameWidth': return { ...f, width_pct: ref.width_pct }
+        case 'sameHeight':return { ...f, height_pct: ref.height_pct }
+        case 'distributeH': {
+          const idx = sortedH.findIndex(s => s.id === f.id)
+          if (idx <= 0 || idx >= sortedH.length - 1) return f
+          const totalW = sortedH.reduce((sum, s) => sum + s.width_pct, 0)
+          const gap = (maxX - minX - totalW) / (sortedH.length - 1)
+          let x = sortedH[0].x_pct + sortedH[0].width_pct
+          for (let i = 1; i < idx; i++) x += sortedH[i].width_pct + gap
+          return { ...f, x_pct: x }
+        }
+        case 'distributeV': {
+          const idx = sortedV.findIndex(s => s.id === f.id)
+          if (idx <= 0 || idx >= sortedV.length - 1) return f
+          const totalH = sortedV.reduce((sum, s) => sum + s.height_pct, 0)
+          const gap = (maxY - minY - totalH) / (sortedV.length - 1)
+          let y = sortedV[0].y_pct + sortedV[0].height_pct
+          for (let i = 1; i < idx; i++) y += sortedV[i].height_pct + gap
+          return { ...f, y_pct: y }
+        }
+        default: return f
+      }
+    }))
+  }
 
   const addPage = () => setNumPages(p => p + 1)
   const deletePage = () => {
@@ -863,8 +1032,10 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
     if (currentPage === lastPage) setCurrentPage(lastPage - 1)
   }
 
+  // Derived selection helpers
+  const selectedId    = selectedIds[selectedIds.length - 1] ?? null  // for properties panel
   const selectedField = fields.find(f => f.id === selectedId) || null
-  const pageFields    = fields.filter(f => f.page_number === currentPage)
+  const pageFields    = fields.filter(f => (f.page_number || 1) === currentPage)
 
   // Only allow deleting pages beyond what PDF has
   const canDeletePage = numPages > 1 && (pdfPageCount === 0 || currentPage > pdfPageCount)
@@ -931,6 +1102,13 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
         pageTemplates={pageTemplates}
       />
 
+      {/* ── Alignment toolbar — only visible when ≥2 fields selected ── */}
+      <AlignmentBar
+        count={selectedIds.filter(id => pageFields.some(f => f.id === id)).length}
+        onAlign={alignFields}
+        onDeselect={() => setSelectedIds([])}
+      />
+
       <div className="flex flex-1 min-h-0 overflow-hidden">
 
         {/* ── Left panel: Toolbox + Field list ── */}
@@ -948,10 +1126,10 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
                   Page {currentPage} · {pageFields.length} field{pageFields.length !== 1 ? 's' : ''}
                 </p>
                 {pageFields.map(f => (
-                  <button key={f.id} onClick={() => setSelectedId(f.id)}
+                  <button key={f.id} onClick={() => setSelectedIds([f.id])}
                     className={cn(
                       'w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs text-left transition-colors',
-                      selectedId === f.id ? 'bg-brand-50 text-brand-700' : 'hover:bg-slate-50 text-slate-600'
+                      selectedIds.includes(f.id) ? 'bg-brand-50 text-brand-700' : 'hover:bg-slate-50 text-slate-600'
                     )}>
                     {typeIcon(f.field_type)}
                     <span className="flex-1 truncate">{f.field_label}</span>
@@ -1050,7 +1228,7 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
 
                 {/* Field overlays */}
                 {pageFields.map(f => {
-                  const isSelected = selectedId === f.id
+                  const isSelected = selectedIds.includes(f.id)
                   const isRef = f.field_type === 'reference'
                   const colorCls = isRef
                     ? 'border-amber-500 bg-amber-50/80 text-amber-800'
@@ -1071,7 +1249,7 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
                         isSelected && 'ring-2 ring-offset-1 ring-brand-500'
                       )}
                       onMouseDown={e => startFieldMove(e, f.id)}
-                      onClick={e => { e.stopPropagation(); setSelectedId(f.id) }}
+                      onClick={e => { e.stopPropagation(); if (!e.shiftKey && !e.ctrlKey && !e.metaKey) setSelectedIds([f.id]) }}
                     >
                       <div className="flex items-start gap-1 flex-1 min-h-0">
                         <span className="flex-shrink-0 mt-0.5">{typeIcon(f.field_type)}</span>
