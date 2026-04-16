@@ -11,7 +11,7 @@ import {
   DollarSign, Zap, Table2, Circle, Plus, HelpCircle,
   Paperclip, Search, ChevronUp, ToggleLeft, Workflow,
   ZoomIn, ZoomOut, Maximize2, SlidersHorizontal, FileDigit,
-  FilePlus, FileX,
+  FilePlus, FileX, Lock, Unlock, Pin, PinOff, Crosshair,
   AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal,
   AlignStartVertical, AlignCenterVertical, AlignEndVertical,
   AlignHorizontalDistributeCenter, AlignVerticalDistributeCenter,
@@ -160,7 +160,7 @@ function TableColumnManager({ columns, onChange }) {
 
 // ── Field properties panel ────────────────────────────────────────────────────
 
-function FieldProperties({ field, onChange, onDelete, formCodeSuffix }) {
+function FieldProperties({ field, onChange, onDelete, formCodeSuffix, locked, onToggleLock }) {
   if (!field) return (
     <div className="text-xs text-slate-400 text-center py-8 px-3 flex flex-col items-center gap-2">
       <SlidersHorizontal size={20} className="text-slate-300" />
@@ -371,6 +371,13 @@ function FieldProperties({ field, onChange, onDelete, formCodeSuffix }) {
             <input type="checkbox" checked={field.read_only||false} onChange={e => onChange({ read_only: e.target.checked })} className="rounded" />
             <span>Read-only</span>
           </label>
+          <label className="flex items-center gap-2 cursor-pointer" title="Locked fields cannot be moved or resized on the canvas">
+            <input type="checkbox" checked={!!locked} onChange={onToggleLock} className="rounded" />
+            <span className="flex items-center gap-1">
+              {locked ? <Lock size={10} className="text-amber-600" /> : <Unlock size={10} className="text-slate-400" />}
+              Lock position
+            </span>
+          </label>
         </div>
       )}
 
@@ -480,56 +487,92 @@ function AlignBtn({ Icon, title, onClick }) {
   )
 }
 
-function AlignmentBar({ count, onAlign, onDeselect }) {
+const ALIGN_MODES = [
+  { id: 'selection', label: 'Selection', title: 'Align relative to the bounding box of the selection' },
+  { id: 'canvas',    label: 'Canvas',    title: 'Align relative to the full canvas (0–100%)' },
+  { id: 'reference', label: 'Reference', title: 'Align relative to a pinned reference field' },
+]
+
+function AlignmentBar({ count, onAlign, onDeselect, alignMode, onAlignModeChange, referenceId, referenceName, onClearReference }) {
   if (count < 2) return null
   return (
-    <div className="flex-shrink-0 flex items-center gap-1 px-3 py-1.5 bg-brand-50 border-b border-brand-200 overflow-x-auto">
-      <span className="text-xs font-semibold text-brand-700 mr-1 flex-shrink-0">{count} selected</span>
+    <div className="flex-shrink-0 flex flex-col bg-amber-50 border-b border-amber-200">
+      {/* Row 1: alignment buttons */}
+      <div className="flex items-center gap-1 px-3 py-1.5 overflow-x-auto">
+        <span className="text-xs font-semibold text-amber-800 mr-1 flex-shrink-0">{count} selected</span>
 
-      <div className="w-px h-4 bg-brand-200 mx-1 flex-shrink-0" />
+        <div className="w-px h-4 bg-amber-200 mx-1 flex-shrink-0" />
 
-      {/* Horizontal alignment */}
-      <AlignBtn Icon={AlignStartHorizontal}   title="Align left edges"             onClick={() => onAlign('left')} />
-      <AlignBtn Icon={AlignCenterHorizontal}  title="Align horizontal centers"     onClick={() => onAlign('centerH')} />
-      <AlignBtn Icon={AlignEndHorizontal}     title="Align right edges"            onClick={() => onAlign('right')} />
+        {/* Horizontal alignment */}
+        <AlignBtn Icon={AlignStartHorizontal}   title="Align left edges"             onClick={() => onAlign('left')} />
+        <AlignBtn Icon={AlignCenterHorizontal}  title="Align horizontal centers"     onClick={() => onAlign('centerH')} />
+        <AlignBtn Icon={AlignEndHorizontal}     title="Align right edges"            onClick={() => onAlign('right')} />
 
-      <div className="w-px h-4 bg-brand-200 mx-1 flex-shrink-0" />
+        <div className="w-px h-4 bg-amber-200 mx-1 flex-shrink-0" />
 
-      {/* Vertical alignment */}
-      <AlignBtn Icon={AlignStartVertical}     title="Align top edges"              onClick={() => onAlign('top')} />
-      <AlignBtn Icon={AlignCenterVertical}    title="Align vertical centers"       onClick={() => onAlign('middleV')} />
-      <AlignBtn Icon={AlignEndVertical}       title="Align bottom edges"           onClick={() => onAlign('bottom')} />
+        {/* Vertical alignment */}
+        <AlignBtn Icon={AlignStartVertical}     title="Align top edges"              onClick={() => onAlign('top')} />
+        <AlignBtn Icon={AlignCenterVertical}    title="Align vertical centers"       onClick={() => onAlign('middleV')} />
+        <AlignBtn Icon={AlignEndVertical}       title="Align bottom edges"           onClick={() => onAlign('bottom')} />
 
-      <div className="w-px h-4 bg-brand-200 mx-1 flex-shrink-0" />
+        <div className="w-px h-4 bg-amber-200 mx-1 flex-shrink-0" />
 
-      {/* Distribute */}
-      <AlignBtn Icon={AlignHorizontalDistributeCenter} title="Distribute horizontally (equal spacing)" onClick={() => onAlign('distributeH')} />
-      <AlignBtn Icon={AlignVerticalDistributeCenter}   title="Distribute vertically (equal spacing)"   onClick={() => onAlign('distributeV')} />
+        {/* Distribute */}
+        <AlignBtn Icon={AlignHorizontalDistributeCenter} title="Distribute horizontally (equal spacing)" onClick={() => onAlign('distributeH')} />
+        <AlignBtn Icon={AlignVerticalDistributeCenter}   title="Distribute vertically (equal spacing)"   onClick={() => onAlign('distributeV')} />
 
-      <div className="w-px h-4 bg-brand-200 mx-1 flex-shrink-0" />
+        <div className="w-px h-4 bg-amber-200 mx-1 flex-shrink-0" />
 
-      {/* Match size */}
-      <button
-        onClick={() => onAlign('sameWidth')}
-        title="Match widths"
-        className="flex items-center gap-1 px-2 h-7 rounded hover:bg-brand-100 hover:text-brand-700 text-brand-600 text-[10px] font-medium transition-colors flex-shrink-0"
-      >
-        W=
-      </button>
-      <button
-        onClick={() => onAlign('sameHeight')}
-        title="Match heights"
-        className="flex items-center gap-1 px-2 h-7 rounded hover:bg-brand-100 hover:text-brand-700 text-brand-600 text-[10px] font-medium transition-colors flex-shrink-0"
-      >
-        H=
-      </button>
+        {/* Match size */}
+        <button onClick={() => onAlign('sameWidth')} title="Match widths"
+          className="flex items-center gap-1 px-2 h-7 rounded hover:bg-amber-100 hover:text-amber-800 text-amber-700 text-[10px] font-semibold transition-colors flex-shrink-0">
+          W=
+        </button>
+        <button onClick={() => onAlign('sameHeight')} title="Match heights"
+          className="flex items-center gap-1 px-2 h-7 rounded hover:bg-amber-100 hover:text-amber-800 text-amber-700 text-[10px] font-semibold transition-colors flex-shrink-0">
+          H=
+        </button>
 
-      <button
-        onClick={onDeselect}
-        className="ml-auto flex items-center gap-1 text-[10px] text-brand-500 hover:text-brand-800 flex-shrink-0"
-      >
-        <X size={10} /> Deselect all
-      </button>
+        <button onClick={onDeselect}
+          className="ml-auto flex items-center gap-1 text-[10px] text-amber-600 hover:text-amber-900 flex-shrink-0">
+          <X size={10} /> Deselect
+        </button>
+      </div>
+
+      {/* Row 2: align-to mode selector */}
+      <div className="flex items-center gap-2 px-3 pb-1.5">
+        <span className="text-[10px] text-amber-700 font-semibold flex-shrink-0">Align to:</span>
+        <div className="flex items-center gap-0.5 rounded-md border border-amber-200 overflow-hidden bg-white flex-shrink-0">
+          {ALIGN_MODES.map(m => (
+            <button key={m.id} onClick={() => onAlignModeChange(m.id)} title={m.title}
+              className={cn(
+                'px-2.5 py-0.5 text-[10px] font-medium transition-colors',
+                alignMode === m.id
+                  ? 'bg-amber-500 text-white'
+                  : 'text-amber-700 hover:bg-amber-50'
+              )}>
+              {m.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Reference mode hint / indicator */}
+        {alignMode === 'reference' && (
+          referenceId ? (
+            <span className="flex items-center gap-1 text-[10px] bg-amber-100 border border-amber-300 text-amber-800 rounded px-2 py-0.5 flex-shrink-0">
+              <Pin size={8} className="text-amber-600" />
+              <span className="font-medium truncate max-w-[120px]">{referenceName}</span>
+              <button onClick={onClearReference} title="Clear reference" className="ml-0.5 hover:text-red-600">
+                <X size={9} />
+              </button>
+            </span>
+          ) : (
+            <span className="text-[10px] text-amber-600 italic flex items-center gap-1 flex-shrink-0">
+              <Pin size={8} /> Click a field on the canvas to pin it as reference
+            </span>
+          )
+        )}
+      </div>
     </div>
   )
 }
@@ -648,12 +691,19 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
   const [saving, setSaving]         = useState(false)
   const [uploading, setUploading]   = useState(false)
   const [showRoleBadges, setShowRoleBadges] = useState(true)
+  const [showGuides, setShowGuides] = useState(true)   // smart guides + snapping on/off
   const [zoom, setZoom]             = useState(100)
+
+  // Alignment toolbar state
+  const [alignMode, setAlignMode]     = useState('selection') // 'selection' | 'canvas' | 'reference'
+  const [referenceId, setReferenceId] = useState(null)        // field id pinned as align reference
+  const [lockedIds, setLockedIds]     = useState([])          // fields locked from moving/resizing
 
   const [drawDrag, setDrawDrag]     = useState(null)
   const [moveDrag, setMoveDrag]     = useState(null)
   const [resizeDrag, setResizeDrag] = useState(null)
-  const [alignGuides, setAlignGuides] = useState({ v: [], h: [] })
+  // Extended guide state: lines, spacing equality brackets, drag position label
+  const [alignGuides, setAlignGuides] = useState({ v: [], h: [], equalH: [], equalV: [], dragLabel: null })
 
   // Two refs: outer scroll container to measure available width, inner canvas
   const scrollContainerRef = useRef(null)
@@ -813,6 +863,23 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
   const startFieldMove = useCallback((e, fieldId) => {
     e.stopPropagation()
     if (pendingType) return
+
+    // In reference-mode with alignment bar visible: clicking a field pins it as reference
+    const currentSel0 = selectedIdsRef.current
+    if (alignMode === 'reference' && currentSel0.length >= 2 && !currentSel0.includes(fieldId)) {
+      setReferenceId(fieldId)
+      return
+    }
+
+    if (lockedIds.includes(fieldId)) {
+      // Allow selection of locked field but no drag
+      setSelectedIds(prev => e.shiftKey || e.ctrlKey || e.metaKey
+        ? (prev.includes(fieldId) ? prev.filter(id => id !== fieldId) : [...prev, fieldId])
+        : [fieldId]
+      )
+      return
+    }
+
     e.preventDefault()
     const { x, y } = getRelativePos(e)
     const currentFields = fieldsRef.current
@@ -839,7 +906,7 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
     })
 
     setMoveDrag({ fieldId, startX: x, startY: y, origPositions })
-  }, [pendingType, getRelativePos])
+  }, [pendingType, alignMode, lockedIds, getRelativePos])
 
   const startFieldResize = useCallback((e, fieldId) => {
     e.preventDefault(); e.stopPropagation()
@@ -887,35 +954,118 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
       const others = currentFields.filter(
         f => f.id !== moveDrag.fieldId && (f.page_number || 1) === (movingField.page_number || 1) && f.x_pct != null
       )
-      const vGuides = new Set()
-      const hGuides = new Set()
+
       let snapX = rawX
       let snapY = rawY
 
-      const mXoffsets = [0, mW / 2, mW]
-      const mYoffsets = [0, mH / 2, mH]
+      const vGuides = new Set()
+      const hGuides = new Set()
 
-      for (const other of others) {
-        const oXs = [other.x_pct, other.x_pct + other.width_pct / 2, other.x_pct + other.width_pct]
-        const oYs = [other.y_pct, other.y_pct + other.height_pct / 2, other.y_pct + other.height_pct]
-        for (let mi = 0; mi < 3; mi++) {
-          for (const ox of oXs) {
-            const diff = Math.abs((rawX + mXoffsets[mi]) - ox)
-            if (diff < GUIDE_THRESHOLD) {
-              vGuides.add(Math.round(ox * 1000) / 1000)
-              if (diff < SNAP_THRESHOLD) snapX = Math.min(100 - mW, Math.max(0, ox - mXoffsets[mi]))
+      if (showGuides) {
+        const mXoffsets = [0, mW / 2, mW]
+        const mYoffsets = [0, mH / 2, mH]
+
+        for (const other of others) {
+          const oXs = [other.x_pct, other.x_pct + other.width_pct / 2, other.x_pct + other.width_pct]
+          const oYs = [other.y_pct, other.y_pct + other.height_pct / 2, other.y_pct + other.height_pct]
+          for (let mi = 0; mi < 3; mi++) {
+            for (const ox of oXs) {
+              const diff = Math.abs((rawX + mXoffsets[mi]) - ox)
+              if (diff < GUIDE_THRESHOLD) {
+                vGuides.add(Math.round(ox * 1000) / 1000)
+                if (diff < SNAP_THRESHOLD) snapX = Math.min(100 - mW, Math.max(0, ox - mXoffsets[mi]))
+              }
             }
-          }
-          for (const oy of oYs) {
-            const diff = Math.abs((rawY + mYoffsets[mi]) - oy)
-            if (diff < GUIDE_THRESHOLD) {
-              hGuides.add(Math.round(oy * 1000) / 1000)
-              if (diff < SNAP_THRESHOLD) snapY = Math.min(100 - mH, Math.max(0, oy - mYoffsets[mi]))
+            for (const oy of oYs) {
+              const diff = Math.abs((rawY + mYoffsets[mi]) - oy)
+              if (diff < GUIDE_THRESHOLD) {
+                hGuides.add(Math.round(oy * 1000) / 1000)
+                if (diff < SNAP_THRESHOLD) snapY = Math.min(100 - mH, Math.max(0, oy - mYoffsets[mi]))
+              }
             }
           }
         }
       }
-      setAlignGuides({ v: [...vGuides], h: [...hGuides] })
+
+      // ── Equal-spacing detection (Figma-style) ─────────────────────────────────
+      // Horizontal: field between two others with equal gaps left and right
+      const equalH = []
+      const equalV = []
+      if (showGuides && others.length >= 2) {
+        // Horizontal: find nearest field to the left and right of the moving field
+        const leftOf  = others.filter(o => o.x_pct + o.width_pct <= snapX + mW * 0.1)
+                               .sort((a, b) => (b.x_pct + b.width_pct) - (a.x_pct + a.width_pct))
+        const rightOf = others.filter(o => o.x_pct >= snapX + mW * 0.9)
+                               .sort((a, b) => a.x_pct - b.x_pct)
+        if (leftOf.length && rightOf.length) {
+          const gapLeft  = snapX - (leftOf[0].x_pct + leftOf[0].width_pct)
+          const gapRight = rightOf[0].x_pct - (snapX + mW)
+          if (gapLeft >= 0 && gapRight >= 0 && Math.abs(gapLeft - gapRight) < GUIDE_THRESHOLD) {
+            if (Math.abs(gapLeft - gapRight) < SNAP_THRESHOLD) {
+              // Snap to perfectly centered between the two flanking fields
+              snapX = Math.round((leftOf[0].x_pct + leftOf[0].width_pct + rightOf[0].x_pct - mW) / 2 * 1000) / 1000
+              snapX = Math.min(100 - mW, Math.max(0, snapX))
+            }
+            const midY = snapY + mH / 2
+            equalH.push({ x1: leftOf[0].x_pct + leftOf[0].width_pct, x2: snapX,       y: midY })
+            equalH.push({ x1: snapX + mW,                             x2: rightOf[0].x_pct, y: midY })
+          }
+        }
+        // Check equal spacing between M and two other fields on its right
+        if (rightOf.length >= 2) {
+          const gapMO1 = rightOf[0].x_pct - (snapX + mW)
+          const gapO1O2 = rightOf[1].x_pct - (rightOf[0].x_pct + rightOf[0].width_pct)
+          if (gapMO1 >= 0 && gapO1O2 >= 0 && Math.abs(gapMO1 - gapO1O2) < GUIDE_THRESHOLD) {
+            const midY = (Math.max(snapY + mH, rightOf[0].y_pct + rightOf[0].height_pct) + Math.min(snapY, rightOf[0].y_pct)) / 2
+            equalH.push({ x1: snapX + mW,                              x2: rightOf[0].x_pct, y: midY })
+            equalH.push({ x1: rightOf[0].x_pct + rightOf[0].width_pct, x2: rightOf[1].x_pct, y: midY })
+          }
+        }
+        // Check equal spacing between two fields on its left and M
+        if (leftOf.length >= 2) {
+          const gapO1M = snapX - (leftOf[0].x_pct + leftOf[0].width_pct)
+          const gapO2O1 = leftOf[1].x_pct - (leftOf[1 === 0 ? 1 : 1].x_pct + leftOf[1].width_pct)
+          const gapO2O1b = leftOf[0].x_pct - (leftOf[1].x_pct + leftOf[1].width_pct)
+          if (gapO1M >= 0 && gapO2O1b >= 0 && Math.abs(gapO1M - gapO2O1b) < GUIDE_THRESHOLD) {
+            const midY = (Math.max(snapY + mH, leftOf[0].y_pct + leftOf[0].height_pct) + Math.min(snapY, leftOf[0].y_pct)) / 2
+            equalH.push({ x1: leftOf[1].x_pct + leftOf[1].width_pct, x2: leftOf[0].x_pct, y: midY })
+            equalH.push({ x1: leftOf[0].x_pct + leftOf[0].width_pct, x2: snapX, y: midY })
+          }
+        }
+
+        // Vertical: find nearest field above and below
+        const aboveOf = others.filter(o => o.y_pct + o.height_pct <= snapY + mH * 0.1)
+                               .sort((a, b) => (b.y_pct + b.height_pct) - (a.y_pct + a.height_pct))
+        const belowOf = others.filter(o => o.y_pct >= snapY + mH * 0.9)
+                               .sort((a, b) => a.y_pct - b.y_pct)
+        if (aboveOf.length && belowOf.length) {
+          const gapAbove = snapY - (aboveOf[0].y_pct + aboveOf[0].height_pct)
+          const gapBelow = belowOf[0].y_pct - (snapY + mH)
+          if (gapAbove >= 0 && gapBelow >= 0 && Math.abs(gapAbove - gapBelow) < GUIDE_THRESHOLD) {
+            if (Math.abs(gapAbove - gapBelow) < SNAP_THRESHOLD) {
+              snapY = Math.round((aboveOf[0].y_pct + aboveOf[0].height_pct + belowOf[0].y_pct - mH) / 2 * 1000) / 1000
+              snapY = Math.min(100 - mH, Math.max(0, snapY))
+            }
+            const midX = snapX + mW / 2
+            equalV.push({ y1: aboveOf[0].y_pct + aboveOf[0].height_pct, y2: snapY,        x: midX })
+            equalV.push({ y1: snapY + mH,                                y2: belowOf[0].y_pct, x: midX })
+          }
+        }
+        if (belowOf.length >= 2) {
+          const gapMO1 = belowOf[0].y_pct - (snapY + mH)
+          const gapO1O2 = belowOf[1].y_pct - (belowOf[0].y_pct + belowOf[0].height_pct)
+          if (gapMO1 >= 0 && gapO1O2 >= 0 && Math.abs(gapMO1 - gapO1O2) < GUIDE_THRESHOLD) {
+            const midX = (Math.max(snapX + mW, belowOf[0].x_pct + belowOf[0].width_pct) + Math.min(snapX, belowOf[0].x_pct)) / 2
+            equalV.push({ y1: snapY + mH,                               y2: belowOf[0].y_pct, x: midX })
+            equalV.push({ y1: belowOf[0].y_pct + belowOf[0].height_pct, y2: belowOf[1].y_pct, x: midX })
+          }
+        }
+      }
+
+      // ── Drag position label ───────────────────────────────────────────────────
+      const dragLabel = { x: snapX + mW / 2, y: snapY, text: `${snapX.toFixed(1)}, ${snapY.toFixed(1)}` }
+
+      setAlignGuides({ v: [...vGuides], h: [...hGuides], equalH, equalV, dragLabel })
       setFields(fs => fs.map(f => f.id === moveDrag.fieldId ? { ...f, x_pct: snapX, y_pct: snapY } : f))
       return
     }
@@ -927,7 +1077,7 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
         height_pct: Math.max(1, resizeDrag.origH + dh),
       } : f))
     }
-  }, [drawDrag, moveDrag, resizeDrag, getRelativePos])
+  }, [drawDrag, moveDrag, resizeDrag, showGuides, getRelativePos])
 
   const handleMouseUp = useCallback((e) => {
     if (drawDrag && pendingType) {
@@ -961,29 +1111,54 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
       }
     }
     setDrawDrag(null); setMoveDrag(null); setResizeDrag(null)
-    setAlignGuides({ v: [], h: [] })
+    setAlignGuides({ v: [], h: [], equalH: [], equalV: [], dragLabel: null })
   }, [drawDrag, pendingType, fields, currentPage, getRelativePos, formDef])
 
   const updateField = (id, changes) => setFields(fs => fs.map(f => f.id === id ? { ...f, ...changes } : f))
   const deleteField = (id) => {
     setFields(fs => fs.filter(f => f.id !== id))
     setSelectedIds(prev => prev.filter(sid => sid !== id))
+    setLockedIds(prev => prev.filter(lid => lid !== id))
+    if (referenceId === id) setReferenceId(null)
   }
+  const toggleLock = (id) => setLockedIds(prev =>
+    prev.includes(id) ? prev.filter(lid => lid !== id) : [...prev, id]
+  )
 
   // ── Alignment operations ──────────────────────────────────────────────────────
   const alignFields = (op) => {
     const sel = fields.filter(f => selectedIds.includes(f.id))
     if (sel.length < 2) return
 
-    const minX   = Math.min(...sel.map(f => f.x_pct))
-    const maxX   = Math.max(...sel.map(f => f.x_pct + f.width_pct))
-    const minY   = Math.min(...sel.map(f => f.y_pct))
-    const maxY   = Math.max(...sel.map(f => f.y_pct + f.height_pct))
-    const centerX = (minX + maxX) / 2
-    const centerY = (minY + maxY) / 2
+    let minX, maxX, minY, maxY, centerX, centerY, ref
 
-    // Reference field (last selected) for match-size operations
-    const ref = sel[sel.length - 1]
+    if (alignMode === 'canvas') {
+      // Align to full canvas bounds
+      minX = 0; maxX = 100; minY = 0; maxY = 100
+      centerX = 50; centerY = 50
+      ref = sel[sel.length - 1]
+    } else if (alignMode === 'reference' && referenceId) {
+      // Align to the pinned reference field's bounds
+      ref = fields.find(f => f.id === referenceId) || sel[sel.length - 1]
+      minX = ref.x_pct
+      maxX = ref.x_pct + ref.width_pct
+      minY = ref.y_pct
+      maxY = ref.y_pct + ref.height_pct
+      centerX = ref.x_pct + ref.width_pct / 2
+      centerY = ref.y_pct + ref.height_pct / 2
+    } else {
+      // Default: bounding box of the entire selection
+      minX   = Math.min(...sel.map(f => f.x_pct))
+      maxX   = Math.max(...sel.map(f => f.x_pct + f.width_pct))
+      minY   = Math.min(...sel.map(f => f.y_pct))
+      maxY   = Math.max(...sel.map(f => f.y_pct + f.height_pct))
+      centerX = (minX + maxX) / 2
+      centerY = (minY + maxY) / 2
+      ref = sel[sel.length - 1]
+    }
+
+    // For match-size (sameWidth/sameHeight), use the reference field or the last-selected field
+    const sizeRef = ref
 
     // Sort helpers for distribute
     const sortedH = [...sel].sort((a, b) => a.x_pct - b.x_pct)
@@ -998,8 +1173,8 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
         case 'top':       return { ...f, y_pct: minY }
         case 'middleV':   return { ...f, y_pct: centerY - f.height_pct / 2 }
         case 'bottom':    return { ...f, y_pct: maxY - f.height_pct }
-        case 'sameWidth': return { ...f, width_pct: ref.width_pct }
-        case 'sameHeight':return { ...f, height_pct: ref.height_pct }
+        case 'sameWidth': return { ...f, width_pct: sizeRef.width_pct }
+        case 'sameHeight':return { ...f, height_pct: sizeRef.height_pct }
         case 'distributeH': {
           const idx = sortedH.findIndex(s => s.id === f.id)
           if (idx <= 0 || idx >= sortedH.length - 1) return f
@@ -1061,6 +1236,18 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
         {/* Zoom */}
         <ZoomControl zoom={zoom} onZoom={setZoom} />
 
+        {/* Smart guides toggle */}
+        <button
+          onClick={() => setShowGuides(p => !p)}
+          title={showGuides ? 'Smart guides & snapping ON — click to disable' : 'Smart guides & snapping OFF — click to enable'}
+          className={cn(
+            'flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border transition-colors flex-shrink-0',
+            showGuides ? 'bg-amber-50 text-amber-700 border-amber-300' : 'text-slate-400 border-slate-200 hover:bg-slate-50'
+          )}
+        >
+          <Crosshair size={12} /> Guides
+        </button>
+
         {/* Role badge toggle */}
         <button
           onClick={() => setShowRoleBadges(p => !p)}
@@ -1107,6 +1294,11 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
         count={selectedIds.filter(id => pageFields.some(f => f.id === id)).length}
         onAlign={alignFields}
         onDeselect={() => setSelectedIds([])}
+        alignMode={alignMode}
+        onAlignModeChange={mode => { setAlignMode(mode); if (mode !== 'reference') setReferenceId(null) }}
+        referenceId={referenceId}
+        referenceName={fields.find(f => f.id === referenceId)?.field_label ?? null}
+        onClearReference={() => setReferenceId(null)}
       />
 
       <div className="flex flex-1 min-h-0 overflow-hidden">
@@ -1185,7 +1377,7 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
                 onMouseUp={handleMouseUp}
                 onMouseLeave={() => {
                   if (drawDrag) setDrawDrag(null)
-                  if (moveDrag) { setMoveDrag(null); setAlignGuides({ v: [], h: [] }) }
+                  if (moveDrag) { setMoveDrag(null); setAlignGuides({ v: [], h: [], equalH: [], equalV: [], dragLabel: null }) }
                   if (resizeDrag) setResizeDrag(null)
                 }}
               >
@@ -1228,8 +1420,10 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
 
                 {/* Field overlays */}
                 {pageFields.map(f => {
-                  const isSelected = selectedIds.includes(f.id)
-                  const isRef = f.field_type === 'reference'
+                  const isSelected  = selectedIds.includes(f.id)
+                  const isRef       = f.field_type === 'reference'
+                  const isLocked    = lockedIds.includes(f.id)
+                  const isPinned    = referenceId === f.id
                   const colorCls = isRef
                     ? 'border-amber-500 bg-amber-50/80 text-amber-800'
                     : filledByColor(f.filled_by || 'initiator')
@@ -1241,12 +1435,14 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
                         left: `${f.x_pct}%`, top: `${f.y_pct}%`,
                         width: `${f.width_pct}%`, height: `${f.height_pct}%`,
                         boxSizing: 'border-box',
-                        cursor: pendingType ? 'crosshair' : 'grab',
+                        cursor: pendingType ? 'crosshair' : isLocked ? 'not-allowed' : 'grab',
                       }}
                       className={cn(
                         'border-2 rounded-sm overflow-visible flex flex-col px-1 py-0.5',
                         colorCls,
-                        isSelected && 'ring-2 ring-offset-1 ring-brand-500'
+                        isSelected && 'ring-2 ring-offset-1 ring-brand-500',
+                        isLocked && 'opacity-70',
+                        isPinned && 'ring-2 ring-offset-1 ring-amber-500',
                       )}
                       onMouseDown={e => startFieldMove(e, f.id)}
                       onClick={e => { e.stopPropagation(); if (!e.shiftKey && !e.ctrlKey && !e.metaKey) setSelectedIds([f.id]) }}
@@ -1279,8 +1475,25 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
                         </div>
                       )}
 
+                      {/* Lock badge */}
+                      {isLocked && (
+                        <div style={{ position: 'absolute', top: -7, right: -7, zIndex: 12 }}
+                          className="w-4 h-4 rounded-full bg-amber-100 border border-amber-400 flex items-center justify-center shadow-sm">
+                          <Lock size={8} className="text-amber-700" />
+                        </div>
+                      )}
+
+                      {/* Reference pin badge */}
+                      {isPinned && (
+                        <div style={{ position: 'absolute', top: -7, left: -7, zIndex: 12 }}
+                          className="w-4 h-4 rounded-full bg-amber-400 border border-amber-600 flex items-center justify-center shadow-sm"
+                          title="Reference field — others align to this">
+                          <Pin size={8} className="text-white" />
+                        </div>
+                      )}
+
                       {/* SE resize handle */}
-                      {isSelected && (
+                      {isSelected && !isLocked && (
                         <div
                           style={{ position: 'absolute', right: -5, bottom: -5, width: 10, height: 10, cursor: 'se-resize', zIndex: 10 }}
                           className="bg-white border-2 border-brand-500 rounded-sm"
@@ -1299,33 +1512,139 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
                   />
                 )}
 
-                {/* ── Alignment guides ── */}
+                {/* ── Alignment guides (amber) ── */}
                 {alignGuides.v.map((xPct, i) => (
                   <div key={`vg${i}`} style={{
                     position: 'absolute',
                     left: `${xPct}%`,
-                    top: '-8px',
-                    bottom: '-8px',
-                    width: '1px',
-                    borderLeft: '1.5px dashed #3b82f6',
+                    top: '-12px',
+                    bottom: '-12px',
+                    width: '0',
+                    borderLeft: '1.5px dashed #f59e0b',
                     pointerEvents: 'none',
                     zIndex: 60,
-                    opacity: 0.85,
+                    opacity: 0.9,
                   }} />
                 ))}
                 {alignGuides.h.map((yPct, i) => (
                   <div key={`hg${i}`} style={{
                     position: 'absolute',
                     top: `${yPct}%`,
-                    left: '-8px',
-                    right: '-8px',
-                    height: '1px',
-                    borderTop: '1.5px dashed #3b82f6',
+                    left: '-12px',
+                    right: '-12px',
+                    height: '0',
+                    borderTop: '1.5px dashed #f59e0b',
                     pointerEvents: 'none',
                     zIndex: 60,
-                    opacity: 0.85,
+                    opacity: 0.9,
                   }} />
                 ))}
+
+                {/* ── Equal-spacing H brackets ── */}
+                {(alignGuides.equalH || []).map((span, i) => {
+                  const midX = (span.x1 + span.x2) / 2
+                  return (
+                    <React.Fragment key={`eqH${i}`}>
+                      {/* Horizontal span line */}
+                      <div style={{
+                        position: 'absolute',
+                        left: `${span.x1}%`, top: `${span.y}%`,
+                        width: `${span.x2 - span.x1}%`, height: '0',
+                        borderTop: '1.5px solid #f59e0b',
+                        pointerEvents: 'none', zIndex: 61,
+                      }} />
+                      {/* Left tick */}
+                      <div style={{
+                        position: 'absolute',
+                        left: `${span.x1}%`, top: `calc(${span.y}% - 3px)`,
+                        width: '0', height: '6px',
+                        borderLeft: '1.5px solid #f59e0b',
+                        pointerEvents: 'none', zIndex: 61,
+                      }} />
+                      {/* Right tick */}
+                      <div style={{
+                        position: 'absolute',
+                        left: `${span.x2}%`, top: `calc(${span.y}% - 3px)`,
+                        width: '0', height: '6px',
+                        borderLeft: '1.5px solid #f59e0b',
+                        pointerEvents: 'none', zIndex: 61,
+                      }} />
+                      {/* Gap label */}
+                      <div style={{
+                        position: 'absolute',
+                        left: `${midX}%`,
+                        top: `calc(${span.y}% - 8px)`,
+                        transform: 'translateX(-50%)',
+                        pointerEvents: 'none', zIndex: 62,
+                      }}
+                        className="bg-amber-500 text-white text-[8px] font-semibold px-1 rounded leading-tight whitespace-nowrap shadow-sm"
+                      >
+                        {(span.x2 - span.x1).toFixed(1)}%
+                      </div>
+                    </React.Fragment>
+                  )
+                })}
+
+                {/* ── Equal-spacing V brackets ── */}
+                {(alignGuides.equalV || []).map((span, i) => {
+                  const midY = (span.y1 + span.y2) / 2
+                  return (
+                    <React.Fragment key={`eqV${i}`}>
+                      {/* Vertical span line */}
+                      <div style={{
+                        position: 'absolute',
+                        top: `${span.y1}%`, left: `${span.x}%`,
+                        height: `${span.y2 - span.y1}%`, width: '0',
+                        borderLeft: '1.5px solid #f59e0b',
+                        pointerEvents: 'none', zIndex: 61,
+                      }} />
+                      {/* Top tick */}
+                      <div style={{
+                        position: 'absolute',
+                        top: `${span.y1}%`, left: `calc(${span.x}% - 3px)`,
+                        height: '0', width: '6px',
+                        borderTop: '1.5px solid #f59e0b',
+                        pointerEvents: 'none', zIndex: 61,
+                      }} />
+                      {/* Bottom tick */}
+                      <div style={{
+                        position: 'absolute',
+                        top: `${span.y2}%`, left: `calc(${span.x}% - 3px)`,
+                        height: '0', width: '6px',
+                        borderTop: '1.5px solid #f59e0b',
+                        pointerEvents: 'none', zIndex: 61,
+                      }} />
+                      {/* Gap label */}
+                      <div style={{
+                        position: 'absolute',
+                        top: `${midY}%`,
+                        left: `calc(${span.x}% + 4px)`,
+                        transform: 'translateY(-50%)',
+                        pointerEvents: 'none', zIndex: 62,
+                      }}
+                        className="bg-amber-500 text-white text-[8px] font-semibold px-1 rounded leading-tight whitespace-nowrap shadow-sm"
+                      >
+                        {(span.y2 - span.y1).toFixed(1)}%
+                      </div>
+                    </React.Fragment>
+                  )
+                })}
+
+                {/* ── Drag position label ── */}
+                {alignGuides.dragLabel && (
+                  <div style={{
+                    position: 'absolute',
+                    left: `${alignGuides.dragLabel.x}%`,
+                    top: `${alignGuides.dragLabel.y}%`,
+                    transform: 'translate(-50%, calc(-100% - 4px))',
+                    pointerEvents: 'none',
+                    zIndex: 63,
+                  }}
+                    className="bg-slate-800/90 text-white text-[9px] font-mono px-1.5 py-0.5 rounded shadow-md leading-tight whitespace-nowrap"
+                  >
+                    {alignGuides.dragLabel.text}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1338,6 +1657,8 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
             onChange={changes => updateField(selectedId, changes)}
             onDelete={() => deleteField(selectedId)}
             formCodeSuffix={formDef?.code_suffix}
+            locked={selectedId ? lockedIds.includes(selectedId) : false}
+            onToggleLock={() => selectedId && toggleLock(selectedId)}
           />
         </div>
       </div>
