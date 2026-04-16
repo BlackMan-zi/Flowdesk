@@ -5,7 +5,7 @@ import SignatureCanvas from './SignatureCanvas'
 import Modal from '../ui/Modal'
 import { getPdfTemplateBlobPage } from '../../api/forms'
 import { PenTool, Plus, Trash2 } from 'lucide-react'
-import { evaluateFormula, evaluateRowFormula, resolveCalculatedFields } from '../../utils/formulaEngine'
+import { evaluateFormula, evaluateRowFormula, resolveCalculatedFields, formatNumberDisplay } from '../../utils/formulaEngine'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
@@ -197,16 +197,22 @@ function FieldOverlay({ field, value, onChange, allValues, fieldsByName }) {
     return (
       <div className="w-full h-full flex items-center bg-white/90 border border-slate-400/60 overflow-hidden">
         <span className="px-1 text-xs text-slate-500 font-medium bg-slate-50 border-r border-slate-300 h-full flex items-center">$</span>
-        <input
-          type="number"
-          step="0.01"
-          value={value || ''}
-          onChange={e => onChange(e.target.value)}
-          placeholder="0.00"
-          readOnly={field.read_only}
-          required={field.required}
-          className="flex-1 h-full text-xs px-1 focus:outline-none focus:ring-1 focus:ring-emerald-400 bg-transparent"
-        />
+        {field.read_only ? (
+          <span className="flex-1 h-full text-xs px-1 flex items-center font-mono">
+            {formatNumberDisplay(value) || <span className="text-slate-400">0.00</span>}
+          </span>
+        ) : (
+          <input
+            type="number"
+            step="0.01"
+            value={value || ''}
+            onChange={e => onChange(e.target.value)}
+            placeholder="0.00"
+            required={field.required}
+            className="flex-1 h-full text-xs px-1 outline-none focus:border-brand-500 bg-transparent"
+            style={inputStyle}
+          />
+        )}
       </div>
     )
   }
@@ -215,13 +221,22 @@ function FieldOverlay({ field, value, onChange, allValues, fieldsByName }) {
     const computed = evaluateFormula(field.calculation_formula, allValues, fieldsByName)
     return (
       <div className="w-full h-full bg-violet-50 border border-violet-200 flex items-center px-1.5 text-xs text-violet-800 font-mono">
-        {computed || <span className="text-slate-400 italic">Auto-calculated</span>}
+        {computed ? formatNumberDisplay(computed) : <span className="text-slate-400 italic">Auto-calculated</span>}
       </div>
     )
   }
 
   if (field.field_type === 'table') {
     return <TableFieldInput field={field} value={value} onChange={onChange} />
+  }
+
+  // Read-only number fields: render as formatted div so commas show
+  if (field.field_type === 'number' && field.read_only) {
+    return (
+      <div className="w-full h-full bg-white/90 border border-slate-400/60 flex items-center px-1 font-mono" style={inputStyle}>
+        {value ? formatNumberDisplay(value) : <span className="text-slate-400">{field.placeholder || '—'}</span>}
+      </div>
+    )
   }
 
   const inputType = field.field_type === 'number' ? 'number'

@@ -61,6 +61,20 @@ export function evaluateFormula(formula, values, fieldsByName) {
 }
 
 /**
+ * Format a numeric string for display by inserting thousands separators.
+ * The raw string (without commas) must be kept in state so formula chaining
+ * (parseFloat) continues to work correctly.
+ *
+ * Examples:  "1000" → "1,000"   "1234567.89" → "1,234,567.89"   "" → ""
+ */
+export function formatNumberDisplay(str) {
+  if (str === '' || str == null) return str
+  const [intPart, decPart] = String(str).split('.')
+  const withCommas = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+  return decPart !== undefined ? `${withCommas}.${decPart}` : withCommas
+}
+
+/**
  * Resolve ALL calculated fields in a form, handling chains of dependencies.
  *
  * Problem: `values` only contains user-typed values. Calculated fields (cal1, cal2…)
