@@ -503,17 +503,17 @@ function AlignmentBar({ count, onAlign, onDeselect, alignMode, onAlignModeChange
 
         <div className="w-px h-4 bg-amber-200 mx-1 flex-shrink-0" />
 
-        {/* Horizontal alignment */}
-        <AlignBtn Icon={AlignStartHorizontal}   title="Align left edges"             onClick={() => onAlign('left')} />
-        <AlignBtn Icon={AlignCenterHorizontal}  title="Align horizontal centers"     onClick={() => onAlign('centerH')} />
-        <AlignBtn Icon={AlignEndHorizontal}     title="Align right edges"            onClick={() => onAlign('right')} />
+        {/* Horizontal alignment — Vertical icons = left/center/right */}
+        <AlignBtn Icon={AlignStartVertical}     title="Align left edges"             onClick={() => onAlign('left')} />
+        <AlignBtn Icon={AlignCenterVertical}    title="Align horizontal centers"     onClick={() => onAlign('centerH')} />
+        <AlignBtn Icon={AlignEndVertical}       title="Align right edges"            onClick={() => onAlign('right')} />
 
         <div className="w-px h-4 bg-amber-200 mx-1 flex-shrink-0" />
 
-        {/* Vertical alignment */}
-        <AlignBtn Icon={AlignStartVertical}     title="Align top edges"              onClick={() => onAlign('top')} />
-        <AlignBtn Icon={AlignCenterVertical}    title="Align vertical centers"       onClick={() => onAlign('middleV')} />
-        <AlignBtn Icon={AlignEndVertical}       title="Align bottom edges"           onClick={() => onAlign('bottom')} />
+        {/* Vertical alignment — Horizontal icons = top/middle/bottom */}
+        <AlignBtn Icon={AlignStartHorizontal}   title="Align top edges"              onClick={() => onAlign('top')} />
+        <AlignBtn Icon={AlignCenterHorizontal}  title="Align vertical centers"       onClick={() => onAlign('middleV')} />
+        <AlignBtn Icon={AlignEndHorizontal}     title="Align bottom edges"           onClick={() => onAlign('bottom')} />
 
         <div className="w-px h-4 bg-amber-200 mx-1 flex-shrink-0" />
 
