@@ -93,10 +93,10 @@ function TableFieldInput({ field, value, onChange }) {
 
 function FieldOverlay({ field, value, onChange, allValues, fieldsByName }) {
   const fontSize = field.validation_rules?.font_size || 11
-  // Sharp edges, thin border — clean look over PDF backgrounds
+  // Sharp edges, thin border — focused state changes color only, no extra ring layer
   const inputCls = `
     w-full h-full bg-white/90 border border-slate-400/60
-    px-1 focus:outline-none focus:ring-1 focus:ring-brand-400 focus:bg-white focus:border-brand-400
+    px-1 outline-none focus:bg-white focus:border-brand-500
   `
   const inputStyle = { fontSize: `${fontSize}px`, borderRadius: 0 }
 

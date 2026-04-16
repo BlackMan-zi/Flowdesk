@@ -1440,11 +1440,11 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
                         cursor: pendingType ? 'crosshair' : isLocked ? 'not-allowed' : 'grab',
                       }}
                       className={cn(
-                        'border overflow-visible flex flex-col px-1 py-0.5',
-                        colorCls,
-                        isSelected && 'ring-2 ring-offset-1 ring-brand-500',
-                        isLocked && 'opacity-70',
-                        isPinned && 'ring-2 ring-offset-1 ring-amber-500',
+                        'border overflow-visible flex flex-col px-1 py-0.5 transition-colors',
+                        isSelected ? 'border-brand-500 bg-brand-50/80 text-brand-800'
+                          : isPinned ? 'border-amber-500 bg-amber-50/80 text-amber-800'
+                          : colorCls,
+                        isLocked && 'opacity-60',
                       )}
                       onMouseDown={e => startFieldMove(e, f.id)}
                       onClick={e => { e.stopPropagation(); if (!e.shiftKey && !e.ctrlKey && !e.metaKey) setSelectedIds([f.id]) }}
