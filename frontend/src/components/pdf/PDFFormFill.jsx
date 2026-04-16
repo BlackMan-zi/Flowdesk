@@ -3,7 +3,7 @@ import * as pdfjsLib from 'pdfjs-dist'
 import PDFPageCanvas from './PDFPageCanvas'
 import SignatureCanvas from './SignatureCanvas'
 import Modal from '../ui/Modal'
-import { getPdfTemplateBlob } from '../../api/forms'
+import { getPdfTemplateBlobPage } from '../../api/forms'
 import { PenTool, Plus, Trash2 } from 'lucide-react'
 import { evaluateFormula, evaluateRowFormula } from '../../utils/formulaEngine'
 
@@ -238,7 +238,13 @@ function FieldOverlay({ field, value, onChange, allValues, fieldsByName }) {
 
 // ── Single page view ─────────────────────────────────────────────────────────
 
-function PageFillView({ pdfDoc, pageNum, fields, values, onValueChange, onSignatureClick, fieldsByName }) {
+/**
+ * Renders one form page: the PDF background (if any) with field overlays on top.
+ * pdfDoc     - the pdfjsLib document for this form page (may differ per page)
+ * pdfPageNum - which page within that pdfDoc to render (usually 1 for per-page templates)
+ * formPage   - the form page number (for filtering fields)
+ */
+function PageFillView({ pdfDoc, pdfPageNum, formPage, fields, values, onValueChange, onSignatureClick, fieldsByName }) {
   const containerRef = useRef(null)
   const [containerWidth, setContainerWidth] = useState(0)
 
@@ -249,12 +255,16 @@ function PageFillView({ pdfDoc, pageNum, fields, values, onValueChange, onSignat
     return () => obs.disconnect()
   }, [])
 
-  const pageFields = fields.filter(f => (f.page_number || 1) === pageNum)
+  const pageFields = fields.filter(f => (f.page_number || 1) === formPage)
 
   return (
     <div ref={containerRef} style={{ position: 'relative' }} className="shadow-md bg-white">
-      {containerWidth > 0 && (
-        <PDFPageCanvas pdfDoc={pdfDoc} pageNum={pageNum} containerWidth={containerWidth} />
+      {containerWidth > 0 && pdfDoc && (
+        <PDFPageCanvas pdfDoc={pdfDoc} pageNum={pdfPageNum} containerWidth={containerWidth} />
+      )}
+      {/* Blank white area when no PDF for this page */}
+      {containerWidth > 0 && !pdfDoc && (
+        <div style={{ width: '100%', height: Math.round(containerWidth * 1.414), backgroundColor: 'white' }} />
       )}
 
       {/* Field overlays */}
@@ -294,6 +304,10 @@ function PageFillView({ pdfDoc, pageNum, fields, values, onValueChange, onSignat
 // ── Main PDFFormFill component ────────────────────────────────────────────────
 
 /**
+ * Renders all form pages as a continuous vertical scroll.
+ * Each page may have its own PDF template (uploaded via per-page upload).
+ * Falls back to rendering the correct page from the main multi-page PDF.
+ *
  * Props:
  *   formDef     - form definition object (has .id, .fields, .pdf_template_path)
  *   values      - { [fieldId]: value } controlled from parent
@@ -301,23 +315,39 @@ function PageFillView({ pdfDoc, pageNum, fields, values, onValueChange, onSignat
  *   currentUser - for auto-fill fields
  */
 export default function PDFFormFill({ formDef, values, onChange, currentUser }) {
-  const [pdfDoc, setPdfDoc] = useState(null)
-  const [numPages, setNumPages] = useState(0)
-  const [sigFieldId, setSigFieldId] = useState(null) // which field is pending signature
+  // pageTemplates maps form-page-number → { doc, pageCount }
+  const [pageTemplates, setPageTemplates] = useState({})
+  const [sigFieldId, setSigFieldId] = useState(null)
 
+  // Load all per-page templates on mount
   useEffect(() => {
-    if (!formDef?.id || !formDef?.pdf_template_path) return
-    let blobUrl = null
+    if (!formDef?.id) return
+    const blobUrls = []
 
-    getPdfTemplateBlob(formDef.id).then(async res => {
-      blobUrl = URL.createObjectURL(res.data)
-      const doc = await pdfjsLib.getDocument(blobUrl).promise
-      setPdfDoc(doc)
-      setNumPages(doc.numPages)
-    }).catch(console.error)
+    const allFields = formDef.fields || []
+    const maxFormPage = allFields.length
+      ? Math.max(...allFields.map(f => f.page_number || 1))
+      : 1
 
-    return () => { if (blobUrl) URL.revokeObjectURL(blobUrl) }
-  }, [formDef?.id, formDef?.pdf_template_path])
+    async function loadPage(pageNum) {
+      try {
+        const res = await getPdfTemplateBlobPage(formDef.id, pageNum)
+        const blobUrl = URL.createObjectURL(res.data)
+        blobUrls.push(blobUrl)
+        const doc = await pdfjsLib.getDocument(blobUrl).promise
+        setPageTemplates(prev => ({ ...prev, [pageNum]: { doc, pageCount: doc.numPages } }))
+      } catch {
+        // No template for this page — blank canvas will be used
+      }
+    }
+
+    // Load page 1 (main template) + any per-page templates up to the max form page
+    for (let p = 1; p <= Math.max(maxFormPage, 1); p++) {
+      loadPage(p)
+    }
+
+    return () => blobUrls.forEach(u => URL.revokeObjectURL(u))
+  }, [formDef?.id])
 
   // Auto-fill fields on mount
   useEffect(() => {
@@ -340,12 +370,23 @@ export default function PDFFormFill({ formDef, values, onChange, currentUser }) 
     f => f.is_active !== false && f.x_pct != null
   )
 
-  // Fields without position fall back to a list below the PDF
+  // Fields without position fall back to a list below the PDF pages
   const unpositionedFields = (formDef?.fields || []).filter(
     f => f.is_active !== false && f.x_pct == null
   )
 
-  if (!pdfDoc) {
+  // Determine total form pages: max page_number across all positioned fields,
+  // or page count of page-1 PDF if it's a multi-page file
+  const mainPageCount = pageTemplates[1]?.pageCount || 0
+  const maxFieldPage  = positionedFields.length
+    ? Math.max(...positionedFields.map(f => f.page_number || 1))
+    : 0
+  const totalPages = Math.max(mainPageCount, maxFieldPage, 1)
+
+  // Loading: show spinner until we've attempted page 1 (either got it or confirmed missing)
+  const isLoading = Object.keys(pageTemplates).length === 0 && formDef?.pdf_template_path
+
+  if (isLoading) {
     return (
       <div className="flex justify-center py-12 text-slate-400 text-sm">
         Loading form…
@@ -356,18 +397,30 @@ export default function PDFFormFill({ formDef, values, onChange, currentUser }) 
   return (
     <>
       <div className="space-y-3">
-        {Array.from({ length: numPages }, (_, i) => i + 1).map(pageNum => (
-          <PageFillView
-            key={pageNum}
-            pdfDoc={pdfDoc}
-            pageNum={pageNum}
-            fields={positionedFields}
-            values={values}
-            onValueChange={onChange}
-            onSignatureClick={setSigFieldId}
-            fieldsByName={fieldsByName}
-          />
-        ))}
+        {Array.from({ length: totalPages }, (_, i) => i + 1).map(formPage => {
+          // Resolve which pdfDoc and page-within-doc to use for this form page
+          const hasOwn = !!pageTemplates[formPage]
+          const pdfDoc     = hasOwn ? pageTemplates[formPage].doc : pageTemplates[1]?.doc || null
+          const pdfPageNum = hasOwn ? 1 : formPage
+
+          // Skip rendering the PDF canvas if formPage exceeds what the main doc has
+          const mainDocPages = pageTemplates[1]?.pageCount || 0
+          const showPdf = hasOwn || formPage <= mainDocPages
+
+          return (
+            <PageFillView
+              key={formPage}
+              pdfDoc={showPdf ? pdfDoc : null}
+              pdfPageNum={pdfPageNum}
+              formPage={formPage}
+              fields={positionedFields}
+              values={values}
+              onValueChange={onChange}
+              onSignatureClick={setSigFieldId}
+              fieldsByName={fieldsByName}
+            />
+          )
+        })}
 
         {/* Fallback list for any unpositioned fields */}
         {unpositionedFields.length > 0 && (
