@@ -565,9 +565,9 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
     return () => obs.disconnect()
   }, [])
 
-  // Base canvas width = available scroll area (minus 48px padding) capped at 850
+  // Base canvas width = available scroll area (minus outer p-6 padding + 8px canvas margin) capped at 850
   const BASE_MAX = 850
-  const basePdfWidth = availableWidth ? Math.min(availableWidth - 48, BASE_MAX) : BASE_MAX
+  const basePdfWidth = availableWidth ? Math.min(availableWidth - 64, BASE_MAX) : BASE_MAX
   const pdfWidth = Math.round(basePdfWidth * zoom / 100)
 
   // Load PDF
@@ -878,8 +878,9 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
           ) : null}
 
           {/* Canvas — shown always when PDF exists, or as blank canvas */}
+          {/* White margin wrapper ensures edge content is never flush against the shadow/border */}
           {(pdfDoc || true) && (
-            <div className="shadow-xl self-start">
+            <div className="shadow-xl self-start rounded-sm" style={{ background: 'white', padding: '8px' }}>
               <div
                 ref={canvasRef}
                 style={{
