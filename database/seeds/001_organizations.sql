@@ -8,8 +8,8 @@
 -- ── Organizations ────────────────────────────────────────────
 INSERT INTO organizations (id, name, subdomain, subscription_plan, created_at, updated_at)
 VALUES
-  ('org-bsc-001', 'BSC Rwanda', 'bsc', 'enterprise', NOW(), NOW())
-ON DUPLICATE KEY UPDATE name = VALUES(name);
+  ('org-bsc-001', 'BSC Rwanda', 'demo', 'enterprise', NOW(), NOW())
+ON DUPLICATE KEY UPDATE name = VALUES(name), subdomain = VALUES(subdomain);
 
 -- ── Top-level Departments ────────────────────────────────────
 INSERT INTO departments (id, organization_id, name, parent_department_id, is_active, created_at)

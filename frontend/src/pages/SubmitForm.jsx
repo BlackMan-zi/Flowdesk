@@ -1,18 +1,18 @@
 import React, { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import toast from 'react-hot-toast'
+import { toast } from 'sonner'
 import { listFormDefinitions, getFormDefinition, createFormInstance, saveDraft, submitFormInstance } from '../api/forms'
-import Card, { CardHeader } from '../components/ui/Card'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/Card'
 import Button from '../components/ui/Button'
-import Input, { Select, Textarea } from '../components/ui/Input'
-import Spinner from '../components/ui/Spinner'
+import Input from '../components/ui/Input'
 import { useAuth } from '../context/AuthContext'
 import PDFFormFill from '../components/pdf/PDFFormFill'
-import { ChevronLeft, ChevronRight, FileText, Check, Save, Send } from 'lucide-react'
+import { ChevronLeft, ChevronRight, FileText, Check, Save, Send, AlertCircle } from 'lucide-react'
 import { evaluateFormula } from '../utils/formulaEngine'
+import { cn } from '@/lib/utils'
 
-// ── Step breadcrumb indicator ─────────────────────────────────────────────────
+// ── Step breadcrumb ───────────────────────────────────────────────────────────
 
 function StepBar({ step, formName }) {
   const steps = [
@@ -22,20 +22,157 @@ function StepBar({ step, formName }) {
   return (
     <div className="flex items-center gap-2">
       {steps.map((s, i) => {
-        const isActive   = s.key === step
-        const isDone     = steps.findIndex(x => x.key === step) > i
+        const isActive = s.key === step
+        const isDone   = steps.findIndex(x => x.key === step) > i
         return (
           <React.Fragment key={s.key}>
-            {i > 0 && <ChevronRight size={14} className="text-slate-300 flex-shrink-0" />}
-            <span className={`text-sm font-semibold flex items-center gap-1.5 ${
-              isActive ? 'text-slate-900' : isDone ? 'text-brand-600' : 'text-slate-400'
-            }`}>
-              {isDone && <Check size={13} className="text-brand-600" />}
+            {i > 0 && <ChevronRight size={14} className="text-muted-foreground/40 flex-shrink-0" />}
+            <span className={cn(
+              'text-sm font-medium flex items-center gap-1.5',
+              isActive ? 'text-foreground' : isDone ? 'text-primary' : 'text-muted-foreground'
+            )}>
+              {isDone && <Check size={13} className="text-primary" />}
               {s.label}
             </span>
           </React.Fragment>
         )
       })}
+    </div>
+  )
+}
+
+// ── Field renderer ────────────────────────────────────────────────────────────
+
+function FieldRenderer({ field, value, onChange, user }) {
+  if (field.auto_filled) {
+    const autoVal = field.auto_fill_source === 'current_user.name' ? (user?.name || '') : ''
+    return (
+      <div className="space-y-1.5">
+        <label className="text-sm font-medium text-foreground">{field.field_label}</label>
+        <input
+          readOnly
+          value={autoVal}
+          className="flex h-10 w-full rounded-md border border-input bg-muted px-3 py-2 text-sm text-muted-foreground cursor-not-allowed"
+        />
+      </div>
+    )
+  }
+
+  const common = {
+    label: field.field_label,
+    required: field.required,
+    placeholder: field.placeholder || '',
+    value: value || '',
+  }
+
+  switch (field.field_type) {
+    case 'textarea':
+      return (
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-foreground">
+            {field.field_label}{field.required && <span className="text-destructive ml-0.5">*</span>}
+          </label>
+          <textarea
+            rows={3}
+            placeholder={field.placeholder || ''}
+            value={value || ''}
+            onChange={e => onChange(e.target.value)}
+            required={field.required}
+            className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none"
+          />
+        </div>
+      )
+    case 'number':
+    case 'currency':
+      return <Input {...common} type="number" step={field.field_type === 'currency' ? '0.01' : '1'} onChange={e => onChange(e.target.value)} />
+    case 'date':
+      return <Input {...common} type="date" onChange={e => onChange(e.target.value)} />
+    case 'dropdown':
+      return (
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-foreground">
+            {field.field_label}{field.required && <span className="text-destructive ml-0.5">*</span>}
+          </label>
+          <select
+            value={value || ''}
+            onChange={e => onChange(e.target.value)}
+            required={field.required}
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          >
+            <option value="">Select…</option>
+            {(field.options || []).map(o => <option key={o} value={o}>{o}</option>)}
+          </select>
+        </div>
+      )
+    case 'checkbox':
+      return (
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-foreground">
+            {field.field_label}{field.required && <span className="text-destructive ml-0.5">*</span>}
+          </label>
+          <div className="space-y-2">
+            {(field.options || []).map(o => (
+              <label key={o} className="flex items-center gap-2.5 text-sm text-foreground cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={(value || '').split(',').filter(Boolean).includes(o)}
+                  onChange={e => {
+                    const cur = (value || '').split(',').filter(Boolean)
+                    if (e.target.checked) cur.push(o)
+                    else cur.splice(cur.indexOf(o), 1)
+                    onChange(cur.join(','))
+                  }}
+                  className="rounded border-input text-primary focus:ring-ring w-4 h-4"
+                />
+                <span>{o}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )
+    case 'radio':
+      return (
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-foreground">
+            {field.field_label}{field.required && <span className="text-destructive ml-0.5">*</span>}
+          </label>
+          <div className="space-y-2">
+            {(field.options || []).map(o => (
+              <label key={o} className="flex items-center gap-2.5 text-sm text-foreground cursor-pointer">
+                <input
+                  type="radio"
+                  name={field.id}
+                  value={o}
+                  checked={value === o}
+                  onChange={() => onChange(o)}
+                  className="border-input text-primary focus:ring-ring w-4 h-4"
+                />
+                <span>{o}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )
+    default:
+      return <Input {...common} type="text" onChange={e => onChange(e.target.value)} />
+  }
+}
+
+// ── Action bar ────────────────────────────────────────────────────────────────
+
+function ActionBar({ draftSaved, onSubmit, onDraft, onCancel, submitLoading, draftLoading }) {
+  return (
+    <div className="flex items-center gap-3 flex-wrap pt-2">
+      <Button onClick={onSubmit} loading={submitLoading}>
+        <Send size={14} /> Submit for Approval
+      </Button>
+      <Button variant="outline" onClick={onDraft} loading={draftLoading}>
+        <Save size={14} />
+        {draftSaved ? 'Saved!' : 'Save Draft'}
+      </Button>
+      <Button variant="ghost" onClick={onCancel}>
+        Cancel
+      </Button>
     </div>
   )
 }
@@ -59,10 +196,12 @@ export default function SubmitForm() {
     queryFn: () => listFormDefinitions().then(r => r.data)
   })
 
+  // staleTime: 0 ensures we always get the latest field configuration after Design Layout edits
   const { data: formDef, isLoading: defLoading } = useQuery({
     queryKey: ['form-definition', selectedDefId],
     queryFn: () => getFormDefinition(selectedDefId).then(r => r.data),
-    enabled: !!selectedDefId
+    enabled: !!selectedDefId,
+    staleTime: 0,
   })
 
   const fieldsByName = useMemo(() => {
@@ -98,7 +237,7 @@ export default function SubmitForm() {
       }
     },
     onSuccess: () => {
-      qc.invalidateQueries(['form-instances'])
+      qc.invalidateQueries({ queryKey: ['form-instances'] })
       setDraftSaved(true)
       setTimeout(() => setDraftSaved(false), 2500)
       toast.success('Draft saved')
@@ -123,7 +262,7 @@ export default function SubmitForm() {
       return instanceId
     },
     onSuccess: (id) => {
-      qc.invalidateQueries(['form-instances'])
+      qc.invalidateQueries({ queryKey: ['form-instances'] })
       toast.success('Form submitted for approval!')
       navigate(`/my-forms/${id}`)
     },
@@ -134,70 +273,10 @@ export default function SubmitForm() {
     }
   })
 
-  const renderField = (field) => {
-    if (field.auto_filled) {
-      const autoVal = field.auto_fill_source === 'current_user.name' ? user?.name : ''
-      return (
-        <Input key={field.id} label={field.field_label} value={autoVal} disabled className="mb-4" />
-      )
-    }
-    const common = {
-      key: field.id,
-      label: field.field_label,
-      required: field.required,
-      placeholder: field.placeholder || '',
-      value: fieldValues[field.id] || '',
-      className: 'mb-4'
-    }
-    switch (field.field_type) {
-      case 'textarea':
-        return <Textarea {...common} onChange={e => setField(field.id, e.target.value)} rows={3} />
-      case 'number':
-        return <Input {...common} type="number" onChange={e => setField(field.id, e.target.value)} />
-      case 'date':
-        return <Input {...common} type="date" onChange={e => setField(field.id, e.target.value)} />
-      case 'dropdown':
-        return (
-          <Select {...common} onChange={e => setField(field.id, e.target.value)}>
-            <option value="">Select…</option>
-            {(field.options || []).map(o => <option key={o} value={o}>{o}</option>)}
-          </Select>
-        )
-      case 'checkbox':
-        return (
-          <div key={field.id} className="mb-4">
-            <label className="block text-sm font-medium text-slate-700 mb-2">
-              {field.field_label}{field.required && <span className="text-red-500 ml-0.5">*</span>}
-            </label>
-            <div className="space-y-2">
-              {(field.options || []).map(o => (
-                <label key={o} className="flex items-center gap-2.5 text-sm text-slate-700 cursor-pointer group">
-                  <input
-                    type="checkbox"
-                    checked={(fieldValues[field.id] || '').includes(o)}
-                    onChange={e => {
-                      const cur = (fieldValues[field.id] || '').split(',').filter(Boolean)
-                      if (e.target.checked) cur.push(o)
-                      else cur.splice(cur.indexOf(o), 1)
-                      setField(field.id, cur.join(','))
-                    }}
-                    className="rounded border-slate-300 text-brand-600 focus:ring-brand-500/30 w-4 h-4"
-                  />
-                  <span className="group-hover:text-slate-900 transition-colors">{o}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-        )
-      default:
-        return <Input {...common} type="text" onChange={e => setField(field.id, e.target.value)} />
-    }
-  }
-
   if (defsLoading) return (
     <div className="flex flex-col items-center justify-center py-24 gap-3">
-      <Spinner />
-      <p className="text-sm text-slate-400">Loading forms…</p>
+      <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      <p className="text-sm text-muted-foreground">Loading forms…</p>
     </div>
   )
 
@@ -208,12 +287,12 @@ export default function SubmitForm() {
       <div className="flex items-center gap-3">
         <button
           onClick={() => step === 'fill' ? setStep('select') : navigate(-1)}
-          className="w-9 h-9 rounded-xl hover:bg-slate-100 text-slate-500 flex items-center justify-center transition-colors"
+          className="w-9 h-9 rounded-xl hover:bg-accent text-muted-foreground flex items-center justify-center transition-colors"
         >
           <ChevronLeft size={20} />
         </button>
         <div className="flex-1">
-          <h1 className="text-xl font-bold text-slate-900">New Request</h1>
+          <h1 className="text-xl font-bold text-foreground">New Request</h1>
           <div className="mt-0.5">
             <StepBar step={step} formName={formDef?.name} />
           </div>
@@ -223,55 +302,55 @@ export default function SubmitForm() {
       {/* Step 1: Select form type */}
       {step === 'select' && (
         <Card>
-          <CardHeader
-            title="Select Form Type"
-            subtitle="Choose the type of request you want to submit"
-          />
-          <div className="p-4 space-y-2">
+          <CardHeader>
+            <CardTitle className="text-base">Select Form Type</CardTitle>
+            <CardDescription>Choose the type of request you want to submit</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
             {defs.length === 0 ? (
               <div className="text-center py-10">
-                <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center mx-auto mb-3">
-                  <FileText size={20} className="text-slate-400" />
+                <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center mx-auto mb-3">
+                  <FileText size={20} className="text-muted-foreground" />
                 </div>
-                <p className="text-sm font-medium text-slate-600">No form types available</p>
-                <p className="text-xs text-slate-400 mt-1">Ask your administrator to set up form definitions.</p>
+                <p className="text-sm font-medium text-foreground">No form types available</p>
+                <p className="text-xs text-muted-foreground mt-1">Ask your administrator to set up form definitions.</p>
               </div>
             ) : defs.map(def => (
               <button
                 key={def.id}
                 onClick={() => { setSelectedDefId(def.id); setStep('fill') }}
-                className="w-full flex items-center justify-between px-4 py-3.5 rounded-xl border border-slate-200 hover:border-brand-400 hover:bg-brand-50 text-left transition-all group"
+                className="w-full flex items-center justify-between px-4 py-3.5 rounded-xl border border-border hover:border-primary/50 hover:bg-primary/5 text-left transition-all group"
               >
                 <div className="flex items-start gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-slate-100 group-hover:bg-brand-100 flex items-center justify-center flex-shrink-0 transition-colors">
-                    <FileText size={15} className="text-slate-500 group-hover:text-brand-600 transition-colors" />
+                  <div className="w-9 h-9 rounded-xl bg-muted group-hover:bg-primary/10 flex items-center justify-center flex-shrink-0 transition-colors">
+                    <FileText size={15} className="text-muted-foreground group-hover:text-primary transition-colors" />
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-slate-800 group-hover:text-slate-900">{def.name}</p>
+                    <p className="text-sm font-semibold text-foreground">{def.name}</p>
                     {def.description && (
-                      <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{def.description}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{def.description}</p>
                     )}
                   </div>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0 ml-3">
-                  <span className="text-xs text-slate-400 font-mono bg-slate-100 px-2 py-0.5 rounded-md">{def.code_suffix}</span>
-                  <ChevronRight size={14} className="text-slate-300 group-hover:text-brand-500 transition-colors" />
+                  <span className="text-xs text-muted-foreground font-mono bg-muted px-2 py-0.5 rounded-md">{def.code_suffix}</span>
+                  <ChevronRight size={14} className="text-muted-foreground/40 group-hover:text-primary transition-colors" />
                 </div>
               </button>
             ))}
-          </div>
+          </CardContent>
         </Card>
       )}
 
       {/* Step 2: Fill form */}
-      {step === 'fill' && formDef && (
+      {step === 'fill' && (
         <>
           {defLoading ? (
             <div className="flex flex-col items-center justify-center py-16 gap-3">
-              <Spinner />
-              <p className="text-sm text-slate-400">Loading form…</p>
+              <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+              <p className="text-sm text-muted-foreground">Loading form…</p>
             </div>
-          ) : formDef.pdf_template_path ? (
+          ) : formDef?.pdf_template_path ? (
             <>
               <PDFFormFill
                 formDef={formDef}
@@ -280,7 +359,8 @@ export default function SubmitForm() {
                 currentUser={user}
               />
               {error && (
-                <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">
+                <div className="flex items-start gap-2 bg-destructive/10 border border-destructive/30 rounded-xl px-4 py-3 text-sm text-destructive">
+                  <AlertCircle size={15} className="flex-shrink-0 mt-0.5" />
                   {error}
                 </div>
               )}
@@ -293,17 +373,30 @@ export default function SubmitForm() {
                 draftLoading={draftMutation.isPending}
               />
             </>
-          ) : (
+          ) : formDef ? (
             <Card>
-              <CardHeader
-                title={formDef.name}
-                subtitle={formDef.description || 'Fill in the required fields below'}
-              />
-              <div className="p-6">
-                {formDef.fields?.filter(f => f.is_active).map(renderField)}
+              <CardHeader>
+                <CardTitle className="text-base">{formDef.name}</CardTitle>
+                {formDef.description && <CardDescription>{formDef.description}</CardDescription>}
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {formDef.fields?.filter(f => f.is_active !== false).map(field => (
+                  <FieldRenderer
+                    key={field.id}
+                    field={field}
+                    value={
+                      field.field_type === 'calculated'
+                        ? String(evaluateFormula(field.calculation_formula, fieldValues, fieldsByName) ?? '')
+                        : fieldValues[field.id] || ''
+                    }
+                    onChange={val => setField(field.id, val)}
+                    user={user}
+                  />
+                ))}
 
                 {error && (
-                  <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700 mb-4">
+                  <div className="flex items-start gap-2 bg-destructive/10 border border-destructive/30 rounded-xl px-4 py-3 text-sm text-destructive">
+                    <AlertCircle size={15} className="flex-shrink-0 mt-0.5" />
                     {error}
                   </div>
                 )}
@@ -316,28 +409,11 @@ export default function SubmitForm() {
                   submitLoading={submitMutation.isPending}
                   draftLoading={draftMutation.isPending}
                 />
-              </div>
+              </CardContent>
             </Card>
-          )}
+          ) : null}
         </>
       )}
-    </div>
-  )
-}
-
-function ActionBar({ draftSaved, onSubmit, onDraft, onCancel, submitLoading, draftLoading }) {
-  return (
-    <div className="flex items-center gap-3 flex-wrap pt-2">
-      <Button onClick={onSubmit} loading={submitLoading}>
-        <Send size={14} /> Submit for Approval
-      </Button>
-      <Button variant="secondary" onClick={onDraft} loading={draftLoading}>
-        <Save size={14} />
-        {draftSaved ? 'Saved!' : 'Save Draft'}
-      </Button>
-      <Button variant="ghost" onClick={onCancel}>
-        Cancel
-      </Button>
     </div>
   )
 }

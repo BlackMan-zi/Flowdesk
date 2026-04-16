@@ -14,45 +14,45 @@ SET @demo_hash = '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMaJobMR/tHvGmcf5TWVNQ7IiO';
 -- ── CEO Office ───────────────────────────────────────────────
 INSERT INTO users (id, organization_id, name, email, password_hash, department_id, status, must_reset_password, created_at)
 VALUES
-  ('usr-ceo-001', 'org-bsc-001', 'Gilbert Kayinamura', 'gilbert.kayinamura@bsc.demo',  @demo_hash, 'dept-ceo',         'Active', 0, NOW()),
-  ('usr-ceo-002', 'org-bsc-001', 'Christian Mbabazi',  'christian.mbabazi@bsc.demo',   @demo_hash, 'dept-ceo',         'Active', 0, NOW()),
-  ('usr-ceo-003', 'org-bsc-001', 'Ndoli Mitali',       'ndoli.mitali@bsc.demo',        @demo_hash, 'dept-ceo',         'Active', 0, NOW()),
-  ('usr-ceo-004', 'org-bsc-001', 'Susan Mutesi',       'susan.mutesi@bsc.demo',        @demo_hash, 'dept-ceo',         'Active', 0, NOW()),
-  ('usr-ceo-005', 'org-bsc-001', 'Innocent Ruzindana', 'innocent.ruzindana@bsc.demo',  @demo_hash, 'dept-ceo',         'Active', 0, NOW()),
-  ('usr-ceo-006', 'org-bsc-001', 'Dominique Muhire',   'dominique.muhire@bsc.demo',    @demo_hash, 'dept-ceo',         'Active', 0, NOW()),
-  ('usr-ceo-007', 'org-bsc-001', 'Dennis Kaliisa',     'dennis.kaliisa@bsc.demo',      @demo_hash, 'unit-ceo-legal',   'Active', 0, NOW()),
-  ('usr-ceo-008', 'org-bsc-001', 'Regis Nkwaya',       'regis.nkwaya@bsc.demo',        @demo_hash, 'unit-ceo-audit',   'Active', 0, NOW())
+  ('usr-ceo-001', 'org-bsc-001', 'Gilbert Kayinamura', 'gilbert.kayinamura@bsc.rw',  @demo_hash, 'dept-ceo',         'Active', 0, NOW()),
+  ('usr-ceo-002', 'org-bsc-001', 'Christian Mbabazi',  'christian.mbabazi@bsc.rw',   @demo_hash, 'dept-ceo',         'Active', 0, NOW()),
+  ('usr-ceo-003', 'org-bsc-001', 'Ndoli Mitali',       'ndoli.mitali@bsc.rw',        @demo_hash, 'dept-ceo',         'Active', 0, NOW()),
+  ('usr-ceo-004', 'org-bsc-001', 'Susan Mutesi',       'susan.mutesi@bsc.rw',        @demo_hash, 'dept-ceo',         'Active', 0, NOW()),
+  ('usr-ceo-005', 'org-bsc-001', 'Innocent Ruzindana', 'innocent.ruzindana@bsc.rw',  @demo_hash, 'dept-ceo',         'Active', 0, NOW()),
+  ('usr-ceo-006', 'org-bsc-001', 'Dominique Muhire',   'dominique.muhire@bsc.rw',    @demo_hash, 'dept-ceo',         'Active', 0, NOW()),
+  ('usr-ceo-007', 'org-bsc-001', 'Dennis Kaliisa',     'dennis.kaliisa@bsc.rw',      @demo_hash, 'unit-ceo-legal',   'Active', 0, NOW()),
+  ('usr-ceo-008', 'org-bsc-001', 'Regis Nkwaya',       'regis.nkwaya@bsc.rw',        @demo_hash, 'unit-ceo-audit',   'Active', 0, NOW())
 ON DUPLICATE KEY UPDATE status = VALUES(status);
 
 -- ── Technical Department (sample — Senior Managers & Managers) ─
 INSERT INTO users (id, organization_id, name, email, password_hash, department_id, status, must_reset_password, created_at)
 VALUES
-  ('usr-tech-001', 'org-bsc-001', 'Philip Mudenge',      'philip.mudenge@bsc.demo',      @demo_hash, 'dept-technical',    'Active', 0, NOW()),
-  ('usr-tech-002', 'org-bsc-001', 'Robert Nkeramugaba',  'robert.nkeramugaba@bsc.demo',  @demo_hash, 'dept-technical',    'Active', 0, NOW()),
-  ('usr-tech-003', 'org-bsc-001', 'Yves Ishema',         'yves.ishema@bsc.demo',         @demo_hash, 'unit-tech-access',  'Active', 0, NOW()),
-  ('usr-tech-004', 'org-bsc-001', 'Jean Claude Karemera','jeanclaude.karemera@bsc.demo', @demo_hash, 'unit-tech-tx',      'Active', 0, NOW()),
-  ('usr-tech-005', 'org-bsc-001', 'Joan Mukantagara',    'joan.mukantagara@bsc.demo',    @demo_hash, 'unit-tech-planning','Active', 0, NOW()),
-  ('usr-tech-006', 'org-bsc-001', 'Richard Buregeya',    'richard.buregeya@bsc.demo',    @demo_hash, 'unit-tech-cloud',   'Active', 0, NOW()),
-  ('usr-tech-007', 'org-bsc-001', 'Callixte Mugabo',     'callixte.mugabo@bsc.demo',     @demo_hash, 'unit-tech-noc',     'Active', 0, NOW()),
-  ('usr-tech-008', 'org-bsc-001', 'Ingrid Iradukunda',   'ingrid.iradukunda@bsc.demo',   @demo_hash, 'unit-tech-ipcore',  'Active', 0, NOW()),
-  ('usr-tech-009', 'org-bsc-001', 'Yves Nkaka',          'yves.nkaka@bsc.demo',          @demo_hash, 'unit-tech-security','Active', 0, NOW())
+  ('usr-tech-001', 'org-bsc-001', 'Philip Mudenge',      'philip.mudenge@bsc.rw',      @demo_hash, 'dept-technical',    'Active', 0, NOW()),
+  ('usr-tech-002', 'org-bsc-001', 'Robert Nkeramugaba',  'robert.nkeramugaba@bsc.rw',  @demo_hash, 'dept-technical',    'Active', 0, NOW()),
+  ('usr-tech-003', 'org-bsc-001', 'Yves Ishema',         'yves.ishema@bsc.rw',         @demo_hash, 'unit-tech-access',  'Active', 0, NOW()),
+  ('usr-tech-004', 'org-bsc-001', 'Jean Claude Karemera','jeanclaude.karemera@bsc.rw', @demo_hash, 'unit-tech-tx',      'Active', 0, NOW()),
+  ('usr-tech-005', 'org-bsc-001', 'Joan Mukantagara',    'joan.mukantagara@bsc.rw',    @demo_hash, 'unit-tech-planning','Active', 0, NOW()),
+  ('usr-tech-006', 'org-bsc-001', 'Richard Buregeya',    'richard.buregeya@bsc.rw',    @demo_hash, 'unit-tech-cloud',   'Active', 0, NOW()),
+  ('usr-tech-007', 'org-bsc-001', 'Callixte Mugabo',     'callixte.mugabo@bsc.rw',     @demo_hash, 'unit-tech-noc',     'Active', 0, NOW()),
+  ('usr-tech-008', 'org-bsc-001', 'Ingrid Iradukunda',   'ingrid.iradukunda@bsc.rw',   @demo_hash, 'unit-tech-ipcore',  'Active', 0, NOW()),
+  ('usr-tech-009', 'org-bsc-001', 'Yves Nkaka',          'yves.nkaka@bsc.rw',          @demo_hash, 'unit-tech-security','Active', 0, NOW())
 ON DUPLICATE KEY UPDATE status = VALUES(status);
 
 -- ── Corporate Department ─────────────────────────────────────
 INSERT INTO users (id, organization_id, name, email, password_hash, department_id, status, must_reset_password, created_at)
 VALUES
-  ('usr-corp-001', 'org-bsc-001', 'Justin Munyampeta',   'justin.munyampeta@bsc.demo',   @demo_hash, 'unit-corp-supchain', 'Active', 0, NOW()),
-  ('usr-corp-002', 'org-bsc-001', 'Noella Uwamariya',    'noella.uwamariya@bsc.demo',    @demo_hash, 'unit-corp-adminhr',  'Active', 0, NOW()),
-  ('usr-corp-003', 'org-bsc-001', 'Nadege Umutoniwase',  'nadege.umutoniwase@bsc.demo',  @demo_hash, 'unit-corp-hr',       'Active', 0, NOW()),
-  ('usr-corp-004', 'org-bsc-001', 'William Manzi',       'william.manzi@bsc.demo',       @demo_hash, 'unit-corp-hr',       'Active', 0, NOW())
+  ('usr-corp-001', 'org-bsc-001', 'Justin Munyampeta',   'justin.munyampeta@bsc.rw',   @demo_hash, 'unit-corp-supchain', 'Active', 0, NOW()),
+  ('usr-corp-002', 'org-bsc-001', 'Noella Uwamariya',    'noella.uwamariya@bsc.rw',    @demo_hash, 'unit-corp-adminhr',  'Active', 0, NOW()),
+  ('usr-corp-003', 'org-bsc-001', 'Nadege Umutoniwase',  'nadege.umutoniwase@bsc.rw',  @demo_hash, 'unit-corp-hr',       'Active', 0, NOW()),
+  ('usr-corp-004', 'org-bsc-001', 'William Manzi',       'william.manzi@bsc.rw',       @demo_hash, 'unit-corp-hr',       'Active', 0, NOW())
 ON DUPLICATE KEY UPDATE status = VALUES(status);
 
 -- ── Finance Department ───────────────────────────────────────
 INSERT INTO users (id, organization_id, name, email, password_hash, department_id, status, must_reset_password, created_at)
 VALUES
-  ('usr-fin-001', 'org-bsc-001', 'Felicien Batitonda',   'felicien.batitonda@bsc.demo',  @demo_hash, 'dept-finance',     'Active', 0, NOW()),
-  ('usr-fin-002', 'org-bsc-001', 'Daniel Muyoboke',      'daniel.muyoboke@bsc.demo',     @demo_hash, 'unit-fin-acct',    'Active', 0, NOW()),
-  ('usr-fin-003', 'org-bsc-001', 'Vianney Mugabo',       'vianney.mugabo@bsc.demo',      @demo_hash, 'unit-fin-recovery','Active', 0, NOW())
+  ('usr-fin-001', 'org-bsc-001', 'Felicien Batitonda',   'felicien.batitonda@bsc.rw',  @demo_hash, 'dept-finance',     'Active', 0, NOW()),
+  ('usr-fin-002', 'org-bsc-001', 'Daniel Muyoboke',      'daniel.muyoboke@bsc.rw',     @demo_hash, 'unit-fin-acct',    'Active', 0, NOW()),
+  ('usr-fin-003', 'org-bsc-001', 'Vianney Mugabo',       'vianney.mugabo@bsc.rw',      @demo_hash, 'unit-fin-recovery','Active', 0, NOW())
 ON DUPLICATE KEY UPDATE status = VALUES(status);
 
 -- ── Hierarchy links ─────────────────────────────────────────

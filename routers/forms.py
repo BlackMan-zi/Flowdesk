@@ -249,6 +249,8 @@ def update_form_fields_layout(
             f.field_label = fd.field_label
             f.field_type = fd.field_type
             f.required = fd.required
+            f.auto_filled = fd.auto_filled
+            f.auto_fill_source = fd.auto_fill_source
             f.options = fd.options
             f.placeholder = fd.placeholder
             f.display_order = idx
