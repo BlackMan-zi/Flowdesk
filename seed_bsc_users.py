@@ -384,9 +384,11 @@ def main():
         full_name = f"{fname} {lname}"
         name_key  = full_name.lower()
 
-        # Skip if already exists
+        # Update existing user's password and reset flag; keep other fields
         if name_key in user_lookup:
             existing = user_lookup[name_key]
+            existing.password_hash      = pwd_ctx.hash(DEFAULT_PASSWORD)
+            existing.must_reset_password = False
             skipped += 1
             new_users.append((existing, level, dept, unit))
             continue
