@@ -5,7 +5,7 @@ import SignatureCanvas from './SignatureCanvas'
 import Modal from '../ui/Modal'
 import { getPdfTemplateBlobPage } from '../../api/forms'
 import { PenTool, Plus, Trash2 } from 'lucide-react'
-import { evaluateFormula, evaluateRowFormula } from '../../utils/formulaEngine'
+import { evaluateFormula, evaluateRowFormula, resolveCalculatedFields } from '../../utils/formulaEngine'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
@@ -93,11 +93,12 @@ function TableFieldInput({ field, value, onChange }) {
 
 function FieldOverlay({ field, value, onChange, allValues, fieldsByName }) {
   const fontSize = field.validation_rules?.font_size || 11
+  // Sharp edges, thin border — clean look over PDF backgrounds
   const inputCls = `
-    w-full h-full bg-white/90 border border-blue-400 rounded-sm
-    px-1 focus:outline-none focus:ring-1 focus:ring-brand-500 focus:bg-white
+    w-full h-full bg-white/90 border border-slate-400/60
+    px-1 focus:outline-none focus:ring-1 focus:ring-brand-400 focus:bg-white focus:border-brand-400
   `
-  const inputStyle = { fontSize: `${fontSize}px` }
+  const inputStyle = { fontSize: `${fontSize}px`, borderRadius: 0 }
 
   if (field.field_type === 'signature') {
     return (
@@ -149,7 +150,7 @@ function FieldOverlay({ field, value, onChange, allValues, fieldsByName }) {
 
   if (field.field_type === 'radio') {
     return (
-      <div className="w-full h-full overflow-auto bg-white/80 border border-sky-400 rounded-sm p-1 space-y-0.5">
+      <div className="w-full h-full overflow-auto bg-white/80 border border-slate-400/60 p-1 space-y-0.5">
         {(field.options || []).map(o => (
           <label key={o} className="flex items-center gap-1 text-xs cursor-pointer">
             <input
@@ -170,7 +171,7 @@ function FieldOverlay({ field, value, onChange, allValues, fieldsByName }) {
   if (field.field_type === 'checkbox') {
     const selected = (value || '').split(',').filter(Boolean)
     return (
-      <div className="w-full h-full overflow-auto bg-white/80 border border-blue-400 rounded-sm p-1 space-y-0.5">
+      <div className="w-full h-full overflow-auto bg-white/80 border border-slate-400/60 p-1 space-y-0.5">
         {(field.options || []).map(o => (
           <label key={o} className="flex items-center gap-1 text-xs cursor-pointer">
             <input
@@ -194,8 +195,8 @@ function FieldOverlay({ field, value, onChange, allValues, fieldsByName }) {
 
   if (field.field_type === 'currency') {
     return (
-      <div className="w-full h-full flex items-center bg-white/90 border border-emerald-400 rounded-sm overflow-hidden">
-        <span className="px-1 text-xs text-emerald-700 font-semibold bg-emerald-50 border-r border-emerald-300 h-full flex items-center">$</span>
+      <div className="w-full h-full flex items-center bg-white/90 border border-slate-400/60 overflow-hidden">
+        <span className="px-1 text-xs text-slate-500 font-medium bg-slate-50 border-r border-slate-300 h-full flex items-center">$</span>
         <input
           type="number"
           step="0.01"
@@ -213,7 +214,7 @@ function FieldOverlay({ field, value, onChange, allValues, fieldsByName }) {
   if (field.field_type === 'calculated') {
     const computed = evaluateFormula(field.calculation_formula, allValues, fieldsByName)
     return (
-      <div className="w-full h-full bg-violet-50 border border-violet-300 rounded-sm flex items-center px-1.5 text-xs text-violet-800 font-mono">
+      <div className="w-full h-full bg-violet-50 border border-violet-200 flex items-center px-1.5 text-xs text-violet-800 font-mono">
         {computed || <span className="text-slate-400 italic">Auto-calculated</span>}
       </div>
     )
@@ -371,6 +372,14 @@ export default function PDFFormFill({ formDef, values, onChange, currentUser }) 
     return map
   }, [formDef?.fields])
 
+  // Resolve all calculated fields in dependency order.
+  // This produces a values map that includes computed results for every
+  // calculated field, so aggregate formulas like cal1+cal2+…+cal8 work.
+  const resolvedValues = useMemo(
+    () => resolveCalculatedFields(formDef?.fields, values, fieldsByName),
+    [formDef?.fields, values, fieldsByName]
+  )
+
   const positionedFields = (formDef?.fields || []).filter(
     f => f.is_active !== false && f.x_pct != null
   )
@@ -419,7 +428,7 @@ export default function PDFFormFill({ formDef, values, onChange, currentUser }) 
               pdfPageNum={pdfPageNum}
               formPage={formPage}
               fields={positionedFields}
-              values={values}
+              values={resolvedValues}
               onValueChange={onChange}
               onSignatureClick={setSigFieldId}
               fieldsByName={fieldsByName}

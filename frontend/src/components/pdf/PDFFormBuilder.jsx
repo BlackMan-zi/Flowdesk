@@ -1440,7 +1440,7 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
                         cursor: pendingType ? 'crosshair' : isLocked ? 'not-allowed' : 'grab',
                       }}
                       className={cn(
-                        'border-2 rounded-sm overflow-visible flex flex-col px-1 py-0.5',
+                        'border overflow-visible flex flex-col px-1 py-0.5',
                         colorCls,
                         isSelected && 'ring-2 ring-offset-1 ring-brand-500',
                         isLocked && 'opacity-70',

@@ -61,6 +61,47 @@ export function evaluateFormula(formula, values, fieldsByName) {
 }
 
 /**
+ * Resolve ALL calculated fields in a form, handling chains of dependencies.
+ *
+ * Problem: `values` only contains user-typed values. Calculated fields (cal1, cal2…)
+ * are never stored there, so a formula like `cal1 + cal2 + cal3` always resolves to 0.
+ *
+ * Solution: iterate over all calculated fields up to N passes. Each pass evaluates
+ * every calc field using the values accumulated so far. Fields whose dependencies are
+ * already resolved get their result stored; fields that depend on those get resolved
+ * in the next pass. Converges in at most N passes for any acyclic dependency graph.
+ *
+ * @param {Array}  fields       - all form field objects (from formDef.fields)
+ * @param {Object} rawValues    - { [fieldId]: userTypedValue }
+ * @param {Object} fieldsByName - { [fieldName]: fieldObject }
+ * @returns {Object} enriched values map including computed values for all calc fields
+ */
+export function resolveCalculatedFields(fields, rawValues, fieldsByName) {
+  const calcFields = (fields || []).filter(
+    f => f.field_type === 'calculated' && f.calculation_formula
+  )
+  if (!calcFields.length) return rawValues
+
+  const resolved = { ...rawValues }
+
+  // Iterate up to calcFields.length + 1 passes to handle chains of any depth.
+  // Stop early once a pass produces no new results (fully converged).
+  for (let pass = 0; pass <= calcFields.length; pass++) {
+    let changed = false
+    for (const field of calcFields) {
+      const next = evaluateFormula(field.calculation_formula, resolved, fieldsByName)
+      if (next !== '' && next !== resolved[field.id]) {
+        resolved[field.id] = next
+        changed = true
+      }
+    }
+    if (!changed) break
+  }
+
+  return resolved
+}
+
+/**
  * Evaluate a per-row formula inside a table field.
  * Tokens reference column keys within the same row.
  * @param {string} formula   - e.g. "qty * unit_price"
