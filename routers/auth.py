@@ -207,6 +207,21 @@ def enable_mfa(
 @router.get("/me")
 def get_me(current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
     roles = [ur.role.name for ur in current_user.user_roles if ur.role]
+
+    # Resolve department / unit names.
+    # Convention: if the user's department has a parent, the parent is the "department"
+    # and the user's department is the "unit". Otherwise the department IS the department.
+    dept = current_user.department
+    dept_name = None
+    unit_name = None
+    if dept:
+        if dept.parent_department_id:
+            unit_name = dept.name
+            parent = db.get(dept.__class__, dept.parent_department_id)
+            dept_name = parent.name if parent else dept.name
+        else:
+            dept_name = dept.name
+
     return {
         "id": current_user.id,
         "name": current_user.name,
@@ -216,4 +231,11 @@ def get_me(current_user: User = Depends(get_current_active_user), db: Session = 
         "roles": roles,
         "must_reset_password": current_user.must_reset_password,
         "mfa_enabled": current_user.mfa_enabled,
+        # Enriched profile for form data-binding
+        "department_name": dept_name,
+        "unit_name": unit_name,
+        "manager_id": current_user.manager_id,
+        "manager_name": current_user.manager.name if current_user.manager else None,
+        "sn_manager_name": current_user.sn_manager.name if current_user.sn_manager else None,
+        "hod_name": current_user.hod.name if current_user.hod else None,
     }

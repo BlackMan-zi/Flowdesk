@@ -45,13 +45,12 @@ function StepBar({ step, formName }) {
 
 function FieldRenderer({ field, value, onChange, user }) {
   if (field.auto_filled) {
-    const autoVal = field.auto_fill_source === 'current_user.name' ? (user?.name || '') : ''
     return (
       <div className="space-y-1.5">
         <label className="text-sm font-medium text-foreground">{field.field_label}</label>
         <input
           readOnly
-          value={autoVal}
+          value={value || ''}
           className="flex h-10 w-full rounded-md border border-input bg-muted px-3 py-2 text-sm text-muted-foreground cursor-not-allowed"
         />
       </div>
@@ -212,11 +211,12 @@ export default function SubmitForm() {
 
   const buildFieldValues = () => {
     if (!formDef?.fields) return []
+    // fieldValues already has auto-filled values injected by PDFFormFill on mount,
+    // so we just use them directly. Calculated fields are re-evaluated here for submission.
     return formDef.fields
       .filter(f => f.is_active !== false)
       .map(f => {
         let value = fieldValues[f.id]
-        if (f.auto_filled && f.auto_fill_source === 'current_user.name') value = user?.name || ''
         if (f.field_type === 'calculated') value = evaluateFormula(f.calculation_formula, fieldValues, fieldsByName)
         return { form_field_id: f.id, value: value != null ? String(value) : '' }
       })

@@ -370,15 +370,37 @@ export default function PDFFormFill({ formDef, values, onChange, currentUser }) 
     return () => blobUrls.forEach(u => URL.revokeObjectURL(u))
   }, [formDef?.id])
 
-  // Auto-fill fields on mount
+  // Auto-fill fields on mount — resolve all data-bound sources from current user context
   useEffect(() => {
-    if (!formDef?.fields) return
-    formDef.fields.filter(f => f.auto_filled).forEach(f => {
-      if (f.auto_fill_source === 'current_user.name' && currentUser?.name) {
-        onChange(f.id, currentUser.name)
+    if (!formDef?.fields || !currentUser) return
+
+    const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+
+    // Map source key → resolved value (undefined = not available → skip, don't overwrite)
+    const sourceValues = {
+      'current_user.name':       currentUser.name,
+      'current_user.email':      currentUser.email,
+      'current_user.department': currentUser.department_name,
+      'current_user.unit':       currentUser.unit_name,
+      'current_user.date':       today,
+      // Initiator = the person submitting the form
+      'approver.initiator.name': currentUser.name,
+      'approver.initiator.date': today,
+      // Upstream approvers — names pre-filled; signatures/dates left blank (filled on approval)
+      'approver.line_manager.name': currentUser.manager_name,
+      'approver.sn_manager.name':   currentUser.sn_manager_name,
+      'approver.hod.name':          currentUser.hod_name,
+    }
+
+    formDef.fields.filter(f => f.auto_filled && f.auto_fill_source).forEach(f => {
+      const val = sourceValues[f.auto_fill_source]
+      // Only set if we have a non-empty value — empty means the user doesn't have this
+      // data (e.g. no unit), so the field stays blank without breaking the layout
+      if (val != null && val !== '') {
+        onChange(f.id, val)
       }
     })
-  }, [formDef?.id])
+  }, [formDef?.id, currentUser])
 
   // Build field_name → field map for formula resolution
   const fieldsByName = useMemo(() => {

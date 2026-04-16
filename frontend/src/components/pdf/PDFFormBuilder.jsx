@@ -11,7 +11,8 @@ import {
   DollarSign, Zap, Table2, Circle, Plus, HelpCircle,
   Paperclip, Search, ChevronUp, ToggleLeft, Workflow,
   ZoomIn, ZoomOut, Maximize2, SlidersHorizontal, FileDigit,
-  FilePlus, FileX, Lock, Unlock, Pin, PinOff, Crosshair,
+  FilePlus, FileX, Lock, Unlock, Pin, PinOff, Crosshair, Link, Link2Off,
+  User, Mail, Building2, Layers, CalendarDays, UserCheck, Users,
   AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal,
   AlignStartVertical, AlignCenterVertical, AlignEndVertical,
   AlignHorizontalDistributeCenter, AlignVerticalDistributeCenter,
@@ -203,14 +204,75 @@ function FieldProperties({ field, onChange, onDelete, formCodeSuffix, locked, on
           className="w-full border border-slate-300 rounded px-2 py-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-brand-500" />
       </label>
 
-      {/* Type */}
-      <label className="block">
-        <span className="font-medium text-slate-600 block mb-1">Type</span>
-        <select value={field.field_type} onChange={e => onChange({ field_type: e.target.value })}
-          className="w-full border border-slate-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-500">
-          {FIELD_TYPES.map(t => <option key={t.type} value={t.type}>{t.label}</option>)}
-        </select>
-      </label>
+      {/* ── Data Binding ── */}
+      <div className={cn(
+        'space-y-2 rounded-md border p-2',
+        field.auto_filled ? 'bg-teal-50 border-teal-300' : 'bg-slate-50 border-slate-200'
+      )}>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={!!field.auto_filled}
+            onChange={e => onChange({
+              auto_filled: e.target.checked,
+              auto_fill_source: e.target.checked ? (field.auto_fill_source || 'current_user.name') : null,
+              read_only: e.target.checked ? true : field.read_only,
+            })}
+            className="rounded accent-teal-600"
+          />
+          <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+            <Link size={10} className={field.auto_filled ? 'text-teal-600' : 'text-slate-400'} />
+            Bind to data source
+          </span>
+        </label>
+
+        {field.auto_filled && (
+          <div className="space-y-1.5">
+            {BIND_SOURCES.map(group => {
+              const GroupIcon = group.icon
+              return (
+                <div key={group.group}>
+                  <p className="flex items-center gap-1 text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-0.5">
+                    <GroupIcon size={9} /> {group.group}
+                  </p>
+                  <div className="grid grid-cols-1 gap-0.5">
+                    {group.sources.map(src => (
+                      <button
+                        key={src.value}
+                        type="button"
+                        onClick={() => onChange({ auto_fill_source: src.value })}
+                        className={cn(
+                          'text-left px-2 py-1 rounded text-xs transition-colors',
+                          field.auto_fill_source === src.value
+                            ? 'bg-teal-600 text-white font-medium'
+                            : 'text-slate-600 hover:bg-teal-50 hover:text-teal-800'
+                        )}
+                      >
+                        {src.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+            <p className="text-[10px] text-teal-700 bg-teal-100 rounded px-1.5 py-1 leading-snug">
+              Field is read-only and auto-populated at runtime.
+              {!field.auto_fill_source?.includes('current_user') && ' Value filled when the step is reached.'}
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Type — hidden when bound (source drives the field behaviour) */}
+      {!field.auto_filled && (
+        <label className="block">
+          <span className="font-medium text-slate-600 block mb-1">Type</span>
+          <select value={field.field_type} onChange={e => onChange({ field_type: e.target.value })}
+            className="w-full border border-slate-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-500">
+            {FIELD_TYPES.map(t => <option key={t.type} value={t.type}>{t.label}</option>)}
+          </select>
+        </label>
+      )}
 
       {/* Font size + Required row */}
       <div className="flex gap-2">
@@ -668,6 +730,57 @@ function ZoomControl({ zoom, onZoom }) {
     </div>
   )
 }
+
+// ── Data-binding source catalogue ────────────────────────────────────────────
+
+const BIND_SOURCES = [
+  {
+    group: 'Submitter Info', icon: User,
+    sources: [
+      { value: 'current_user.name',       label: 'Full Name',    preview: 'User Name'       },
+      { value: 'current_user.email',      label: 'Email',        preview: 'User Email'      },
+      { value: 'current_user.department', label: 'Department',   preview: 'Department'      },
+      { value: 'current_user.unit',       label: 'Unit',         preview: 'Unit'            },
+      { value: 'current_user.date',       label: "Today's Date", preview: 'Today'           },
+    ],
+  },
+  {
+    group: 'Initiator', icon: UserCheck,
+    sources: [
+      { value: 'approver.initiator.name',      label: 'Name',        preview: 'Initiator Name' },
+      { value: 'approver.initiator.signature', label: 'Signature',   preview: 'Initiator Sig'  },
+      { value: 'approver.initiator.date',      label: 'Date Signed', preview: 'Initiator Date' },
+    ],
+  },
+  {
+    group: 'Line Manager', icon: Users,
+    sources: [
+      { value: 'approver.line_manager.name',      label: 'Name',        preview: 'Line Mgr Name' },
+      { value: 'approver.line_manager.signature', label: 'Signature',   preview: 'Line Mgr Sig'  },
+      { value: 'approver.line_manager.date',      label: 'Date Signed', preview: 'Line Mgr Date' },
+    ],
+  },
+  {
+    group: 'Senior Manager', icon: Users,
+    sources: [
+      { value: 'approver.sn_manager.name',      label: 'Name',        preview: 'Sr Mgr Name' },
+      { value: 'approver.sn_manager.signature', label: 'Signature',   preview: 'Sr Mgr Sig'  },
+      { value: 'approver.sn_manager.date',      label: 'Date Signed', preview: 'Sr Mgr Date' },
+    ],
+  },
+  {
+    group: 'Head of Department', icon: Building2,
+    sources: [
+      { value: 'approver.hod.name',      label: 'Name',        preview: 'HOD Name' },
+      { value: 'approver.hod.signature', label: 'Signature',   preview: 'HOD Sig'  },
+      { value: 'approver.hod.date',      label: 'Date Signed', preview: 'HOD Date' },
+    ],
+  },
+]
+
+// Flat lookup: source value → { group, label, preview }
+const BIND_SOURCE_MAP = {}
+BIND_SOURCES.forEach(g => g.sources.forEach(s => { BIND_SOURCE_MAP[s.value] = { group: g.group, ...s } }))
 
 // ── Main builder ──────────────────────────────────────────────────────────────
 
@@ -1424,10 +1537,13 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
                 {pageFields.map(f => {
                   const isSelected  = selectedIds.includes(f.id)
                   const isRef       = f.field_type === 'reference'
+                  const isBound     = !!f.auto_filled && !!f.auto_fill_source && f.field_type !== 'reference'
                   const isLocked    = lockedIds.includes(f.id)
                   const isPinned    = referenceId === f.id
                   const colorCls = isRef
                     ? 'border-amber-500 bg-amber-50/80 text-amber-800'
+                    : isBound
+                    ? 'border-teal-500 bg-teal-50/80 text-teal-800'
                     : filledByColor(f.filled_by || 'initiator')
                   return (
                     <div
@@ -1450,13 +1566,16 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
                       onClick={e => { e.stopPropagation(); if (!e.shiftKey && !e.ctrlKey && !e.metaKey) setSelectedIds([f.id]) }}
                     >
                       <div className="flex items-start gap-1 flex-1 min-h-0">
-                        <span className="flex-shrink-0 mt-0.5">{typeIcon(f.field_type)}</span>
+                        <span className="flex-shrink-0 mt-0.5">
+                          {isBound ? <Link size={10} className="text-teal-600" /> : typeIcon(f.field_type)}
+                        </span>
                         <span
                           className="font-medium truncate leading-tight flex-1"
                           style={{ fontSize: `${f.validation_rules?.font_size || 11}px` }}
                         >{f.field_label}</span>
-                        {f.required && !isRef && <span className="text-red-500 font-bold text-xs flex-shrink-0">*</span>}
+                        {f.required && !isRef && !isBound && <span className="text-red-500 font-bold text-xs flex-shrink-0">*</span>}
                         {isRef && <span className="text-amber-600 text-[9px] font-bold flex-shrink-0">AUTO</span>}
+                        {isBound && <span className="text-teal-600 text-[9px] font-bold flex-shrink-0 truncate max-w-[48px]">{BIND_SOURCE_MAP[f.auto_fill_source]?.preview || '→'}</span>}
                       </div>
 
                       {/* Role badge */}
