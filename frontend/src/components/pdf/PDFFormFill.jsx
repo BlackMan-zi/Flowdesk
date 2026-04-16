@@ -92,10 +92,12 @@ function TableFieldInput({ field, value, onChange }) {
 // ── Single field input rendered over the PDF ──────────────────────────────────
 
 function FieldOverlay({ field, value, onChange, allValues, fieldsByName }) {
+  const fontSize = field.validation_rules?.font_size || 11
   const inputCls = `
-    w-full h-full bg-white/90 border border-blue-400 rounded-sm text-xs
+    w-full h-full bg-white/90 border border-blue-400 rounded-sm
     px-1 focus:outline-none focus:ring-1 focus:ring-brand-500 focus:bg-white
   `
+  const inputStyle = { fontSize: `${fontSize}px` }
 
   if (field.field_type === 'signature') {
     return (
@@ -122,6 +124,7 @@ function FieldOverlay({ field, value, onChange, allValues, fieldsByName }) {
         onChange={e => onChange(e.target.value)}
         placeholder={field.placeholder || field.field_label}
         className={inputCls + ' resize-none'}
+        style={inputStyle}
         readOnly={field.read_only}
         required={field.required}
       />
@@ -133,6 +136,7 @@ function FieldOverlay({ field, value, onChange, allValues, fieldsByName }) {
       <select
         value={value || ''}
         onChange={e => onChange(e.target.value)}
+        style={inputStyle}
         className={inputCls}
         disabled={field.read_only}
         required={field.required}
@@ -232,6 +236,7 @@ function FieldOverlay({ field, value, onChange, allValues, fieldsByName }) {
       readOnly={field.read_only}
       required={field.required}
       className={inputCls}
+      style={inputStyle}
     />
   )
 }

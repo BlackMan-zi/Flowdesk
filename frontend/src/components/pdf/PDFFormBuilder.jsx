@@ -208,6 +208,27 @@ function FieldProperties({ field, onChange, onDelete, formCodeSuffix }) {
         </select>
       </label>
 
+      {/* Font size + Required row */}
+      <div className="flex gap-2">
+        <label className="flex-1 block">
+          <span className="font-medium text-slate-600 block mb-1">Font size <Tip text="Character size inside the field when filled." /></span>
+          <select value={rules.font_size || 11} onChange={e => setRule('font_size', Number(e.target.value))}
+            className="w-full border border-slate-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-500">
+            {[8, 9, 10, 11, 12, 13, 14, 16, 18, 20, 22, 24].map(s => (
+              <option key={s} value={s}>{s}px</option>
+            ))}
+          </select>
+        </label>
+        {!isReference && (
+          <label className="flex flex-col gap-1 items-center justify-end pb-1.5 flex-shrink-0">
+            <span className="font-medium text-slate-600 text-xs">Required</span>
+            <input type="checkbox" checked={!!field.required}
+              onChange={e => onChange({ required: e.target.checked })}
+              className="w-4 h-4 rounded accent-brand-600" />
+          </label>
+        )}
+      </div>
+
       {/* Reference number config */}
       {isReference && (
         <div className="space-y-2 p-2 bg-amber-50 border border-amber-200 rounded">
@@ -342,10 +363,6 @@ function FieldProperties({ field, onChange, onDelete, formCodeSuffix }) {
       {/* Toggles */}
       {!isReference && (
         <div className="space-y-1.5 border-t border-slate-100 pt-2">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={field.required} onChange={e => onChange({ required: e.target.checked })} className="rounded" />
-            <span>Required <span className="text-red-500">*</span></span>
-          </label>
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" checked={field.read_only||false} onChange={e => onChange({ read_only: e.target.checked })} className="rounded" />
             <span>Read-only</span>
@@ -539,6 +556,10 @@ function ZoomControl({ zoom, onZoom }) {
 
 // ── Main builder ──────────────────────────────────────────────────────────────
 
+// Alignment guide thresholds (in percentage points)
+const GUIDE_THRESHOLD = 1.5  // show guide line when within this distance
+const SNAP_THRESHOLD  = 0.7  // snap field edge when within this distance
+
 export default function PDFFormBuilder({ formDef, initialFields = [], onSave, onBack, onDelete }) {
   // pageTemplates maps form-page-number → { doc: pdfjsLib.Document, pageCount: number }
   // Page 1 is the "main" template (may be multi-page). Pages 2+ each have their own 1-page PDF.
@@ -560,11 +581,14 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
   const [drawDrag, setDrawDrag]     = useState(null)
   const [moveDrag, setMoveDrag]     = useState(null)
   const [resizeDrag, setResizeDrag] = useState(null)
+  const [alignGuides, setAlignGuides] = useState({ v: [], h: [] })
 
   // Two refs: outer scroll container to measure available width, inner canvas
   const scrollContainerRef = useRef(null)
   const canvasRef           = useRef(null)
   const fileInputRef        = useRef(null)
+  // Ref to current fields so alignment code can read without closure staleness
+  const fieldsRef           = useRef(initialFields)
   const [availableWidth, setAvailableWidth] = useState(0)
 
   // Measure outer scroll container width
@@ -574,6 +598,9 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
     obs.observe(scrollContainerRef.current)
     return () => obs.disconnect()
   }, [])
+
+  // Keep fieldsRef current for alignment guide calculation
+  useEffect(() => { fieldsRef.current = fields }, [fields])
 
   // Base canvas width = available scroll area (minus outer p-6 padding + 8px canvas margin) capped at 850
   const BASE_MAX = 850
@@ -731,12 +758,53 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
     const { x, y } = getRelativePos(e)
     if (drawDrag) { setDrawDrag(d => d ? { ...d, currentX: x, currentY: y } : null); return }
     if (moveDrag) {
-      const dx = x - moveDrag.startX; const dy = y - moveDrag.startY
-      setFields(fs => fs.map(f => f.id === moveDrag.fieldId ? {
-        ...f,
-        x_pct: Math.min(100 - f.width_pct, Math.max(0, moveDrag.origX + dx)),
-        y_pct: Math.min(100 - f.height_pct, Math.max(0, moveDrag.origY + dy)),
-      } : f)); return
+      const dx = x - moveDrag.startX
+      const dy = y - moveDrag.startY
+      const currentFields = fieldsRef.current
+      const movingField   = currentFields.find(f => f.id === moveDrag.fieldId)
+      if (!movingField) return
+
+      const mW = movingField.width_pct
+      const mH = movingField.height_pct
+      const rawX = Math.min(100 - mW, Math.max(0, moveDrag.origX + dx))
+      const rawY = Math.min(100 - mH, Math.max(0, moveDrag.origY + dy))
+
+      // ── Alignment guide calculation ───────────────────────────────────────────
+      const others = currentFields.filter(
+        f => f.id !== moveDrag.fieldId && (f.page_number || 1) === (movingField.page_number || 1) && f.x_pct != null
+      )
+      const vGuides = new Set()
+      const hGuides = new Set()
+      let snapX = rawX
+      let snapY = rawY
+
+      // 3 edge/center positions for each axis
+      const mXoffsets = [0, mW / 2, mW]
+      const mYoffsets = [0, mH / 2, mH]
+
+      for (const other of others) {
+        const oXs = [other.x_pct, other.x_pct + other.width_pct / 2, other.x_pct + other.width_pct]
+        const oYs = [other.y_pct, other.y_pct + other.height_pct / 2, other.y_pct + other.height_pct]
+        for (let mi = 0; mi < 3; mi++) {
+          for (const ox of oXs) {
+            const diff = Math.abs((rawX + mXoffsets[mi]) - ox)
+            if (diff < GUIDE_THRESHOLD) {
+              vGuides.add(Math.round(ox * 1000) / 1000)
+              if (diff < SNAP_THRESHOLD) snapX = Math.min(100 - mW, Math.max(0, ox - mXoffsets[mi]))
+            }
+          }
+          for (const oy of oYs) {
+            const diff = Math.abs((rawY + mYoffsets[mi]) - oy)
+            if (diff < GUIDE_THRESHOLD) {
+              hGuides.add(Math.round(oy * 1000) / 1000)
+              if (diff < SNAP_THRESHOLD) snapY = Math.min(100 - mH, Math.max(0, oy - mYoffsets[mi]))
+            }
+          }
+        }
+      }
+      setAlignGuides({ v: [...vGuides], h: [...hGuides] })
+      setFields(fs => fs.map(f => f.id === moveDrag.fieldId ? { ...f, x_pct: snapX, y_pct: snapY } : f))
+      return
     }
     if (resizeDrag) {
       const dw = x - resizeDrag.startX; const dh = y - resizeDrag.startY
@@ -780,6 +848,7 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
       }
     }
     setDrawDrag(null); setMoveDrag(null); setResizeDrag(null)
+    setAlignGuides({ v: [], h: [] })
   }, [drawDrag, pendingType, fields, currentPage, getRelativePos, formDef])
 
   const updateField = (id, changes) => setFields(fs => fs.map(f => f.id === id ? { ...f, ...changes } : f))
@@ -864,17 +933,17 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
 
       <div className="flex flex-1 min-h-0 overflow-hidden">
 
-        {/* ── Left panel ── */}
-        <div className="w-56 flex-shrink-0 bg-white border-r border-slate-200 flex flex-col overflow-hidden">
+        {/* ── Left panel: Toolbox + Field list ── */}
+        <div className="w-52 flex-shrink-0 bg-white border-r border-slate-200 flex flex-col overflow-hidden">
           {/* Toolbox */}
-          <div className="border-b border-slate-200 overflow-y-auto" style={{ maxHeight: '55%' }}>
+          <div className="border-b border-slate-200 overflow-y-auto" style={{ maxHeight: '60%' }}>
             <FieldToolbox pendingType={pendingType} onSelect={setPendingType} />
           </div>
 
-          {/* Field list + properties */}
+          {/* Field list */}
           <div className="flex-1 overflow-y-auto min-h-0">
-            {pageFields.length > 0 && (
-              <div className="p-2 border-b border-slate-100">
+            {pageFields.length > 0 ? (
+              <div className="p-2">
                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider px-1 mb-1">
                   Page {currentPage} · {pageFields.length} field{pageFields.length !== 1 ? 's' : ''}
                 </p>
@@ -890,13 +959,12 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
                   </button>
                 ))}
               </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full gap-2 text-center px-3 py-8">
+                <p className="text-xs text-slate-400">No fields on this page yet</p>
+                <p className="text-[10px] text-slate-300">Select a type above, then draw on the canvas</p>
+              </div>
             )}
-            <FieldProperties
-              field={selectedField}
-              onChange={changes => updateField(selectedId, changes)}
-              onDelete={() => deleteField(selectedId)}
-              formCodeSuffix={formDef?.code_suffix}
-            />
           </div>
         </div>
 
@@ -939,7 +1007,7 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
                 onMouseUp={handleMouseUp}
                 onMouseLeave={() => {
                   if (drawDrag) setDrawDrag(null)
-                  if (moveDrag) setMoveDrag(null)
+                  if (moveDrag) { setMoveDrag(null); setAlignGuides({ v: [], h: [] }) }
                   if (resizeDrag) setResizeDrag(null)
                 }}
               >
@@ -1007,7 +1075,10 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
                     >
                       <div className="flex items-start gap-1 flex-1 min-h-0">
                         <span className="flex-shrink-0 mt-0.5">{typeIcon(f.field_type)}</span>
-                        <span className="text-xs font-medium truncate leading-tight flex-1">{f.field_label}</span>
+                        <span
+                          className="font-medium truncate leading-tight flex-1"
+                          style={{ fontSize: `${f.validation_rules?.font_size || 11}px` }}
+                        >{f.field_label}</span>
                         {f.required && !isRef && <span className="text-red-500 font-bold text-xs flex-shrink-0">*</span>}
                         {isRef && <span className="text-amber-600 text-[9px] font-bold flex-shrink-0">AUTO</span>}
                       </div>
@@ -1049,9 +1120,47 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
                     className="border-2 border-brand-500 bg-brand-100/40 rounded-sm"
                   />
                 )}
+
+                {/* ── Alignment guides ── */}
+                {alignGuides.v.map((xPct, i) => (
+                  <div key={`vg${i}`} style={{
+                    position: 'absolute',
+                    left: `${xPct}%`,
+                    top: '-8px',
+                    bottom: '-8px',
+                    width: '1px',
+                    borderLeft: '1.5px dashed #3b82f6',
+                    pointerEvents: 'none',
+                    zIndex: 60,
+                    opacity: 0.85,
+                  }} />
+                ))}
+                {alignGuides.h.map((yPct, i) => (
+                  <div key={`hg${i}`} style={{
+                    position: 'absolute',
+                    top: `${yPct}%`,
+                    left: '-8px',
+                    right: '-8px',
+                    height: '1px',
+                    borderTop: '1.5px dashed #3b82f6',
+                    pointerEvents: 'none',
+                    zIndex: 60,
+                    opacity: 0.85,
+                  }} />
+                ))}
               </div>
             </div>
           )}
+        </div>
+
+        {/* ── Right panel: Properties ── */}
+        <div className="w-64 flex-shrink-0 bg-white border-l border-slate-200 overflow-y-auto">
+          <FieldProperties
+            field={selectedField}
+            onChange={changes => updateField(selectedId, changes)}
+            onDelete={() => deleteField(selectedId)}
+            formCodeSuffix={formDef?.code_suffix}
+          />
         </div>
       </div>
     </div>
