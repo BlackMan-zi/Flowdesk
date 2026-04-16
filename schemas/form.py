@@ -74,6 +74,7 @@ class FormDefinitionCreate(BaseModel):
 class FormDefinitionUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    code_suffix: Optional[str] = None
     visibility: Optional[FormVisibility] = None
     visible_department_ids: Optional[List[str]] = None
     allow_backdating: Optional[bool] = None
@@ -96,6 +97,7 @@ class FormDefinitionResponse(BaseModel):
     description: Optional[str]
     code_suffix: str
     visibility: FormVisibility
+    visible_department_ids: Optional[List[str]] = None
     allow_backdating: bool
     allow_attachments: bool
     approval_template_id: Optional[str]

@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import { getFormDefinition, replaceFormFields, deleteFormDefinition } from '../../api/forms'
 import PDFFormBuilder from '../../components/pdf/PDFFormBuilder'
 import Spinner from '../../components/ui/Spinner'
@@ -22,15 +23,16 @@ export default function FormBuilder() {
 
   const handleSave = async (fields) => {
     await replaceFormFields(id, fields)
-    qc.invalidateQueries(['form-definition', id])
-    qc.invalidateQueries(['form-definitions'])
+    // Immediately clear the cache so any page loading this form definition gets fresh data
+    qc.removeQueries({ queryKey: ['form-definition', id] })
+    qc.invalidateQueries({ queryKey: ['form-definitions'] })
     navigate('/admin/form-definitions')
   }
 
   const deleteMutation = useMutation({
     mutationFn: () => deleteFormDefinition(id),
     onSuccess: () => {
-      qc.invalidateQueries(['form-definitions'])
+      qc.invalidateQueries({ queryKey: ['form-definitions'] })
       navigate('/admin/form-definitions')
     },
     onError: (err) => setDeleteError(err.response?.data?.detail || 'Delete failed.')

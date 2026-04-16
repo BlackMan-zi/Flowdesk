@@ -1,63 +1,98 @@
-import React from 'react'
+import * as React from 'react'
+import { cn } from '@/lib/utils'
 
-export default function Input({ label, error, className = '', ...props }) {
+const Input = React.forwardRef(({ className, type, label, error, hint, ...props }, ref) => {
+  const input = (
+    <input
+      type={type}
+      className={cn(
+        'flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50',
+        error && 'border-destructive focus-visible:ring-destructive',
+        className
+      )}
+      ref={ref}
+      {...props}
+    />
+  )
+
+  if (!label && !error && !hint) return input
+
   return (
-    <div className={className}>
+    <div className="space-y-1.5">
       {label && (
-        <label className="block text-sm font-medium text-slate-700 mb-1">
+        <label className="text-sm font-medium leading-none text-foreground">
           {label}
+          {props.required && <span className="text-destructive ml-0.5">*</span>}
         </label>
       )}
-      <input
-        {...props}
-        className={`w-full px-3 py-2 text-sm rounded-lg border transition-colors
-          focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent
-          disabled:bg-slate-50 disabled:text-slate-500
-          ${error ? 'border-red-400 bg-red-50' : 'border-slate-300 bg-white hover:border-slate-400'}`}
-      />
-      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+      {input}
+      {hint && !error && <p className="text-xs text-muted-foreground">{hint}</p>}
+      {error && <p className="text-xs text-destructive">{error}</p>}
+    </div>
+  )
+})
+Input.displayName = 'Input'
+
+// Native select wrapper
+export function Select({ label, error, hint, className, children, ...props }) {
+  const select = (
+    <select
+      className={cn(
+        'flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50',
+        error && 'border-destructive',
+        className
+      )}
+      {...props}
+    >
+      {children}
+    </select>
+  )
+
+  if (!label && !error && !hint) return select
+
+  return (
+    <div className="space-y-1.5">
+      {label && (
+        <label className="text-sm font-medium leading-none text-foreground">
+          {label}
+          {props.required && <span className="text-destructive ml-0.5">*</span>}
+        </label>
+      )}
+      {select}
+      {hint && !error && <p className="text-xs text-muted-foreground">{hint}</p>}
+      {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
   )
 }
 
-export function Select({ label, error, className = '', children, ...props }) {
+export function Textarea({ label, error, hint, className, ...props }) {
+  const ta = (
+    <textarea
+      className={cn(
+        'flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 resize-y',
+        error && 'border-destructive',
+        className
+      )}
+      {...props}
+    />
+  )
+
+  if (!label && !error && !hint) return ta
+
   return (
-    <div className={className}>
+    <div className="space-y-1.5">
       {label && (
-        <label className="block text-sm font-medium text-slate-700 mb-1">
+        <label className="text-sm font-medium leading-none text-foreground">
           {label}
+          {props.required && <span className="text-destructive ml-0.5">*</span>}
         </label>
       )}
-      <select
-        {...props}
-        className={`w-full px-3 py-2 text-sm rounded-lg border transition-colors
-          focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent
-          disabled:bg-slate-50
-          ${error ? 'border-red-400 bg-red-50' : 'border-slate-300 bg-white hover:border-slate-400'}`}
-      >
-        {children}
-      </select>
-      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+      {ta}
+      {hint && !error && <p className="text-xs text-muted-foreground">{hint}</p>}
+      {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
   )
 }
 
-export function Textarea({ label, error, className = '', ...props }) {
-  return (
-    <div className={className}>
-      {label && (
-        <label className="block text-sm font-medium text-slate-700 mb-1">
-          {label}
-        </label>
-      )}
-      <textarea
-        {...props}
-        className={`w-full px-3 py-2 text-sm rounded-lg border transition-colors
-          focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent
-          disabled:bg-slate-50
-          ${error ? 'border-red-400 bg-red-50' : 'border-slate-300 bg-white hover:border-slate-400'}`}
-      />
-      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
-    </div>
-  )
-}
+export { Input }
+export default Input

@@ -1,6 +1,7 @@
 import React from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { listDocuments, downloadDocument } from '../api/documents'
+import { toast } from 'sonner'
 import Card, { CardHeader } from '../components/ui/Card'
 import Table from '../components/ui/Table'
 import Button from '../components/ui/Button'
@@ -23,16 +24,16 @@ export default function Documents() {
       a.click()
       URL.revokeObjectURL(url)
     } catch {
-      alert('Download failed.')
+      toast.error('Download failed.')
     }
   }
 
   const columns = [
     { key: 'reference_number', label: 'Reference' },
-    { key: 'file_name', label: 'File' },
-    { key: 'file_size', label: 'Size', render: r => r.file_size ? `${Math.round(r.file_size / 1024)} KB` : '—' },
-    { key: 'generated_at', label: 'Generated', render: r => fmt(r.generated_at) },
-    { key: 'actions', label: '', render: r => (
+    { key: 'file_name',        label: 'File' },
+    { key: 'file_size',        label: 'Size',      render: r => r.file_size ? `${Math.round(r.file_size / 1024)} KB` : '—' },
+    { key: 'generated_at',     label: 'Generated', render: r => fmt(r.generated_at) },
+    { key: 'actions',          label: '',           render: r => (
       <Button size="sm" variant="secondary" onClick={() => handleDownload(r)}>
         <FileDown size={14} /> Download
       </Button>
@@ -41,7 +42,10 @@ export default function Documents() {
 
   return (
     <div className="max-w-4xl space-y-4">
-      <h1 className="text-xl font-bold text-slate-900">Documents</h1>
+      <div>
+        <h1 className="text-xl font-bold text-foreground">Documents</h1>
+        <p className="text-sm text-muted-foreground mt-0.5">Completed and approved forms available for download.</p>
+      </div>
       <Card>
         <CardHeader title="Generated PDFs" subtitle="Completed and approved forms" />
         {isLoading
