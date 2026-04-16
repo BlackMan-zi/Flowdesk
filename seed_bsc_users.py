@@ -30,7 +30,7 @@ def normalize(s):
 def make_email(fname, lname):
     f = normalize(fname.split()[0])
     l = normalize(lname.split()[0])
-    return f"{f}.{l}@bscrwanda.rw"
+    return f"{f}.{l}@bsc.rw"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Data
@@ -265,9 +265,12 @@ def get_hierarchy_key(dept, unit, level):
 
 def main():
     db = SessionLocal()
-    org = db.query(Organization).first()
+    org = db.query(Organization).filter(Organization.email_domain == 'bsc.rw').first()
     if not org:
-        print("ERROR: No organization found.")
+        # fallback: first non-demo org
+        org = db.query(Organization).filter(Organization.subdomain != 'demo').first()
+    if not org:
+        print("ERROR: No BSC organisation found.")
         return
 
     print(f"\n{'='*60}")
@@ -275,7 +278,7 @@ def main():
     print(f"  Organization: {org.name}")
     print(f"{'='*60}\n")
 
-    DEFAULT_PASSWORD = "BSCRwanda@2024"
+    DEFAULT_PASSWORD = "FlowDesk@2024"
     hashed_pw = pwd_ctx.hash(DEFAULT_PASSWORD)
 
     # ── 1. Ensure roles exist ─────────────────────────────────────────────────
@@ -411,7 +414,7 @@ def main():
             password_hash=hashed_pw,
             department_id=dept_obj.id if dept_obj else None,
             status=UserStatus.active,
-            must_reset_password=True,
+            must_reset_password=False,
         )
         db.add(u)
         user_lookup[name_key] = u
