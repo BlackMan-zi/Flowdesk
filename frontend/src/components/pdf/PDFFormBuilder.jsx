@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
 import { toast } from 'sonner'
 import PDFPageCanvas from './PDFPageCanvas'
-import { uploadPdfTemplate, getPdfTemplateBlob } from '../../api/forms'
+import { uploadPdfTemplatePage, getPdfTemplateBlobPage } from '../../api/forms'
 import Button from '../ui/Button'
 import { cn } from '../../lib/utils'
 import {
@@ -447,7 +447,7 @@ function FTBtn({ ft, pendingType, onSelect }) {
 
 // ── Page navigation bar ───────────────────────────────────────────────────────
 
-function PageNav({ numPages, currentPage, onChangePage, fields, onAddPage, onDeletePage }) {
+function PageNav({ numPages, currentPage, onChangePage, fields, onAddPage, onDeletePage, pageTemplates }) {
   return (
     <div className="flex-shrink-0 border-b border-slate-200 bg-white">
       <div className="flex items-center gap-1 px-3 py-2 overflow-x-auto">
@@ -455,10 +455,12 @@ function PageNav({ numPages, currentPage, onChangePage, fields, onAddPage, onDel
         {Array.from({ length: numPages }, (_, i) => i + 1).map(page => {
           const count = fields.filter(f => f.page_number === page).length
           const isActive = page === currentPage
+          const hasTemplate = !!pageTemplates[page]
           return (
             <button
               key={page}
               onClick={() => onChangePage(page)}
+              title={hasTemplate ? `Page ${page} — has PDF template` : `Page ${page} — blank canvas`}
               className={cn(
                 'flex-shrink-0 flex flex-col items-center justify-center rounded-lg border-2 px-2.5 py-1.5 transition-all text-xs',
                 isActive
@@ -466,7 +468,10 @@ function PageNav({ numPages, currentPage, onChangePage, fields, onAddPage, onDel
                   : 'border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-50'
               )}
             >
-              <span className="font-semibold">{page}</span>
+              <span className="font-semibold flex items-center gap-1">
+                {page}
+                {hasTemplate && <span className="w-1.5 h-1.5 rounded-full bg-brand-400 inline-block" title="Has PDF template" />}
+              </span>
               <span className={cn('text-[9px]', isActive ? 'text-brand-500' : 'text-slate-400')}>
                 {count} field{count !== 1 ? 's' : ''}
               </span>
@@ -535,10 +540,15 @@ function ZoomControl({ zoom, onZoom }) {
 // ── Main builder ──────────────────────────────────────────────────────────────
 
 export default function PDFFormBuilder({ formDef, initialFields = [], onSave, onBack, onDelete }) {
-  const [pdfDoc, setPdfDoc]         = useState(null)
-  const [pdfPageCount, setPdfPageCount] = useState(0)   // pages in the PDF
+  // pageTemplates maps form-page-number → { doc: pdfjsLib.Document, pageCount: number }
+  // Page 1 is the "main" template (may be multi-page). Pages 2+ each have their own 1-page PDF.
+  const [pageTemplates, setPageTemplates] = useState({})
   const [numPages, setNumPages]     = useState(1)        // total form pages (PDF + virtual)
   const [currentPage, setCurrentPage] = useState(1)
+
+  // Derived: active pdfDoc for current page
+  const pdfDoc      = pageTemplates[currentPage]?.doc || pageTemplates[1]?.doc || null
+  const pdfPageCount = pageTemplates[1]?.pageCount || 0  // pages in the main (page-1) PDF
   const [fields, setFields]         = useState(initialFields)
   const [selectedId, setSelectedId] = useState(null)
   const [pendingType, setPendingType] = useState(null)
@@ -570,18 +580,32 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
   const basePdfWidth = availableWidth ? Math.min(availableWidth - 64, BASE_MAX) : BASE_MAX
   const pdfWidth = Math.round(basePdfWidth * zoom / 100)
 
-  // Load PDF
+  // Load PDF templates on mount — page 1 first, then check for page-specific templates
   useEffect(() => {
-    if (!formDef?.pdf_template_path) return
-    let blobUrl = null
-    getPdfTemplateBlob(formDef.id).then(async res => {
-      blobUrl = URL.createObjectURL(res.data)
-      const doc = await pdfjsLib.getDocument(blobUrl).promise
-      setPdfDoc(doc)
-      setPdfPageCount(doc.numPages)
-      setNumPages(prev => Math.max(prev, doc.numPages))
-    }).catch(() => {})
-    return () => { if (blobUrl) URL.revokeObjectURL(blobUrl) }
+    if (!formDef?.id) return
+    const blobUrls = []
+
+    async function loadPage(pageNum) {
+      try {
+        const res = await getPdfTemplateBlobPage(formDef.id, pageNum)
+        const blobUrl = URL.createObjectURL(res.data)
+        blobUrls.push(blobUrl)
+        const doc = await pdfjsLib.getDocument(blobUrl).promise
+        setPageTemplates(prev => ({ ...prev, [pageNum]: { doc, pageCount: doc.numPages } }))
+        if (pageNum === 1) {
+          setNumPages(prev => Math.max(prev, doc.numPages))
+        }
+      } catch {
+        // No template for this page — that's fine
+      }
+    }
+
+    // Always attempt page 1
+    loadPage(1)
+    // Check for per-page templates for pages 2+ (based on current numPages)
+    for (let p = 2; p <= numPages; p++) loadPage(p)
+
+    return () => blobUrls.forEach(u => URL.revokeObjectURL(u))
   }, [formDef?.id])
 
   // Sync numPages from initial fields (fields may reference pages beyond PDF)
@@ -591,19 +615,34 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
     setNumPages(prev => Math.max(prev, maxPage))
   }, [])
 
+  // When navigating to a page that might have a per-page template, try to load it
+  useEffect(() => {
+    if (!formDef?.id || currentPage <= 1 || pageTemplates[currentPage]) return
+    let blobUrl = null
+    getPdfTemplateBlobPage(formDef.id, currentPage).then(async res => {
+      blobUrl = URL.createObjectURL(res.data)
+      const doc = await pdfjsLib.getDocument(blobUrl).promise
+      setPageTemplates(prev => ({ ...prev, [currentPage]: { doc, pageCount: doc.numPages } }))
+    }).catch(() => {})
+    return () => { if (blobUrl) URL.revokeObjectURL(blobUrl) }
+  }, [formDef?.id, currentPage])
+
   const handlePdfUpload = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
+    // Reset input so the same file can be re-selected
+    e.target.value = ''
     setUploading(true)
     try {
-      await uploadPdfTemplate(formDef.id, file)
+      await uploadPdfTemplatePage(formDef.id, currentPage, file)
       const url = URL.createObjectURL(file)
       const doc = await pdfjsLib.getDocument(url).promise
-      setPdfDoc(doc)
-      setPdfPageCount(doc.numPages)
-      setNumPages(prev => Math.max(prev, doc.numPages))
-      setCurrentPage(1)
-      toast.success('PDF template uploaded')
+      const pc = doc.numPages
+      setPageTemplates(prev => ({ ...prev, [currentPage]: { doc, pageCount: pc } }))
+      if (currentPage === 1) {
+        setNumPages(prev => Math.max(prev, pc))
+      }
+      toast.success(`PDF template for page ${currentPage} uploaded`)
     } catch {
       toast.error('PDF upload failed')
     }
@@ -795,9 +834,14 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
 
         <input ref={fileInputRef} type="file" accept=".pdf,application/pdf" className="hidden" onChange={handlePdfUpload} />
         <Button size="sm" variant="secondary" onClick={() => fileInputRef.current?.click()} loading={uploading} className="flex-shrink-0">
-          <Upload size={13} className="mr-1.5" /> {formDef?.pdf_template_path ? 'Replace PDF' : 'Upload PDF'}
+          <Upload size={13} className="mr-1.5" />
+          {pageTemplates[currentPage]
+            ? `Replace Page ${currentPage} PDF`
+            : currentPage === 1
+              ? (pageTemplates[1] ? 'Replace PDF' : 'Upload PDF')
+              : `Upload Page ${currentPage} PDF`}
         </Button>
-        <Button size="sm" onClick={handleSave} loading={saving} disabled={!pdfDoc} className="flex-shrink-0">
+        <Button size="sm" onClick={handleSave} loading={saving} className="flex-shrink-0">
           <Save size={13} className="mr-1.5" /> Save & Return
         </Button>
         {onDelete && (
@@ -815,6 +859,7 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
         fields={fields}
         onAddPage={addPage}
         onDeletePage={canDeletePage ? deletePage : null}
+        pageTemplates={pageTemplates}
       />
 
       <div className="flex flex-1 min-h-0 overflow-hidden">
@@ -860,19 +905,18 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
           ref={scrollContainerRef}
           className="flex-1 overflow-auto bg-slate-200 flex justify-center p-6"
         >
-          {!pdfDoc ? (
+          {Object.keys(pageTemplates).length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-4 text-center self-center">
               <div className="w-16 h-16 rounded-2xl bg-white flex items-center justify-center shadow">
                 <Upload size={24} className="text-slate-400" />
               </div>
               <div>
                 <p className="text-sm font-semibold text-slate-700">No PDF template yet</p>
-                <p className="text-xs text-slate-400 mt-1">Upload a PDF to start placing fields</p>
+                <p className="text-xs text-slate-400 mt-1">Upload a PDF for page 1 to start placing fields</p>
               </div>
               <Button onClick={() => fileInputRef.current?.click()} loading={uploading}>
                 <Upload size={14} className="mr-1.5" /> Upload PDF Template
               </Button>
-              {/* Allow placing fields on virtual page even without PDF */}
               <p className="text-xs text-slate-400">or use the blank canvas below</p>
             </div>
           ) : null}
@@ -899,16 +943,25 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
                   if (resizeDrag) setResizeDrag(null)
                 }}
               >
-                {pdfDoc && currentPage <= pdfPageCount && (
-                  <PDFPageCanvas
-                    pdfDoc={pdfDoc}
-                    pageNum={currentPage}
-                    containerWidth={pdfWidth}
-                  />
-                )}
+                {pdfDoc && (() => {
+                  // If this page has its own template, render page 1 of it.
+                  // Otherwise fall back to rendering currentPage from the page-1 multi-page PDF.
+                  const hasOwnTemplate = !!pageTemplates[currentPage]
+                  const renderDoc     = hasOwnTemplate ? pageTemplates[currentPage].doc : pageTemplates[1]?.doc
+                  const renderPageNum = hasOwnTemplate ? 1 : currentPage
+                  const renderMax     = hasOwnTemplate ? pageTemplates[currentPage].pageCount : pdfPageCount
+                  if (!renderDoc || renderPageNum > renderMax) return null
+                  return (
+                    <PDFPageCanvas
+                      pdfDoc={renderDoc}
+                      pageNum={renderPageNum}
+                      containerWidth={pdfWidth}
+                    />
+                  )
+                })()}
 
-                {/* Blank page grid for virtual pages */}
-                {(!pdfDoc || currentPage > pdfPageCount) && (
+                {/* Blank page grid — shown when no template exists for this page */}
+                {(!pdfDoc || (!pageTemplates[currentPage] && currentPage > pdfPageCount)) && (
                   <div
                     style={{ width: pdfWidth, minHeight: Math.round(pdfWidth * 1.414) }}
                     className="bg-white"

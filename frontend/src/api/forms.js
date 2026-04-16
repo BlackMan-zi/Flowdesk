@@ -27,6 +27,15 @@ export const uploadPdfTemplate = (formDefId, file) => {
 }
 export const getPdfTemplateBlob = (formDefId) =>
   client.get(`/forms/definitions/${formDefId}/pdf-template`, { responseType: 'blob' })
+
+// Per-page template endpoints (page_num >= 1)
+export const uploadPdfTemplatePage = (formDefId, pageNum, file) => {
+  const fd = new FormData()
+  fd.append('file', file)
+  return client.post(`/forms/definitions/${formDefId}/pdf-template/page/${pageNum}`, fd)
+}
+export const getPdfTemplateBlobPage = (formDefId, pageNum) =>
+  client.get(`/forms/definitions/${formDefId}/pdf-template/page/${pageNum}`, { responseType: 'blob' })
 export const replaceFormFields = (formDefId, fields) =>
   client.put(`/forms/definitions/${formDefId}/fields`, { fields })
 

@@ -215,6 +215,75 @@ def get_pdf_template(
     )
 
 
+@router.post("/definitions/{form_def_id}/pdf-template/page/{page_num}")
+async def upload_pdf_template_page(
+    form_def_id: str,
+    page_num: int,
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_roles(RoleName.admin)),
+    db: Session = Depends(get_db)
+):
+    """Upload a separate PDF template for a specific form page (page_num >= 1).
+    Page 1 also updates the main pdf_template_path for backwards compatibility.
+    """
+    if page_num < 1:
+        raise HTTPException(status_code=400, detail="page_num must be >= 1")
+    form_def = db.query(FormDefinition).filter(
+        FormDefinition.id == form_def_id,
+        FormDefinition.organization_id == current_user.organization_id
+    ).first()
+    if not form_def:
+        raise HTTPException(status_code=404, detail="Form definition not found")
+    if file.content_type not in ("application/pdf", "application/octet-stream"):
+        raise HTTPException(status_code=400, detail="Uploaded file must be a PDF")
+
+    pdf_dir = os.path.join(settings.MEDIA_DIR, "pdf_templates", current_user.organization_id)
+    os.makedirs(pdf_dir, exist_ok=True)
+
+    if page_num == 1:
+        stored_path = os.path.join(pdf_dir, f"{form_def_id}.pdf")
+        form_def.pdf_template_path = stored_path
+    else:
+        stored_path = os.path.join(pdf_dir, f"{form_def_id}_p{page_num}.pdf")
+
+    with open(stored_path, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+
+    db.commit()
+    return {"message": f"PDF template for page {page_num} uploaded successfully", "page": page_num}
+
+
+@router.get("/definitions/{form_def_id}/pdf-template/page/{page_num}")
+def get_pdf_template_page(
+    form_def_id: str,
+    page_num: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Get the PDF template for a specific form page. Falls back to page 1 template if not found."""
+    form_def = db.query(FormDefinition).filter(
+        FormDefinition.id == form_def_id,
+        FormDefinition.organization_id == current_user.organization_id
+    ).first()
+    if not form_def:
+        raise HTTPException(status_code=404, detail="Form definition not found")
+
+    if page_num == 1:
+        path = form_def.pdf_template_path
+    else:
+        pdf_dir = os.path.join(settings.MEDIA_DIR, "pdf_templates", current_user.organization_id)
+        path = os.path.join(pdf_dir, f"{form_def_id}_p{page_num}.pdf")
+
+    if not path or not os.path.exists(path):
+        raise HTTPException(status_code=404, detail=f"No PDF template for page {page_num}")
+
+    return FileResponse(
+        path=path,
+        media_type="application/pdf",
+        filename=f"{form_def.name.replace(' ', '_')}_p{page_num}_template.pdf"
+    )
+
+
 @router.put("/definitions/{form_def_id}/fields")
 def update_form_fields_layout(
     form_def_id: str,
