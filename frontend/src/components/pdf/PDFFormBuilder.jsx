@@ -1180,8 +1180,9 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
           if (idx <= 0 || idx >= sortedH.length - 1) return f
           const totalW = sortedH.reduce((sum, s) => sum + s.width_pct, 0)
           const gap = (maxX - minX - totalW) / (sortedH.length - 1)
-          let x = sortedH[0].x_pct + sortedH[0].width_pct
-          for (let i = 1; i < idx; i++) x += sortedH[i].width_pct + gap
+          // Start from the leftmost field's left edge, then step width+gap for each preceding field
+          let x = sortedH[0].x_pct
+          for (let i = 0; i < idx; i++) x += sortedH[i].width_pct + gap
           return { ...f, x_pct: x }
         }
         case 'distributeV': {
@@ -1189,8 +1190,9 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
           if (idx <= 0 || idx >= sortedV.length - 1) return f
           const totalH = sortedV.reduce((sum, s) => sum + s.height_pct, 0)
           const gap = (maxY - minY - totalH) / (sortedV.length - 1)
-          let y = sortedV[0].y_pct + sortedV[0].height_pct
-          for (let i = 1; i < idx; i++) y += sortedV[i].height_pct + gap
+          // Start from the topmost field's top edge, then step height+gap for each preceding field
+          let y = sortedV[0].y_pct
+          for (let i = 0; i < idx; i++) y += sortedV[i].height_pct + gap
           return { ...f, y_pct: y }
         }
         default: return f
