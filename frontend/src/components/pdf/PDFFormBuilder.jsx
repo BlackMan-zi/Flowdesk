@@ -1441,8 +1441,8 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
                       }}
                       className={cn(
                         'border overflow-visible flex flex-col px-1 py-0.5 transition-colors',
-                        isSelected ? 'border-brand-500 bg-brand-50/80 text-brand-800'
-                          : isPinned ? 'border-amber-500 bg-amber-50/80 text-amber-800'
+                        isSelected ? 'border-amber-500 bg-amber-100/90 text-amber-900'
+                          : isPinned ? 'border-orange-500 bg-orange-50/80 text-orange-900'
                           : colorCls,
                         isLocked && 'opacity-60',
                       )}
