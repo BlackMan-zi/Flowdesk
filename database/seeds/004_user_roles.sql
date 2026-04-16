@@ -5,7 +5,12 @@
 -- Description: Maps users to their functional roles
 -- ============================================================
 
--- ── System Admin ─────────────────────────────────────────────
+-- ── Demo Org: System Admin ───────────────────────────────────
+INSERT INTO user_roles (id, user_id, role_id) VALUES
+  (UUID(), 'usr-demo-admin', 'role-admin')
+ON DUPLICATE KEY UPDATE role_id = VALUES(role_id);
+
+-- ── BSC Rwanda: System Admin ──────────────────────────────────
 INSERT INTO user_roles (id, user_id, role_id) VALUES
   (UUID(), 'usr-ceo-001', 'role-admin'),
   (UUID(), 'usr-ceo-001', 'role-hod'),

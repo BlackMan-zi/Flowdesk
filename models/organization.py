@@ -15,6 +15,7 @@ class Organization(Base):
     id = Column(String(36), primary_key=True, default=gen_uuid)
     name = Column(String(255), nullable=False)
     subdomain = Column(String(100), unique=True, nullable=False)
+    email_domain = Column(String(255), unique=True, nullable=True)  # e.g. bsc.rw → auto-detects org on login
     subscription_plan = Column(String(50), default="starter")
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)

@@ -25,17 +25,23 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 @router.post("/login", response_model=TokenResponse)
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
-    # Lookup org
+    email_lower = payload.email.lower()
+
+    # Auto-detect organisation from email domain (e.g. william@bsc.rw → email_domain='bsc.rw')
+    email_domain = email_lower.split('@')[-1]
     org = db.query(Organization).filter(
-        Organization.subdomain == payload.org_subdomain,
+        Organization.email_domain == email_domain,
         Organization.is_active == True
     ).first()
     if not org:
-        raise HTTPException(status_code=404, detail="Organization not found")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password"
+        )
 
     # Lookup user
     user = db.query(User).filter(
-        User.email == payload.email.lower(),
+        User.email == email_lower,
         User.organization_id == org.id
     ).first()
     if not user or not verify_password(payload.password, user.password_hash):
@@ -108,14 +114,17 @@ def force_reset_password(
 
 @router.post("/forgot-password")
 def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    email_lower = payload.email.lower()
+    email_domain = email_lower.split('@')[-1]
     org = db.query(Organization).filter(
-        Organization.subdomain == payload.org_subdomain
+        Organization.email_domain == email_domain,
+        Organization.is_active == True
     ).first()
     if not org:
         return {"message": "If that email is registered, a reset link will be sent."}
 
     user = db.query(User).filter(
-        User.email == payload.email.lower(),
+        User.email == email_lower,
         User.organization_id == org.id
     ).first()
     if not user:

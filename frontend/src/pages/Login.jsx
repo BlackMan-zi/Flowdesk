@@ -2,11 +2,9 @@ import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { login, getMe } from '../api/auth'
-import { Workflow, Building2, Mail, Lock, ArrowRight, CheckCircle } from 'lucide-react'
+import { Workflow, Mail, Lock, ArrowRight, CheckCircle, AlertCircle } from 'lucide-react'
 import { Button } from '../components/ui/Button'
-import Input from '../components/ui/Input'
 import { Alert, AlertDescription } from '../components/ui/alert'
-import { AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const FEATURES = [
@@ -43,7 +41,7 @@ function IconInput({ icon: Icon, label, error, className, ...props }) {
 export default function Login() {
   const { login: authLogin } = useAuth()
   const navigate = useNavigate()
-  const [form, setForm] = useState({ org_subdomain: '', email: '', password: '' })
+  const [form, setForm] = useState({ email: '', password: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -68,7 +66,7 @@ export default function Login() {
       authLogin(data.access_token, { ...meRes.data, must_reset_password: data.must_reset_password })
       navigate(data.must_reset_password ? '/force-reset-password' : '/')
     } catch (err) {
-      setError(err.response?.data?.detail || 'Login failed. Check your credentials.')
+      setError(err.response?.data?.detail || 'Invalid email or password.')
     } finally {
       setLoading(false)
     }
@@ -128,30 +126,22 @@ export default function Login() {
 
           <div className="mb-8">
             <h1 className="text-2xl font-bold text-foreground">Welcome back</h1>
-            <p className="text-muted-foreground mt-1 text-sm">Sign in to your workspace to continue</p>
+            <p className="text-muted-foreground mt-1 text-sm">
+              Sign in with your work email — your organisation is detected automatically.
+            </p>
           </div>
 
           <div className="bg-card rounded-xl border border-border shadow-sm p-7">
             <form onSubmit={handleSubmit} className="space-y-4">
               <IconInput
-                icon={Building2}
-                label="Organisation"
-                type="text"
-                placeholder="your-company"
-                value={form.org_subdomain}
-                onChange={set('org_subdomain')}
-                required
-                autoFocus
-                autoComplete="organization"
-              />
-              <IconInput
                 icon={Mail}
-                label="Email address"
+                label="Work email"
                 type="email"
-                placeholder="you@company.com"
+                placeholder="you@bsc.rw"
                 value={form.email}
                 onChange={set('email')}
                 required
+                autoFocus
                 autoComplete="email"
               />
               <IconInput

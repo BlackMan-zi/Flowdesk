@@ -5,7 +5,7 @@ from typing import Optional
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
-    org_subdomain: str
+    # Organisation is auto-detected from the email domain (e.g. @bsc.rw → BSC Rwanda)
 
 
 class TokenResponse(BaseModel):
@@ -27,7 +27,7 @@ class ForcePasswordResetRequest(BaseModel):
 
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
-    org_subdomain: str
+    # Organisation auto-detected from email domain
 
 
 class MFASetupResponse(BaseModel):

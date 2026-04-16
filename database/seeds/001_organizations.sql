@@ -1,17 +1,22 @@
 -- ============================================================
 -- FlowDesk Database Seed: Organizations & Departments
--- Version: 1.0
--- Generated: 2026-04-15
--- Description: Core organisational structure for BSC Rwanda
+-- Version: 2.0
+-- Updated: 2026-04-16
+-- Description: Two organisations — demo (admin only) + BSC Rwanda (all staff)
 -- ============================================================
 
 -- ── Organizations ────────────────────────────────────────────
-INSERT INTO organizations (id, name, subdomain, subscription_plan, created_at, updated_at)
+-- email_domain drives auto-org-detection on login (no org field needed)
+INSERT INTO organizations (id, name, subdomain, email_domain, subscription_plan, created_at, updated_at)
 VALUES
-  ('org-bsc-001', 'BSC Rwanda', 'demo', 'enterprise', NOW(), NOW())
-ON DUPLICATE KEY UPDATE name = VALUES(name), subdomain = VALUES(subdomain);
+  ('org-demo-001', 'FlowDesk Demo', 'demo', 'demo.com', 'enterprise', NOW(), NOW()),
+  ('org-bsc-001',  'BSC Rwanda',    'bsc',  'bsc.rw',   'enterprise', NOW(), NOW())
+ON DUPLICATE KEY UPDATE
+  name         = VALUES(name),
+  email_domain = VALUES(email_domain),
+  subdomain    = VALUES(subdomain);
 
--- ── Top-level Departments ────────────────────────────────────
+-- ── BSC Rwanda: Top-level Departments ────────────────────────
 INSERT INTO departments (id, organization_id, name, parent_department_id, is_active, created_at)
 VALUES
   ('dept-ceo',        'org-bsc-001', 'CEO Office',  NULL, 1, NOW()),
@@ -22,7 +27,7 @@ VALUES
   ('dept-pmo',        'org-bsc-001', 'PMO',         NULL, 1, NOW())
 ON DUPLICATE KEY UPDATE name = VALUES(name);
 
--- ── Sub-departments / Units ───────────────────────────────────
+-- ── BSC Rwanda: Sub-departments / Units ──────────────────────
 -- CEO Office units
 INSERT INTO departments (id, organization_id, name, parent_department_id, is_active, created_at)
 VALUES
