@@ -83,9 +83,24 @@ class FormDefinitionUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 
+class ApprovalTemplateStepBrief(BaseModel):
+    id: str
+    step_order: int
+    step_label: Optional[str] = None
+    role_type: str          # 'Hierarchy' | 'Functional' | 'Executive' | 'SpecificUser'
+    role_id: Optional[str] = None
+    specific_user_id: Optional[str] = None
+    hierarchy_level: Optional[str] = None  # 'manager' | 'sn_manager' | 'hod'
+    skip_if_missing: bool = False
+
+    class Config:
+        from_attributes = True
+
+
 class ApprovalTemplateBrief(BaseModel):
     id: str
     name: str
+    steps: List[ApprovalTemplateStepBrief] = []
 
     class Config:
         from_attributes = True

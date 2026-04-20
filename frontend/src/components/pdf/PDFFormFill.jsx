@@ -386,11 +386,27 @@ export default function PDFFormFill({ formDef, values, onChange, currentUser }) 
       // Initiator = the person submitting the form
       'approver.initiator.name': currentUser.name,
       'approver.initiator.date': today,
-      // Upstream approvers — names pre-filled; signatures/dates left blank (filled on approval)
+      // Legacy hierarchy keys (for backward compat with forms designed before step-based workflow)
       'approver.line_manager.name': currentUser.manager_name,
       'approver.sn_manager.name':   currentUser.sn_manager_name,
       'approver.hod.name':          currentUser.hod_name,
     }
+
+    // Step-based approver resolution (for forms using the configurable workflow)
+    const steps = formDef?.approval_template?.steps || []
+    steps.forEach((step, i) => {
+      const n = i + 1
+      if (step.role_type === 'Hierarchy') {
+        const name = step.hierarchy_level === 'manager'    ? currentUser.manager_name
+                   : step.hierarchy_level === 'sn_manager' ? currentUser.sn_manager_name
+                   : step.hierarchy_level === 'hod'        ? currentUser.hod_name
+                   : null
+        if (name) sourceValues[`approver.step_${n}.name`] = name
+        // Signature and date are filled at approval time — leave them blank
+      }
+      // For 'SpecificUser' / 'Functional' / 'Executive': approver is resolved at submission
+      // time by the backend; names are not pre-filled here
+    })
 
     formDef.fields.filter(f => f.auto_filled && f.auto_fill_source).forEach(f => {
       const val = sourceValues[f.auto_fill_source]

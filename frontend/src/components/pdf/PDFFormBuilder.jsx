@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react'
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
 import { toast } from 'sonner'
 import PDFPageCanvas from './PDFPageCanvas'
@@ -159,9 +159,298 @@ function TableColumnManager({ columns, onChange }) {
   )
 }
 
+// ── Searchable combobox (used in approval step editor) ───────────────────────
+
+function SearchCombobox({ items, selectedId, selectedName, onSelect, placeholder = 'Search…' }) {
+  const [query, setQuery] = useState('')
+  const [open, setOpen] = useState(false)
+  const inputRef = useRef(null)
+
+  const filtered = useMemo(() => {
+    const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean)
+    if (!tokens.length) return items.slice(0, 25)
+    return items.filter(item =>
+      tokens.every(t =>
+        item.label.toLowerCase().includes(t) ||
+        (item.sublabel || '').toLowerCase().includes(t)
+      )
+    )
+  }, [query, items])
+
+  return (
+    <div className="relative">
+      <input
+        ref={inputRef}
+        value={selectedId ? (selectedName || selectedId) : query}
+        onChange={e => {
+          setQuery(e.target.value)
+          if (selectedId) onSelect(null, null)
+        }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 200)}
+        placeholder={placeholder}
+        className="w-full border border-slate-300 rounded px-2 py-1.5 pr-6 text-xs focus:outline-none focus:ring-1 focus:ring-brand-500 bg-white"
+      />
+      {selectedId && (
+        <button
+          type="button"
+          onMouseDown={e => { e.preventDefault(); onSelect(null, null); setQuery('') }}
+          className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+        >
+          <X size={10} />
+        </button>
+      )}
+      {open && (
+        <div className="absolute z-50 top-full left-0 right-0 mt-0.5 bg-white border border-slate-200 rounded-md shadow-lg max-h-44 overflow-y-auto">
+          {filtered.length === 0 ? (
+            <p className="text-xs text-slate-400 px-2.5 py-2 text-center">No matches</p>
+          ) : filtered.map(item => (
+            <button
+              key={item.id}
+              type="button"
+              onMouseDown={e => {
+                e.preventDefault()
+                onSelect(item.id, item.label)
+                setQuery('')
+                setOpen(false)
+              }}
+              className="w-full text-left px-2.5 py-1.5 hover:bg-brand-50 flex flex-col gap-0"
+            >
+              <span className="text-xs font-medium text-slate-700">{item.label}</span>
+              {item.sublabel && <span className="text-[10px] text-slate-400">{item.sublabel}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Single approval step editor card ─────────────────────────────────────────
+
+const HIERARCHY_LABELS = { manager: 'Line Manager', sn_manager: 'Senior Manager', hod: 'Head of Department' }
+
+function StepCard({ step, index, isEditing, onToggleEdit, onUpdate, onDelete, onMoveUp, onMoveDown, userItems, roleItems }) {
+  const sourceLabel = step.source_type === 'hierarchy'     ? 'Hierarchy'
+                    : step.source_type === 'role'          ? 'By Role'
+                    : 'Specific User'
+
+  const detail = step.source_type === 'hierarchy'     ? (HIERARCHY_LABELS[step.hierarchy_level] || step.hierarchy_level)
+               : step.source_type === 'role'          ? (step.role_name || '—')
+               : step.source_type === 'specific_user' ? (step.specific_user_name || '—')
+               : '—'
+
+  return (
+    <div className="border border-slate-200 rounded-lg overflow-hidden">
+      {/* Header — click to toggle editor */}
+      <div
+        className="flex items-center gap-2 px-2.5 py-2 bg-slate-50 hover:bg-slate-100 cursor-pointer select-none transition-colors"
+        onClick={onToggleEdit}
+      >
+        <span className="w-5 h-5 rounded-full bg-brand-100 text-brand-700 text-[10px] font-bold flex items-center justify-center flex-shrink-0">
+          {index + 1}
+        </span>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-medium text-slate-700 truncate">{step.step_label || `Step ${index + 1}`}</p>
+          <p className="text-[10px] text-slate-400 truncate">{sourceLabel} · {detail}</p>
+        </div>
+        <div className="flex items-center gap-0.5 flex-shrink-0" onClick={e => e.stopPropagation()}>
+          {onMoveUp   && <button type="button" onClick={onMoveUp}   className="p-0.5 text-slate-400 hover:text-slate-700"><ChevronUp   size={11} /></button>}
+          {onMoveDown && <button type="button" onClick={onMoveDown} className="p-0.5 text-slate-400 hover:text-slate-700"><ChevronDown size={11} /></button>}
+          <button type="button" onClick={onDelete} className="p-0.5 text-slate-400 hover:text-red-500 ml-0.5"><X size={11} /></button>
+        </div>
+      </div>
+
+      {/* Editor — shown when isEditing */}
+      {isEditing && (
+        <div className="p-2.5 space-y-2.5 border-t border-slate-200 bg-white">
+          {/* Label */}
+          <label className="block">
+            <span className="text-[10px] font-semibold text-slate-600 block mb-0.5">Step Label</span>
+            <input
+              type="text"
+              value={step.step_label}
+              onChange={e => onUpdate({ step_label: e.target.value })}
+              placeholder="e.g. Line Manager Approval"
+              className="w-full border border-slate-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-brand-500"
+            />
+          </label>
+
+          {/* Source type */}
+          <div>
+            <span className="text-[10px] font-semibold text-slate-600 block mb-1">Approver Source</span>
+            <div className="flex gap-1">
+              {[
+                { id: 'hierarchy',     label: 'Hierarchy' },
+                { id: 'role',          label: 'Role'      },
+                { id: 'specific_user', label: 'User'      },
+              ].map(opt => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => onUpdate({ source_type: opt.id })}
+                  className={cn(
+                    'flex-1 py-1 rounded text-[10px] font-semibold border transition-colors',
+                    step.source_type === opt.id
+                      ? 'bg-brand-600 text-white border-brand-600'
+                      : 'bg-white text-slate-600 border-slate-300 hover:border-brand-400 hover:text-brand-700'
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Hierarchy level picker */}
+          {step.source_type === 'hierarchy' && (
+            <label className="block">
+              <span className="text-[10px] font-semibold text-slate-600 block mb-0.5">Hierarchy Level</span>
+              <select
+                value={step.hierarchy_level || 'manager'}
+                onChange={e => onUpdate({ hierarchy_level: e.target.value })}
+                className="w-full border border-slate-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-brand-500"
+              >
+                <option value="manager">Line Manager</option>
+                <option value="sn_manager">Senior Manager</option>
+                <option value="hod">Head of Department</option>
+              </select>
+            </label>
+          )}
+
+          {/* Role picker */}
+          {step.source_type === 'role' && (
+            <label className="block">
+              <span className="text-[10px] font-semibold text-slate-600 block mb-0.5">Role / Position</span>
+              <SearchCombobox
+                items={roleItems}
+                selectedId={step.role_id}
+                selectedName={step.role_name}
+                onSelect={(id, name) => onUpdate({ role_id: id, role_name: name })}
+                placeholder="Search roles…"
+              />
+              {roleItems.length === 0 && (
+                <p className="text-[10px] text-amber-600 mt-0.5">No roles loaded — check admin permissions.</p>
+              )}
+            </label>
+          )}
+
+          {/* Specific user picker */}
+          {step.source_type === 'specific_user' && (
+            <label className="block">
+              <span className="text-[10px] font-semibold text-slate-600 block mb-0.5">Specific User</span>
+              <SearchCombobox
+                items={userItems}
+                selectedId={step.specific_user_id}
+                selectedName={step.specific_user_name}
+                onSelect={(id, name) => onUpdate({ specific_user_id: id, specific_user_name: name })}
+                placeholder="Search by name or email…"
+              />
+            </label>
+          )}
+
+          {/* Skip if missing */}
+          <label className="flex items-center gap-2 cursor-pointer pt-0.5">
+            <input
+              type="checkbox"
+              checked={!!step.skip_if_missing}
+              onChange={e => onUpdate({ skip_if_missing: e.target.checked })}
+              className="rounded accent-brand-600 w-3 h-3 flex-shrink-0"
+            />
+            <span className="text-[10px] text-slate-600">Skip step if approver not found</span>
+          </label>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Approval steps panel (left-panel "Approval" tab) ─────────────────────────
+
+function ApprovalStepsPanel({ steps, onChange, userItems, roleItems }) {
+  const [editingIdx, setEditingIdx] = useState(null)
+
+  const addStep = () => {
+    const newStep = {
+      id: `new-${Date.now()}`,
+      step_order: steps.length + 1,
+      step_label: '',
+      source_type: 'hierarchy',
+      hierarchy_level: 'manager',
+      role_id: null, role_name: null,
+      specific_user_id: null, specific_user_name: null,
+      skip_if_missing: false,
+    }
+    onChange([...steps, newStep])
+    setEditingIdx(steps.length)
+  }
+
+  const updateStep = (i, updates) => onChange(steps.map((s, idx) => idx === i ? { ...s, ...updates } : s))
+
+  const deleteStep = (i) => {
+    const next = steps.filter((_, idx) => idx !== i).map((s, idx) => ({ ...s, step_order: idx + 1 }))
+    onChange(next)
+    setEditingIdx(p => p === i ? null : (p != null && p > i ? p - 1 : p))
+  }
+
+  const moveStep = (i, dir) => {
+    const j = i + dir
+    if (j < 0 || j >= steps.length) return
+    const next = [...steps]
+    ;[next[i], next[j]] = [next[j], next[i]]
+    next.forEach((s, idx) => { s = { ...s, step_order: idx + 1 }; next[idx] = s })
+    onChange(next)
+    setEditingIdx(j)
+  }
+
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      <div className="px-3 pt-2.5 pb-2 border-b border-slate-100 flex-shrink-0">
+        <div className="flex items-center justify-between mb-1">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Approval Steps</p>
+          <button
+            onClick={addStep}
+            className="flex items-center gap-0.5 text-[10px] font-semibold text-brand-600 hover:text-brand-800 transition-colors"
+          >
+            <Plus size={11} /> Add
+          </button>
+        </div>
+        <p className="text-[10px] text-slate-400 leading-snug">
+          Steps run in order. Bind PDF fields to step approvers via <em>Data Binding</em> in field properties.
+        </p>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
+        {steps.map((step, i) => (
+          <StepCard
+            key={step.id}
+            step={step}
+            index={i}
+            isEditing={editingIdx === i}
+            onToggleEdit={() => setEditingIdx(editingIdx === i ? null : i)}
+            onUpdate={updates => updateStep(i, updates)}
+            onDelete={() => deleteStep(i)}
+            onMoveUp={i > 0 ? () => moveStep(i, -1) : null}
+            onMoveDown={i < steps.length - 1 ? () => moveStep(i, 1) : null}
+            userItems={userItems}
+            roleItems={roleItems}
+          />
+        ))}
+        {steps.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-8 gap-2 text-center">
+            <Workflow size={18} className="text-slate-300" />
+            <p className="text-xs text-slate-400">No approval steps</p>
+            <p className="text-[10px] text-slate-300">Click "Add" to build your workflow</p>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Field properties panel ────────────────────────────────────────────────────
 
-function FieldProperties({ field, onChange, onDelete, formCodeSuffix, locked, onToggleLock }) {
+function FieldProperties({ field, onChange, onDelete, formCodeSuffix, locked, onToggleLock, bindSources }) {
   if (!field) return (
     <div className="text-xs text-slate-400 text-center py-8 px-3 flex flex-col items-center gap-2">
       <SlidersHorizontal size={20} className="text-slate-300" />
@@ -228,7 +517,7 @@ function FieldProperties({ field, onChange, onDelete, formCodeSuffix, locked, on
 
         {field.auto_filled && (
           <div className="space-y-1.5">
-            {BIND_SOURCES.map(group => {
+            {(bindSources || STATIC_BIND_SOURCES).map(group => {
               const GroupIcon = group.icon
               return (
                 <div key={group.group}>
@@ -733,7 +1022,8 @@ function ZoomControl({ zoom, onZoom }) {
 
 // ── Data-binding source catalogue ────────────────────────────────────────────
 
-const BIND_SOURCES = [
+// Static sources (submitter + initiator) — always present
+const STATIC_BIND_SOURCES = [
   {
     group: 'Submitter Info', icon: User,
     sources: [
@@ -747,40 +1037,25 @@ const BIND_SOURCES = [
   {
     group: 'Initiator', icon: UserCheck,
     sources: [
-      { value: 'approver.initiator.name',      label: 'Name',        preview: 'Initiator Name' },
-      { value: 'approver.initiator.signature', label: 'Signature',   preview: 'Initiator Sig'  },
-      { value: 'approver.initiator.date',      label: 'Date Signed', preview: 'Initiator Date' },
-    ],
-  },
-  {
-    group: 'Line Manager', icon: Users,
-    sources: [
-      { value: 'approver.line_manager.name',      label: 'Name',        preview: 'Line Mgr Name' },
-      { value: 'approver.line_manager.signature', label: 'Signature',   preview: 'Line Mgr Sig'  },
-      { value: 'approver.line_manager.date',      label: 'Date Signed', preview: 'Line Mgr Date' },
-    ],
-  },
-  {
-    group: 'Senior Manager', icon: Users,
-    sources: [
-      { value: 'approver.sn_manager.name',      label: 'Name',        preview: 'Sr Mgr Name' },
-      { value: 'approver.sn_manager.signature', label: 'Signature',   preview: 'Sr Mgr Sig'  },
-      { value: 'approver.sn_manager.date',      label: 'Date Signed', preview: 'Sr Mgr Date' },
-    ],
-  },
-  {
-    group: 'Head of Department', icon: Building2,
-    sources: [
-      { value: 'approver.hod.name',      label: 'Name',        preview: 'HOD Name' },
-      { value: 'approver.hod.signature', label: 'Signature',   preview: 'HOD Sig'  },
-      { value: 'approver.hod.date',      label: 'Date Signed', preview: 'HOD Date' },
+      { value: 'approver.initiator.name',      label: 'Name',        preview: 'Initiator'  },
+      { value: 'approver.initiator.signature', label: 'Signature',   preview: 'Init Sig'   },
+      { value: 'approver.initiator.date',      label: 'Date Signed', preview: 'Init Date'  },
     ],
   },
 ]
 
-// Flat lookup: source value → { group, label, preview }
-const BIND_SOURCE_MAP = {}
-BIND_SOURCES.forEach(g => g.sources.forEach(s => { BIND_SOURCE_MAP[s.value] = { group: g.group, ...s } }))
+// Legacy preview labels — for fields bound to old hierarchy keys (kept for backward compat display)
+const LEGACY_PREVIEW = {
+  'approver.line_manager.name':      'Mgr Name',
+  'approver.line_manager.signature': 'Mgr Sig',
+  'approver.line_manager.date':      'Mgr Date',
+  'approver.sn_manager.name':        'Sr Mgr Name',
+  'approver.sn_manager.signature':   'Sr Mgr Sig',
+  'approver.sn_manager.date':        'Sr Mgr Date',
+  'approver.hod.name':               'HOD Name',
+  'approver.hod.signature':          'HOD Sig',
+  'approver.hod.date':               'HOD Date',
+}
 
 // ── Main builder ──────────────────────────────────────────────────────────────
 
@@ -788,7 +1063,7 @@ BIND_SOURCES.forEach(g => g.sources.forEach(s => { BIND_SOURCE_MAP[s.value] = { 
 const GUIDE_THRESHOLD = 1.5  // show guide line when within this distance
 const SNAP_THRESHOLD  = 0.7  // snap field edge when within this distance
 
-export default function PDFFormBuilder({ formDef, initialFields = [], onSave, onBack, onDelete }) {
+export default function PDFFormBuilder({ formDef, initialFields = [], onSave, onBack, onDelete, users = [], roles = [] }) {
   // pageTemplates maps form-page-number → { doc: pdfjsLib.Document, pageCount: number }
   // Page 1 is the "main" template (may be multi-page). Pages 2+ each have their own 1-page PDF.
   const [pageTemplates, setPageTemplates] = useState({})
@@ -818,6 +1093,28 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
   // Extended guide state: lines, spacing equality brackets, drag position label
   const [alignGuides, setAlignGuides] = useState({ v: [], h: [], equalH: [], equalV: [], dragLabel: null })
 
+  // Approval workflow steps (configurable per form)
+  const [approvalSteps, setApprovalSteps] = useState(() => {
+    const backendSteps = formDef?.approval_template?.steps || []
+    return backendSteps.map(s => ({
+      id: s.id || `step-${s.step_order}`,
+      step_order: s.step_order,
+      step_label: s.step_label || '',
+      source_type: s.role_type === 'Hierarchy'     ? 'hierarchy'
+                 : s.role_type === 'SpecificUser'  ? 'specific_user'
+                 : 'role',
+      hierarchy_level:    s.hierarchy_level || 'manager',
+      role_id:            s.role_id || null,
+      role_name:          null,   // enriched by effect below
+      specific_user_id:   s.specific_user_id || null,
+      specific_user_name: null,   // enriched by effect below
+      skip_if_missing:    s.skip_if_missing || false,
+    }))
+  })
+
+  // Left panel tab: 'fields' | 'approval'
+  const [leftTab, setLeftTab] = useState('fields')
+
   // Two refs: outer scroll container to measure available width, inner canvas
   const scrollContainerRef = useRef(null)
   const canvasRef           = useRef(null)
@@ -838,6 +1135,61 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
   // Keep refs current for move/align callbacks
   useEffect(() => { fieldsRef.current = fields }, [fields])
   useEffect(() => { selectedIdsRef.current = selectedIds }, [selectedIds])
+
+  // Enrich role/user display names once the lists load
+  useEffect(() => {
+    if (!roles.length && !users.length) return
+    setApprovalSteps(prev => prev.map(step => {
+      let updated = { ...step }
+      if (step.source_type === 'role' && step.role_id && !step.role_name) {
+        const r = roles.find(r => r.id === step.role_id)
+        if (r) updated.role_name = r.name
+      }
+      if (step.source_type === 'specific_user' && step.specific_user_id && !step.specific_user_name) {
+        const u = users.find(u => u.id === step.specific_user_id)
+        if (u) updated.specific_user_name = u.name
+      }
+      return updated
+    }))
+  }, [roles, users])
+
+  // Build combobox item lists for the approval step editor
+  const userItems = useMemo(() => users.map(u => ({
+    id: u.id,
+    label: u.name,
+    sublabel: u.email + (u.roles?.length ? ' · ' + u.roles.map(r => r.name).join(', ') : ''),
+  })), [users])
+
+  const roleItems = useMemo(() => roles.map(r => ({
+    id: r.id,
+    label: r.name,
+    sublabel: r.role_category || r.description || '',
+  })), [roles])
+
+  // Dynamic bind sources: static + one group per configured approval step
+  const bindSources = useMemo(() => {
+    const stepGroups = approvalSteps.map((step, i) => {
+      const n = i + 1
+      const label = step.step_label ? `Step ${n}: ${step.step_label}` : `Step ${n}`
+      return {
+        group: label,
+        icon: Users,
+        sources: [
+          { value: `approver.step_${n}.name`,      label: 'Approver Name',  preview: `S${n} Name` },
+          { value: `approver.step_${n}.signature`, label: 'Signature',      preview: `S${n} Sig`  },
+          { value: `approver.step_${n}.date`,      label: 'Date Signed',    preview: `S${n} Date` },
+        ],
+      }
+    })
+    return [...STATIC_BIND_SOURCES, ...stepGroups]
+  }, [approvalSteps])
+
+  // Flat map for canvas preview (includes legacy hierarchy keys for backward compat)
+  const bindSourceMap = useMemo(() => {
+    const map = { ...LEGACY_PREVIEW }
+    bindSources.forEach(g => g.sources.forEach(s => { map[s.value] = s }))
+    return map
+  }, [bindSources])
 
   // Base canvas width = available scroll area (minus outer p-6 padding + 8px canvas margin) capped at 850
   const BASE_MAX = 850
@@ -943,7 +1295,7 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
           filled_by:           f.filled_by || 'initiator',
         }
       })
-      await onSave(payload)
+      await onSave(payload, approvalSteps)
       toast.success('Layout saved')
     } catch {
       toast.error('Save failed — please try again')
@@ -1418,39 +1770,80 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
 
       <div className="flex flex-1 min-h-0 overflow-hidden">
 
-        {/* ── Left panel: Toolbox + Field list ── */}
+        {/* ── Left panel: Toolbox + Field list  |  Approval steps ── */}
         <div className="w-52 flex-shrink-0 bg-white border-r border-slate-200 flex flex-col overflow-hidden">
-          {/* Toolbox */}
-          <div className="border-b border-slate-200 overflow-y-auto" style={{ maxHeight: '60%' }}>
-            <FieldToolbox pendingType={pendingType} onSelect={setPendingType} />
+
+          {/* Tab bar */}
+          <div className="flex border-b border-slate-200 flex-shrink-0">
+            <button
+              onClick={() => setLeftTab('fields')}
+              className={cn(
+                'flex-1 py-2 text-xs font-semibold transition-colors',
+                leftTab === 'fields'
+                  ? 'text-brand-700 border-b-2 border-brand-500 -mb-px'
+                  : 'text-slate-400 hover:text-slate-600'
+              )}
+            >Fields</button>
+            <button
+              onClick={() => setLeftTab('approval')}
+              className={cn(
+                'flex-1 py-2 text-xs font-semibold transition-colors relative',
+                leftTab === 'approval'
+                  ? 'text-brand-700 border-b-2 border-brand-500 -mb-px'
+                  : 'text-slate-400 hover:text-slate-600'
+              )}
+            >
+              Approval
+              {approvalSteps.length > 0 && (
+                <span className="ml-1 text-[9px] bg-brand-100 text-brand-700 rounded-full px-1 font-bold">
+                  {approvalSteps.length}
+                </span>
+              )}
+            </button>
           </div>
 
-          {/* Field list */}
-          <div className="flex-1 overflow-y-auto min-h-0">
-            {pageFields.length > 0 ? (
-              <div className="p-2">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider px-1 mb-1">
-                  Page {currentPage} · {pageFields.length} field{pageFields.length !== 1 ? 's' : ''}
-                </p>
-                {pageFields.map(f => (
-                  <button key={f.id} onClick={() => setSelectedIds([f.id])}
-                    className={cn(
-                      'w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs text-left transition-colors',
-                      selectedIds.includes(f.id) ? 'bg-brand-50 text-brand-700' : 'hover:bg-slate-50 text-slate-600'
-                    )}>
-                    {typeIcon(f.field_type)}
-                    <span className="flex-1 truncate">{f.field_label}</span>
-                    {f.required && <span className="text-red-400 font-bold">*</span>}
-                  </button>
-                ))}
+          {leftTab === 'approval' ? (
+            <ApprovalStepsPanel
+              steps={approvalSteps}
+              onChange={setApprovalSteps}
+              userItems={userItems}
+              roleItems={roleItems}
+            />
+          ) : (
+            <>
+              {/* Toolbox */}
+              <div className="border-b border-slate-200 overflow-y-auto" style={{ maxHeight: '60%' }}>
+                <FieldToolbox pendingType={pendingType} onSelect={setPendingType} />
               </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center h-full gap-2 text-center px-3 py-8">
-                <p className="text-xs text-slate-400">No fields on this page yet</p>
-                <p className="text-[10px] text-slate-300">Select a type above, then draw on the canvas</p>
+
+              {/* Field list */}
+              <div className="flex-1 overflow-y-auto min-h-0">
+                {pageFields.length > 0 ? (
+                  <div className="p-2">
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider px-1 mb-1">
+                      Page {currentPage} · {pageFields.length} field{pageFields.length !== 1 ? 's' : ''}
+                    </p>
+                    {pageFields.map(f => (
+                      <button key={f.id} onClick={() => setSelectedIds([f.id])}
+                        className={cn(
+                          'w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs text-left transition-colors',
+                          selectedIds.includes(f.id) ? 'bg-brand-50 text-brand-700' : 'hover:bg-slate-50 text-slate-600'
+                        )}>
+                        {typeIcon(f.field_type)}
+                        <span className="flex-1 truncate">{f.field_label}</span>
+                        {f.required && <span className="text-red-400 font-bold">*</span>}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full gap-2 text-center px-3 py-8">
+                    <p className="text-xs text-slate-400">No fields on this page yet</p>
+                    <p className="text-[10px] text-slate-300">Select a type above, then draw on the canvas</p>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            </>
+          )}
         </div>
 
         {/* ── PDF canvas ── */}
@@ -1575,7 +1968,7 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
                         >{f.field_label}</span>
                         {f.required && !isRef && !isBound && <span className="text-red-500 font-bold text-xs flex-shrink-0">*</span>}
                         {isRef && <span className="text-amber-600 text-[9px] font-bold flex-shrink-0">AUTO</span>}
-                        {isBound && <span className="text-teal-600 text-[9px] font-bold flex-shrink-0 truncate max-w-[48px]">{BIND_SOURCE_MAP[f.auto_fill_source]?.preview || '→'}</span>}
+                        {isBound && <span className="text-teal-600 text-[9px] font-bold flex-shrink-0 truncate max-w-[48px]">{bindSourceMap[f.auto_fill_source]?.preview || '→'}</span>}
                       </div>
 
                       {/* Role badge */}
@@ -1780,6 +2173,7 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
             formCodeSuffix={formDef?.code_suffix}
             locked={selectedId ? lockedIds.includes(selectedId) : false}
             onToggleLock={() => selectedId && toggleLock(selectedId)}
+            bindSources={bindSources}
           />
         </div>
       </div>

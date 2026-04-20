@@ -2,7 +2,11 @@ import React, { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { getFormDefinition, replaceFormFields, deleteFormDefinition } from '../../api/forms'
+import {
+  getFormDefinition, replaceFormFields, deleteFormDefinition,
+  updateFormDefinition, createApprovalTemplate, updateApprovalTemplate,
+} from '../../api/forms'
+import { listUsers, listRoles } from '../../api/users'
 import PDFFormBuilder from '../../components/pdf/PDFFormBuilder'
 import Spinner from '../../components/ui/Spinner'
 import Modal from '../../components/ui/Modal'
@@ -21,9 +25,53 @@ export default function FormBuilder() {
     queryFn: () => getFormDefinition(id).then(r => r.data)
   })
 
-  const handleSave = async (fields) => {
+  // For the approval step configuration UI
+  const { data: users = [] } = useQuery({
+    queryKey: ['users'],
+    queryFn: () => listUsers().then(r => r.data),
+  })
+  const { data: roles = [] } = useQuery({
+    queryKey: ['roles'],
+    queryFn: () => listRoles().then(r => r.data),
+  })
+
+  /**
+   * Save fields + approval steps.
+   * approvalSteps is the local state array from PDFFormBuilder (may be undefined if
+   * the approval panel was never opened / no change made).
+   */
+  const handleSave = async (fields, approvalSteps) => {
+    // 1. Always save the field layout
     await replaceFormFields(id, fields)
-    // Immediately clear the cache so any page loading this form definition gets fresh data
+
+    // 2. Save approval template steps if provided
+    if (approvalSteps !== undefined) {
+      const stepsPayload = approvalSteps.map(s => ({
+        step_order:        s.step_order,
+        step_label:        s.step_label || null,
+        role_type:         s.source_type === 'hierarchy'     ? 'Hierarchy'
+                         : s.source_type === 'specific_user' ? 'SpecificUser'
+                         : 'Functional',
+        role_id:           s.source_type === 'role'          ? (s.role_id || null) : null,
+        specific_user_id:  s.source_type === 'specific_user' ? (s.specific_user_id || null) : null,
+        hierarchy_level:   s.source_type === 'hierarchy'     ? (s.hierarchy_level || 'manager') : null,
+        skip_if_missing:   s.skip_if_missing || false,
+        delegation_allowed: true,
+      }))
+
+      if (formDef?.approval_template_id) {
+        // Update existing template
+        await updateApprovalTemplate(formDef.approval_template_id, { steps: stepsPayload })
+      } else if (stepsPayload.length > 0) {
+        // Create a new template and link it to the form definition
+        const res = await createApprovalTemplate({
+          name: `${formDef?.name || 'Form'} Workflow`,
+          steps: stepsPayload,
+        })
+        await updateFormDefinition(id, { approval_template_id: res.data.id })
+      }
+    }
+
     qc.removeQueries({ queryKey: ['form-definition', id] })
     qc.invalidateQueries({ queryKey: ['form-definitions'] })
     navigate('/admin/form-definitions')
@@ -52,6 +100,8 @@ export default function FormBuilder() {
         onSave={handleSave}
         onBack={() => navigate('/admin/form-definitions')}
         onDelete={() => { setDeleteError(''); setDeleteOpen(true) }}
+        users={users}
+        roles={roles}
       />
 
       <Modal
