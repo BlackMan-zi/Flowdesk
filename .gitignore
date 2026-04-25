@@ -52,6 +52,19 @@ redis_data/
 uploads/
 generated_pdfs/
 
+# Media / generated files (runtime uploads, PDFs)
+media/
+backend/media/
+
+# OneDrive-synced files from other machines
+*MacBook*
+
+# Editor / tool config
+settings.json
+
+# PDFs at project root (source documents, not tracked)
+*.pdf
+
 # Test / coverage
 .coverage
 htmlcov/
