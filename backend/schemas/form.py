@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional, List, Any, Dict
 from datetime import datetime
 from models.form import FormStatus, VersionStatus, FieldType, FormVisibility
@@ -120,6 +120,11 @@ class FormDefinitionResponse(BaseModel):
     pdf_template_path: Optional[str] = None
     is_active: bool
     fields: List[FormFieldResponse] = []
+
+    @field_validator('fields', mode='before')
+    @classmethod
+    def only_active_fields(cls, v):
+        return [f for f in (v or []) if getattr(f, 'is_active', True)]
 
     class Config:
         from_attributes = True
