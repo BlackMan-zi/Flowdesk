@@ -602,11 +602,15 @@ export default function PDFFormFill({ formDef, values, onChange, currentUser }) 
 
     // Map source key → resolved value (undefined = not available → skip, don't overwrite)
     const sourceValues = {
-      'current_user.name':       currentUser.name,
-      'current_user.email':      currentUser.email,
-      'current_user.department': currentUser.department_name,
-      'current_user.unit':       currentUser.unit_name,
-      'current_user.date':       today,
+      'current_user.name':              currentUser.name,
+      'current_user.email':             currentUser.email,
+      'current_user.department':        currentUser.department_name,
+      'current_user.department.name':   currentUser.department_name,
+      'current_user.unit':              currentUser.unit_name,
+      'current_user.unit.name':         currentUser.unit_name,
+      'current_user.top_department.name': currentUser.department_name,
+      'current_user.date':              today,
+      'form.submitted_at':              today,
       // Initiator = the person submitting the form
       'approver.initiator.name': currentUser.name,
       'approver.initiator.date': today,

@@ -348,6 +348,43 @@ def generate_pdf_with_overlay(
 
     active_fields = [f for f in form_def.fields if f.is_active and f.x_pct is not None]
 
+    # Inject form-level auto-fill values (reference number, submitted date)
+    from datetime import date as _date
+    for field in active_fields:
+        if field.id in field_values:
+            continue
+        src = field.auto_fill_source or ''
+        if src == 'form.reference_number' and form_instance.reference_number:
+            field_values[field.id] = form_instance.reference_number
+        elif src == 'form.submitted_at' and form_instance.submitted_at:
+            field_values[field.id] = form_instance.submitted_at.strftime('%d/%m/%Y')
+        elif field.default_value and field.read_only:
+            field_values[field.id] = field.default_value
+
+    # Inject approver data for filled_by='approver' fields
+    from models.approval import ApprovalInstance, ApprovalStepStatus
+    approvals = db.query(ApprovalInstance).filter(
+        ApprovalInstance.form_instance_id == form_instance.id
+    ).order_by(ApprovalInstance.step_order).all()
+
+    for ap in approvals:
+        step = ap.step_order
+        for field in active_fields:
+            src = field.auto_fill_source or ''
+            if field.id in field_values:
+                continue
+            if src == f'approver.step_{step}.name' and ap.approver:
+                field_values[field.id] = ap.approver.name
+            elif src == f'approver.step_{step}.date' and ap.approved_at:
+                field_values[field.id] = ap.approved_at.strftime('%d/%m/%Y')
+            elif src == f'approver.step_{step}.signature':
+                from models.document import Signature as _Sig
+                sig = db.query(_Sig).filter(
+                    _Sig.approval_instance_id == ap.id
+                ).first()
+                if sig:
+                    field_values[field.id] = sig.signature_data
+
     # Overlay form data on PDF template
     filled_pdf_bytes = overlay_pdf(template_path, active_fields, field_values)
 

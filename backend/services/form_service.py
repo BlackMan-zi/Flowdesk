@@ -62,6 +62,16 @@ def create_form_instance(
     db.add(version)
     db.flush()
 
+    # Inject form-level auto-fills (reference number) into the values
+    provided_ids = {fv['form_field_id'] for fv in field_values}
+    for field in (form_def.fields or []):
+        if field.id in provided_ids:
+            continue
+        if field.auto_fill_source == 'form.reference_number':
+            field_values = list(field_values) + [{'form_field_id': field.id, 'value': reference}]
+        elif field.default_value and field.read_only and not field.auto_fill_source:
+            field_values = list(field_values) + [{'form_field_id': field.id, 'value': field.default_value}]
+
     _save_field_values(db, version.id, field_values, form_def=form_def, user=created_by_user)
     db.commit()
     db.refresh(instance)
