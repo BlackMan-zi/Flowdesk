@@ -1,5 +1,5 @@
 from fastapi import Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from typing import List
 from core.security import get_current_active_user
 from models.user import User, UserRole, Role, RoleName
@@ -7,13 +7,14 @@ from database import get_db
 
 
 def _get_user_role_names(user: User, db: Session) -> List[str]:
-    """Return list of role names the user holds."""
-    user_roles = db.query(UserRole).filter(UserRole.user_id == user.id).all()
-    role_names = []
-    for ur in user_roles:
-        role = db.query(Role).filter(Role.id == ur.role_id).first()
-        if role:
-            role_names.append(role.name)
+    """Return list of role names the user holds.
+    
+    Uses selectinload to prevent N+1 queries by joining roles with user roles.
+    """
+    user_roles = db.query(UserRole).filter(UserRole.user_id == user.id)\
+        .options(selectinload(UserRole.role)).all()
+    
+    role_names = [ur.role.name for ur in user_roles if ur.role]
     return role_names
 
 

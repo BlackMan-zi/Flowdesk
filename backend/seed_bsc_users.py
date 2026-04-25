@@ -13,10 +13,13 @@ import models.approval, models.delegation, models.audit, models.document
 from database import SessionLocal
 from models.organization import Organization, Department
 from models.user import User, Role, UserRole, RoleName, RoleCategory, UserStatus
-from passlib.context import CryptContext
+import bcrypt as _bcrypt
 import uuid, unicodedata, re
 
-pwd_ctx = CryptContext(schemes=['bcrypt'], deprecated='auto')
+class _PwdCtx:
+    def hash(self, pw): return _bcrypt.hashpw(pw.encode(), _bcrypt.gensalt(12)).decode()
+
+pwd_ctx = _PwdCtx()
 
 def gid(): return str(uuid.uuid4())
 

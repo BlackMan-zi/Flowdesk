@@ -7,6 +7,17 @@ import { getPdfTemplateBlobPage } from '../../api/forms'
 import { PenTool, Plus, Trash2 } from 'lucide-react'
 import { evaluateFormula, evaluateRowFormula, resolveCalculatedFields, formatNumberDisplay } from '../../utils/formulaEngine'
 
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)')
+    const handler = e => setIsMobile(e.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
+  return isMobile
+}
+
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
   import.meta.url
@@ -322,6 +333,218 @@ function PageFillView({ pdfDoc, pdfPageNum, formPage, fields, values, onValueCha
   )
 }
 
+// ── Mobile field input ────────────────────────────────────────────────────────
+
+function MobileFieldInput({ field, value, onChange, allValues, fieldsByName, onSignatureClick }) {
+  // 16px base font prevents iOS auto-zoom on focus
+  const baseCls = 'w-full rounded-lg border border-border bg-background px-4 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-ring'
+
+  if (field.auto_filled || field.read_only) {
+    return (
+      <div className="w-full rounded-lg border border-border bg-muted px-4 py-3 text-base text-muted-foreground min-h-[48px] flex items-center">
+        {value || <span className="italic opacity-50">Auto-filled</span>}
+      </div>
+    )
+  }
+
+  if (field.field_type === 'calculated') {
+    const computed = evaluateFormula(field.calculation_formula, allValues, fieldsByName)
+    return (
+      <div className="w-full rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-base text-violet-800 font-mono min-h-[48px] flex items-center">
+        {computed ? formatNumberDisplay(computed) : <span className="italic opacity-50">Auto-calculated</span>}
+      </div>
+    )
+  }
+
+  if (field.field_type === 'signature') {
+    return (
+      <button
+        type="button"
+        onClick={() => onSignatureClick(field.id)}
+        className="w-full rounded-lg border-2 border-dashed border-muted-foreground/40 bg-background hover:border-ring transition-colors min-h-[72px] flex items-center justify-center gap-2 text-base text-muted-foreground"
+      >
+        {value
+          ? <img src={value} alt="Signature" className="h-14 object-contain" />
+          : <><PenTool size={18} /> Tap to sign</>
+        }
+      </button>
+    )
+  }
+
+  if (field.field_type === 'textarea') {
+    return (
+      <textarea
+        value={value || ''}
+        onChange={e => onChange(e.target.value)}
+        placeholder={field.placeholder || ''}
+        required={field.required}
+        rows={4}
+        className={`${baseCls} py-3 resize-none`}
+      />
+    )
+  }
+
+  if (field.field_type === 'dropdown') {
+    return (
+      <select
+        value={value || ''}
+        onChange={e => onChange(e.target.value)}
+        required={field.required}
+        className={`${baseCls} h-12`}
+      >
+        <option value="">Select…</option>
+        {(field.options || []).map(o => <option key={o} value={o}>{o}</option>)}
+      </select>
+    )
+  }
+
+  if (field.field_type === 'radio') {
+    return (
+      <div className="space-y-2 pt-1">
+        {(field.options || []).map(o => (
+          <label key={o} className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="radio"
+              name={field.id}
+              value={o}
+              checked={value === o}
+              onChange={() => onChange(o)}
+              className="w-5 h-5 accent-primary"
+            />
+            <span className="text-base text-foreground">{o}</span>
+          </label>
+        ))}
+      </div>
+    )
+  }
+
+  if (field.field_type === 'checkbox') {
+    const selected = (value || '').split(',').filter(Boolean)
+    return (
+      <div className="space-y-2 pt-1">
+        {(field.options || []).map(o => (
+          <label key={o} className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={selected.includes(o)}
+              onChange={e => {
+                const next = e.target.checked ? [...selected, o] : selected.filter(x => x !== o)
+                onChange(next.join(','))
+              }}
+              className="w-5 h-5 rounded accent-primary"
+            />
+            <span className="text-base text-foreground">{o}</span>
+          </label>
+        ))}
+      </div>
+    )
+  }
+
+  if (field.field_type === 'currency') {
+    return (
+      <div className="flex items-center rounded-lg border border-border overflow-hidden h-12">
+        <span className="px-3 text-sm font-medium text-muted-foreground bg-muted border-r border-border h-full flex items-center">RWF</span>
+        <input
+          type="number"
+          step="0.01"
+          value={value || ''}
+          onChange={e => onChange(e.target.value)}
+          placeholder="0.00"
+          required={field.required}
+          className="flex-1 h-full px-4 text-base bg-background text-foreground outline-none"
+        />
+      </div>
+    )
+  }
+
+  if (field.field_type === 'table') {
+    return <TableFieldInput field={field} value={value} onChange={onChange} />
+  }
+
+  const inputType = field.field_type === 'number' ? 'number'
+                  : field.field_type === 'date'   ? 'date'
+                  : 'text'
+  return (
+    <input
+      type={inputType}
+      value={value || ''}
+      onChange={e => onChange(e.target.value)}
+      placeholder={field.placeholder || ''}
+      required={field.required}
+      className={`${baseCls} h-12`}
+    />
+  )
+}
+
+// ── Mobile card layout ────────────────────────────────────────────────────────
+
+function MobileFormFill({ formDef, values, onChange, currentUser, onSigFieldId }) {
+  const allFields = useMemo(
+    () => [...(formDef?.fields || [])].sort((a, b) => (a.display_order || 0) - (b.display_order || 0)),
+    [formDef?.fields]
+  )
+
+  const fieldsByName = useMemo(() => {
+    const map = {}
+    allFields.forEach(f => { map[f.field_name] = f })
+    return map
+  }, [allFields])
+
+  const resolvedValues = useMemo(
+    () => resolveCalculatedFields(formDef?.fields, values, fieldsByName),
+    [formDef?.fields, values, fieldsByName]
+  )
+
+  // Group fields by page for section headers
+  const pages = useMemo(() => {
+    const map = {}
+    allFields.forEach(f => {
+      const p = f.page_number || 1
+      if (!map[p]) map[p] = []
+      map[p].push(f)
+    })
+    return map
+  }, [allFields])
+
+  const pageNums = Object.keys(pages).map(Number).sort((a, b) => a - b)
+  const multiPage = pageNums.length > 1
+
+  return (
+    <div className="space-y-4">
+      {pageNums.map(pageNum => (
+        <div key={pageNum}>
+          {multiPage && (
+            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3 px-1">
+              Page {pageNum}
+            </p>
+          )}
+          <div className="space-y-4">
+            {pages[pageNum].map(field => (
+              <div key={field.id} className="rounded-xl border border-border bg-card p-4 shadow-sm">
+                <label className="block text-sm font-semibold text-foreground mb-2">
+                  {field.field_label}
+                  {field.required && <span className="text-destructive ml-1">*</span>}
+                </label>
+                {field.placeholder && !['dropdown','radio','checkbox','signature','calculated'].includes(field.field_type) && (
+                  <p className="text-xs text-muted-foreground mb-2">{field.placeholder}</p>
+                )}
+                <MobileFieldInput
+                  field={field}
+                  value={resolvedValues[field.id]}
+                  onChange={val => onChange(field.id, val)}
+                  allValues={resolvedValues}
+                  fieldsByName={fieldsByName}
+                  onSignatureClick={onSigFieldId}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ── Main PDFFormFill component ────────────────────────────────────────────────
 
 /**
@@ -336,6 +559,7 @@ function PageFillView({ pdfDoc, pdfPageNum, formPage, fields, values, onValueCha
  *   currentUser - for auto-fill fields
  */
 export default function PDFFormFill({ formDef, values, onChange, currentUser }) {
+  const isMobile = useIsMobile()
   // pageTemplates maps form-page-number → { doc, pageCount }
   const [pageTemplates, setPageTemplates] = useState({})
   const [sigFieldId, setSigFieldId] = useState(null)
@@ -461,6 +685,33 @@ export default function PDFFormFill({ formDef, values, onChange, currentUser }) 
     )
   }
 
+  // ── Mobile: clean vertical card layout, no PDF ─────────────────────────────
+  if (isMobile) {
+    return (
+      <>
+        <MobileFormFill
+          formDef={formDef}
+          values={values}
+          onChange={onChange}
+          currentUser={currentUser}
+          onSigFieldId={setSigFieldId}
+        />
+        <Modal
+          open={!!sigFieldId}
+          onClose={() => setSigFieldId(null)}
+          title="Add Your Signature"
+          size="md"
+        >
+          <SignatureCanvas
+            onCapture={(dataUrl) => { onChange(sigFieldId, dataUrl); setSigFieldId(null) }}
+            onCancel={() => setSigFieldId(null)}
+          />
+        </Modal>
+      </>
+    )
+  }
+
+  // ── Desktop: PDF overlay experience ───────────────────────────────────────
   return (
     <>
       <div className="space-y-3">

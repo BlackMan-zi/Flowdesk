@@ -1,45 +1,53 @@
 services:
 
-  # ── MySQL Database ──────────────────────────────────────────
+  # ── PostgreSQL Database ─────────────────────────────────────────
   db:
-    image: mysql:8.0
+    image: postgres:16-alpine
     container_name: flowdesk_db
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: FlowDesk_Root@2024
-      MYSQL_DATABASE: flowdesk
-      MYSQL_USER: flowdesk_app
-      MYSQL_PASSWORD: FlowDesk_App@2024
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
     ports:
-      - "3308:3306"          # host:container  (use 3308 to avoid conflicts with local MySQL)
+      - "${DB_PORT:-5432}:5432"
     volumes:
-      - mysql_data:/var/lib/mysql
-      - ./database/init:/docker-entrypoint-initdb.d   # runs *.sql on first start
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uflowdesk_app", "-pFlowDesk_App@2024"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
       interval: 10s
       timeout: 5s
       retries: 10
 
-  # ── FastAPI Backend ─────────────────────────────────────────
+  # ── FastAPI Backend ─────────────────────────────────────────────
   api:
-    build: .
+    build: ./backend
     container_name: flowdesk_api
     restart: unless-stopped
     ports:
       - "9000:8000"
     env_file:
       - .env
-    environment:
-      # Override DATABASE_URL to point at the Docker service name
-      DATABASE_URL: mysql+pymysql://flowdesk_app:FlowDesk_App@2024@db:3306/flowdesk
-    volumes:
-      - .:/app
-      - media_data:/app/media
     depends_on:
       db:
         condition: service_healthy
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./backend:/app
+      - media_data:/app/../media
+
+  # ── React Frontend (dev) ────────────────────────────────────────
+  frontend:
+    image: node:20-alpine
+    container_name: flowdesk_frontend
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+    ports:
+      - "3000:3000"
+    command: sh -c "npm install && npm run dev -- --host"
 
 volumes:
-  mysql_data:
+  postgres_data:
   media_data:

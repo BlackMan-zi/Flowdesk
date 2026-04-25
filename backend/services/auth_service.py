@@ -1,21 +1,51 @@
 import secrets
 import string
+import re
+import bcrypt
 import pyotp
 import qrcode
 import io
 import base64
-from passlib.context import CryptContext
 from config import settings
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt(12)).decode()
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    return bcrypt.checkpw(plain_password.encode(), hashed_password.encode())
+
+
+def validate_password_strength(password: str) -> tuple[bool, str]:
+    """
+    Validate password strength.
+    
+    Returns: (is_valid, error_message)
+    
+    Requirements:
+    - At least 12 characters
+    - At least one uppercase letter
+    - At least one lowercase letter
+    - At least one digit
+    - At least one special character (!@#$%^&*)
+    """
+    if len(password) < 12:
+        return False, "Password must be at least 12 characters long"
+    
+    if not re.search(r"[A-Z]", password):
+        return False, "Password must contain at least one uppercase letter"
+    
+    if not re.search(r"[a-z]", password):
+        return False, "Password must contain at least one lowercase letter"
+    
+    if not re.search(r"\d", password):
+        return False, "Password must contain at least one digit"
+    
+    if not re.search(r"[!@#$%^&*()_+\-=\[\]{};:,.<>?]", password):
+        return False, "Password must contain at least one special character (!@#$%^&*)"
+    
+    return True, ""
 
 
 def generate_temp_password(length: int = 12) -> str:

@@ -1,12 +1,10 @@
 -- ============================================================
--- FlowDesk Database Init: Create dedicated application user
--- Runs automatically on first Docker MySQL start.
+-- FlowDesk Database Init: PostgreSQL setup
+-- Runs automatically on first container start (empty volume).
+-- The POSTGRES_USER / POSTGRES_DB / POSTGRES_PASSWORD env vars
+-- already create the user and database, so this script only
+-- adds any extra extensions needed by the application.
 -- ============================================================
 
--- Create app user (accessible from any host inside Docker network)
-CREATE USER IF NOT EXISTS 'flowdesk_app'@'%' IDENTIFIED BY 'FlowDesk_App@2024';
-
--- Grant full privileges on the flowdesk database only
-GRANT ALL PRIVILEGES ON flowdesk.* TO 'flowdesk_app'@'%';
-
-FLUSH PRIVILEGES;
+-- Enable pgcrypto for UUID generation (optional, used by gen_random_uuid())
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
