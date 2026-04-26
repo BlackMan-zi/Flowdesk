@@ -48,16 +48,17 @@ function ExecutiveLayout() {
 
 export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const { isApprover, isExecutive } = useAuth()
+  const { isApprover, isExecutive, isHod } = useAuth()
 
   const { data: pending = [] } = useQuery({
     queryKey: ['approvals', 'pending'],
     queryFn: () => getPendingApprovals().then(r => r.data),
-    enabled: isApprover || isExecutive,
+    enabled: isApprover || isExecutive || isHod,
     refetchInterval: 60_000,
   })
 
-  if (isExecutive) return <ExecutiveLayout />
+  // HOD users (even if also executive) need the full sidebar layout
+  if (isExecutive && !isHod) return <ExecutiveLayout />
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
