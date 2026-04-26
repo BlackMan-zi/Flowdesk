@@ -124,7 +124,7 @@ class FormDefinitionResponse(BaseModel):
     @field_validator('fields', mode='before')
     @classmethod
     def only_active_fields(cls, v):
-        return [f for f in (v or []) if getattr(f, 'is_active', True)]
+        return [f for f in (v or []) if getattr(f, 'is_active', None) is not False]
 
     class Config:
         from_attributes = True

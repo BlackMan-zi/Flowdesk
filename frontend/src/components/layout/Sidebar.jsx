@@ -125,11 +125,12 @@ function ObserverNav() {
 // ── Main Sidebar ───────────────────────────────────────────────────────────────
 
 export default function Sidebar({ open, onClose, pendingCount = 0 }) {
-  const { isAdmin, isReportManager, isExecutive, isObserver } = useAuth()
+  const { isAdmin, isReportManager, isExecutive, isObserver, isHod } = useAuth()
 
   const renderNav = () => {
     if (isAdmin)         return <AdminNav />
     if (isReportManager) return <ReportManagerNav pendingCount={pendingCount} />
+    if (isHod)           return <StandardUserNav pendingCount={pendingCount} />
     if (isExecutive)     return <StandardUserNav pendingCount={pendingCount} />
     if (isObserver)      return <ObserverNav />
     return <StandardUserNav pendingCount={pendingCount} />

@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import toast from 'react-hot-toast'
+import { toast } from 'sonner'
 import { getFormInstance } from '../api/forms'
 import { adminCancelForm, adminSendBackForm, reassignStep } from '../api/approvals'
 import { listUsers } from '../api/users'

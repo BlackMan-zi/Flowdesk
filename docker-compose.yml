@@ -1,18 +1,23 @@
+# FlowDesk — Production Docker Compose
+# Deployed at /opt/flowdesk on the BSC server (10.20.26.47)
+# Accessible at http://10.20.26.47/flowdesk/
+
 services:
 
-  # ── PostgreSQL Database ─────────────────────────────────────────
+  # ── PostgreSQL Database ─────────────────────────────────────
   db:
     image: postgres:16-alpine
-    container_name: flowdesk_db
+    container_name: flowdesk-db
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
-    ports:
-      - "${DB_PORT:-5432}:5432"
+    # No ports exposed — only reachable by other containers on bsc_network
+    expose:
+      - "5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - flowdesk_pgdata:/var/lib/postgresql/data
       - ./database/init:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
@@ -20,34 +25,41 @@ services:
       timeout: 5s
       retries: 10
 
-  # ── FastAPI Backend ─────────────────────────────────────────────
+  # ── FastAPI Backend ─────────────────────────────────────────
   api:
     build: ./backend
-    container_name: flowdesk_api
+    container_name: flowdesk-api
     restart: unless-stopped
-    ports:
-      - "9000:8000"
+    expose:
+      - "8000"
     env_file:
       - .env
     depends_on:
       db:
         condition: service_healthy
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     volumes:
-      - ./backend:/app
-      - media_data:/app/../media
+      - flowdesk_media:/app/media
 
-  # ── React Frontend (dev) ────────────────────────────────────────
-  frontend:
-    image: node:20-alpine
-    container_name: flowdesk_frontend
-    working_dir: /app
-    volumes:
-      - ./frontend:/app
-    ports:
-      - "3000:3000"
-    command: sh -c "npm install && npm run dev -- --host"
+  # ── Nginx + Frontend ────────────────────────────────────────
+  # Multi-stage build: compiles React frontend, serves via nginx
+  # Also proxies /api/ and /media/ to the backend
+  nginx:
+    build:
+      context: .
+      dockerfile: Dockerfile.nginx
+    container_name: flowdesk-nginx
+    restart: unless-stopped
+    expose:
+      - "80"
+    depends_on:
+      - api
 
 volumes:
-  postgres_data:
-  media_data:
+  flowdesk_pgdata:
+  flowdesk_media:
+
+# All containers join bsc_network so the outer proxy can reach them
+networks:
+  default:
+    name: bsc_network
+    external: true

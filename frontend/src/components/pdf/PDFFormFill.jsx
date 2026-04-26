@@ -562,6 +562,7 @@ export default function PDFFormFill({ formDef, values, onChange, currentUser }) 
   const isMobile = useIsMobile()
   // pageTemplates maps form-page-number → { doc, pageCount }
   const [pageTemplates, setPageTemplates] = useState({})
+  const [pdfLoadAttempted, setPdfLoadAttempted] = useState(false)
   const [sigFieldId, setSigFieldId] = useState(null)
 
   // Load all per-page templates on mount
@@ -583,6 +584,8 @@ export default function PDFFormFill({ formDef, values, onChange, currentUser }) 
         setPageTemplates(prev => ({ ...prev, [pageNum]: { doc, pageCount: doc.numPages } }))
       } catch {
         // No template for this page — blank canvas will be used
+      } finally {
+        if (pageNum === 1) setPdfLoadAttempted(true)
       }
     }
 
@@ -678,8 +681,8 @@ export default function PDFFormFill({ formDef, values, onChange, currentUser }) 
     : 0
   const totalPages = Math.max(mainPageCount, maxFieldPage, 1)
 
-  // Loading: show spinner until we've attempted page 1 (either got it or confirmed missing)
-  const isLoading = Object.keys(pageTemplates).length === 0 && formDef?.pdf_template_path
+  // Loading: show spinner until page-1 load attempt completes (success or 404)
+  const isLoading = !pdfLoadAttempted && formDef?.pdf_template_path
 
   if (isLoading) {
     return (

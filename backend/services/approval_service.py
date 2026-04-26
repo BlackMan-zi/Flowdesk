@@ -135,6 +135,13 @@ def initialize_approval_steps(
             instances.append(ai)
             continue
 
+        if not approver_id:
+            raise ValueError(
+                f"Cannot submit: no approver could be resolved for step '{step.step_label}'. "
+                f"Ensure the submitter has a Manager, SN Manager, and HOD assigned in their user profile "
+                f"(Admin → Users → edit user)."
+            )
+
         # Check delegation
         delegated_from = None
         if approver_id and step.delegation_allowed:
@@ -143,6 +150,8 @@ def initialize_approval_steps(
                 delegated_from = approver_id
                 approver_id = delegate
 
+        # First non-skipped step is active; the rest wait
+        has_active = any(i for i in instances if i.status == ApprovalStepStatus.active)
         ai = ApprovalInstance(
             organization_id=form_instance.organization_id,
             form_version_id=form_version.id,
@@ -151,7 +160,7 @@ def initialize_approval_steps(
             step_label=step.step_label,
             approver_user_id=approver_id,
             delegated_from_user_id=delegated_from,
-            status=ApprovalStepStatus.waiting if idx > 0 else ApprovalStepStatus.active
+            status=ApprovalStepStatus.waiting if has_active else ApprovalStepStatus.active
         )
         db.add(ai)
         instances.append(ai)

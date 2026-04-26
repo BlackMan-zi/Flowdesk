@@ -2,7 +2,12 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { fileURLToPath, URL } from 'node:url'
 
+// VITE_BASE_PATH is set during Docker build to '/flowdesk/'
+// In local dev it defaults to '/' so nothing changes
+const basePath = process.env.VITE_BASE_PATH || '/'
+
 export default defineConfig({
+  base: basePath,
   plugins: [react()],
   resolve: {
     alias: {

@@ -21,6 +21,9 @@ import AdminDelegations from './pages/admin/Delegations'
 import FormBuilder from './pages/admin/FormBuilder'
 import Logs from './pages/Logs'
 
+// Auto-detect subpath: /flowdesk on the server, empty in local dev
+const BASENAME = window.location.pathname.startsWith('/flowdesk') ? '/flowdesk' : ''
+
 function RequireAuth({ children }) {
   const { user } = useAuth()
   if (!user) return <Navigate to="/login" replace />
@@ -79,7 +82,7 @@ function AppRoutes() {
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
+      <BrowserRouter basename={BASENAME}>
         <AppRoutes />
       </BrowserRouter>
     </AuthProvider>

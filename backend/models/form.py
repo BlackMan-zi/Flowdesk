@@ -96,7 +96,6 @@ class FormField(Base):
     default_value = Column(Text, nullable=True)
     read_only = Column(Boolean, default=False)
     validation_rules = Column(JSON, nullable=True)   # {min, max, pattern, min_length, max_length}
-    calculation_formula = Column(Text, nullable=True) # e.g. "qty * unit_price"
     table_columns = Column(JSON, nullable=True)      # [{key, label, type, formula}]
     # PDF layout coordinates (percentages 0-100, relative to page size)
     page_number = Column(Integer, default=1, nullable=True)

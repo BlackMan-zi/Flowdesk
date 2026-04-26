@@ -39,6 +39,9 @@ export function AuthProvider({ children }) {
   // Observer: read-only documents view
   const isObserver = roles.includes('Observer') && !isAdmin && !isReportManager && !isExecutive
 
+  // HOD: Head of Department — needs both approver queue and own form submissions
+  const isHod = roles.includes('HOD') && !isAdmin && !isReportManager
+
   // Approver: anyone who signs forms
   const isApprover = roles.some(r =>
     ['Admin', 'Report Manager', 'Manager', 'SN Manager', 'HOD',
@@ -49,7 +52,7 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={{
       user, login, logout, updateUser,
-      isAdmin, isReportManager, isApprover, isExecutive, isObserver
+      isAdmin, isReportManager, isApprover, isExecutive, isObserver, isHod
     }}>
       {children}
     </AuthContext.Provider>
