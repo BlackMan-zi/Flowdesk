@@ -6,9 +6,9 @@ WORKDIR /build
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 
-# Copy source and build with /flowdesk/ base path
+# Copy source and build (base path is / for vhost routing at flowdesk.bsc.local)
 COPY frontend/ ./
-ENV VITE_BASE_PATH=/flowdesk/
+ENV VITE_BASE_PATH=/
 RUN npm run build
 
 # ── Stage 2: Serve with nginx ─────────────────────────────────

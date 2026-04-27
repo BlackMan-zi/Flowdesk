@@ -1,6 +1,6 @@
 # FlowDesk — Production Docker Compose
 # Deployed at /opt/flowdesk on the BSC server (10.20.26.47)
-# Accessible at http://10.20.26.47/flowdesk/
+# Accessible at http://flowdesk.bsc.local  (vhost routing via outer proxy)
 
 services:
 
