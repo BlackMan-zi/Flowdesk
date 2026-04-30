@@ -281,7 +281,7 @@ def main():
     print(f"  Organization: {org.name}")
     print(f"{'='*60}\n")
 
-    DEFAULT_PASSWORD = "FlowDesk@2024"
+    DEFAULT_PASSWORD = os.environ.get("SEED_PASSWORD", "FlowDesk@2024")
     hashed_pw = pwd_ctx.hash(DEFAULT_PASSWORD)
 
     # ── 1. Ensure roles exist ─────────────────────────────────────────────────

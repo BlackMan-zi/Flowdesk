@@ -1,10 +1,9 @@
 """
 Seed script — creates demo org + BSC Rwanda org with all users and roles.
 Run inside the container: python seed_demo.py
-Password for all accounts: FlowDesk@2024
+Password defaults to FlowDesk@2024 or override with SEED_PASSWORD env var.
 """
-import uuid
-import bcrypt
+import os, uuid, bcrypt
 from datetime import datetime
 from database import SessionLocal, engine, Base
 import models.approval, models.audit, models.delegation, models.document, models.form
@@ -12,7 +11,8 @@ from models.organization import Organization, Department
 from models.user import User, Role, UserRole, RoleCategory, UserStatus
 
 Base.metadata.create_all(bind=engine)
-HASH = bcrypt.hashpw("FlowDesk@2024".encode(), bcrypt.gensalt(12)).decode()
+_seed_pw = os.environ.get("SEED_PASSWORD", "FlowDesk@2024")
+HASH = bcrypt.hashpw(_seed_pw.encode(), bcrypt.gensalt(12)).decode()
 NOW = datetime.utcnow()
 
 
