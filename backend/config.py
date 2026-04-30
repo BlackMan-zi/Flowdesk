@@ -6,7 +6,7 @@ import os
 
 class Settings(BaseSettings):
     # Database
-    DATABASE_URL: str = "postgresql+psycopg2://flowdesk_user:password@localhost:5432/flowdesk"
+    DATABASE_URL: str = "postgresql+psycopg2://flowdesk_user:password@flowdesk-db:5432/flowdesk"
 
     # JWT
     SECRET_KEY: str  # Required – must be set in .env
