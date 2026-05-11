@@ -1251,6 +1251,15 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
     setUploading(true)
     try {
       await uploadPdfTemplatePage(formDef.id, currentPage, file)
+      toast.success(`PDF template for page ${currentPage} uploaded`)
+    } catch (err) {
+      const msg = err?.response?.data?.detail || err?.message || 'Upload failed'
+      toast.error(`PDF upload failed: ${msg}`)
+      setUploading(false)
+      return
+    }
+    // Upload succeeded — now try to load PDF.js preview (non-fatal if it fails)
+    try {
       const url = URL.createObjectURL(file)
       const doc = await pdfjsLib.getDocument(url).promise
       const pc = doc.numPages
@@ -1258,10 +1267,18 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
       if (currentPage === 1) {
         setNumPages(prev => Math.max(prev, pc))
       }
-      toast.success(`PDF template for page ${currentPage} uploaded`)
-    } catch (err) {
-      const msg = err?.response?.data?.detail || err?.message || 'PDF upload failed'
-      toast.error(`PDF upload failed: ${msg}`)
+    } catch {
+      // Preview failed but file is saved — reload from server
+      try {
+        const blob = await import('../../api/forms').then(m => m.getPdfTemplateBlobPage(formDef.id, currentPage)).then(r => r.data)
+        const url = URL.createObjectURL(blob)
+        const doc = await pdfjsLib.getDocument(url).promise
+        const pc = doc.numPages
+        setPageTemplates(prev => ({ ...prev, [currentPage]: { doc, pageCount: pc } }))
+        if (currentPage === 1) setNumPages(prev => Math.max(prev, pc))
+      } catch {
+        // Preview unavailable — canvas stays blank but file is saved
+      }
     }
     setUploading(false)
   }
