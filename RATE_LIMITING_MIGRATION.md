@@ -7,6 +7,7 @@ This guide shows how to add rate limiting decorators to your routers.
 ## Quick Start
 
 ### Before:
+
 ```python
 @router.post("/login", response_model=TokenResponse)
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
@@ -14,6 +15,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 ```
 
 ### After:
+
 ```python
 from fastapi import Request
 from main import limiter
@@ -41,6 +43,7 @@ def login(
 ## Recommended Rate Limits by Endpoint Type
 
 ### Auth Endpoints (Strict - prevent brute force)
+
 ```python
 @limiter.limit("5/minute")  # 5 requests per minute per IP
 def login(...):
@@ -56,6 +59,7 @@ def forgot_password(...):
 ```
 
 ### Read Endpoints (Moderate)
+
 ```python
 @limiter.limit("100/minute")  # 100 requests per minute per IP
 def list_documents(...):
@@ -67,6 +71,7 @@ def get_pending_approvals(...):
 ```
 
 ### Write Endpoints (Moderate)
+
 ```python
 @limiter.limit("50/minute")  # 50 requests per minute per IP
 def create_approval(...):
@@ -78,6 +83,7 @@ def upload_document(...):
 ```
 
 ### Admin/Sensitive Endpoints (Very Strict)
+
 ```python
 @limiter.limit("10/minute")  # 10 requests per minute per IP
 def create_user(...):
@@ -89,6 +95,7 @@ def delete_organization(...):
 ```
 
 ### Health/System Endpoints (Relaxed)
+
 ```python
 @limiter.limit("1000/minute")  # High limit for monitoring
 def health(...):
@@ -114,6 +121,7 @@ from main import limiter  # ← Add this import
 ### Step 2: Add Decorator and Request Parameter
 
 **Auth Router** (`routers/auth.py`):
+
 ```python
 @router.post("/login", response_model=TokenResponse)
 @limiter.limit("5/minute")
@@ -145,6 +153,7 @@ async def force_reset_password(
 ```
 
 **Approvals Router** (`routers/approvals.py`):
+
 ```python
 @router.get("/pending")
 @limiter.limit("100/minute")
@@ -168,6 +177,7 @@ def approve(
 ```
 
 **Documents Router** (`routers/documents.py`):
+
 ```python
 @router.get("/{form_instance_id}/download")
 @limiter.limit("100/minute")
@@ -194,9 +204,10 @@ def list_documents(
 ## Testing Rate Limits
 
 ### Test with curl:
+
 ```bash
 # Try to hit endpoint 6 times in quick succession
-for i in {1..6}; do 
+for i in {1..6}; do
     curl -i http://localhost:8000/health
     echo "Request $i"
 done
@@ -211,15 +222,17 @@ done
 ```
 
 ### Response when rate-limited:
+
 ```json
 {
-    "error": "Rate limit exceeded",
-    "detail": "1000 per 1 minute",
-    "retry_after": "60"
+  "error": "Rate limit exceeded",
+  "detail": "1000 per 1 minute",
+  "retry_after": "60"
 }
 ```
 
 ### Test with Python:
+
 ```python
 import requests
 import time
@@ -296,6 +309,7 @@ def list_forms(
 ## Monitoring Rate Limits
 
 ### Log rate limit hits:
+
 ```python
 # In main.py
 
@@ -322,6 +336,7 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
 ```
 
 ### Alert on high rate limit hits:
+
 ```python
 # In monitoring/alerting system
 if requests_with_status_429 > 100:
@@ -333,6 +348,7 @@ if requests_with_status_429 > 100:
 ## Common Mistakes
 
 ### ❌ Wrong: Forgetting Request parameter
+
 ```python
 @limiter.limit("100/minute")
 def list_documents(
@@ -343,6 +359,7 @@ def list_documents(
 ```
 
 ### ✅ Correct:
+
 ```python
 @limiter.limit("100/minute")
 def list_documents(
@@ -354,21 +371,25 @@ def list_documents(
 ```
 
 ### ❌ Wrong: Import path
+
 ```python
 from slowapi import limiter  # ← Won't work
 ```
 
 ### ✅ Correct:
+
 ```python
 from main import limiter  # ← Import from main.py
 ```
 
 ### ❌ Wrong: Forgetting to import Request
+
 ```python
 from fastapi import APIRouter, Depends
 ```
 
 ### ✅ Correct:
+
 ```python
 from fastapi import APIRouter, Depends, Request  # ← Add Request
 ```
@@ -378,18 +399,22 @@ from fastapi import APIRouter, Depends, Request  # ← Add Request
 ## Rollout Strategy
 
 ### Phase 1: Auth Endpoints (Critical)
+
 - Apply strict rate limits to login, MFA, password reset
 - Deploy and monitor for false positives
 
 ### Phase 2: Write Endpoints (Important)
+
 - Apply moderate rate limits to create/update/delete
 - Deploy and monitor
 
 ### Phase 3: Read Endpoints (Nice to have)
+
 - Apply moderate rate limits to list/get
 - Deploy and monitor
 
 ### Phase 4: Fine-tuning
+
 - Adjust limits based on real traffic patterns
 - Add role-based limits if needed
 

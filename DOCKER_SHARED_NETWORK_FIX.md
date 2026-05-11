@@ -1,4 +1,4 @@
-# Fix: Docker Shared Network Hostname Collisions
++# Fix: Docker Shared Network Hostname Collisions
 
 When multiple Docker Compose stacks share a single external network (e.g. `bsc_network`),
 generic service aliases like `db`, `backend`, or `api` become ambiguous — requests resolve

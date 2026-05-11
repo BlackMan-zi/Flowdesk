@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -7,8 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../co
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
 import { useAuth } from '../context/AuthContext'
-import PDFFormFill from '../components/pdf/PDFFormFill'
-import { ChevronLeft, ChevronRight, FileText, Check, Save, Send, AlertCircle } from 'lucide-react'
+import { ChevronLeft, ChevronRight, FileText, Check, Save, Send, AlertCircle, PenLine } from 'lucide-react'
 import { evaluateFormula } from '../utils/formulaEngine'
 import { cn } from '@/lib/utils'
 
@@ -152,6 +151,18 @@ function FieldRenderer({ field, value, onChange, user }) {
           </div>
         </div>
       )
+    case 'signature':
+      return (
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-foreground">
+            {field.field_label}{field.required && <span className="text-destructive ml-0.5">*</span>}
+          </label>
+          <div className="flex items-center gap-3 h-10 px-3 rounded-md border border-dashed border-input bg-muted/50 text-sm text-muted-foreground">
+            <PenLine size={14} className="shrink-0" />
+            Signature collected during approval
+          </div>
+        </div>
+      )
     default:
       return <Input {...common} type="text" onChange={e => onChange(e.target.value)} />
   }
@@ -211,8 +222,7 @@ export default function SubmitForm() {
 
   const buildFieldValues = () => {
     if (!formDef?.fields) return []
-    // fieldValues already has auto-filled values injected by PDFFormFill on mount,
-    // so we just use them directly. Calculated fields are re-evaluated here for submission.
+    // Calculated fields are re-evaluated at submission time; all others use state directly.
     return formDef.fields
       .filter(f => f.is_active !== false)
       .map(f => {
@@ -223,6 +233,43 @@ export default function SubmitForm() {
   }
 
   const setField = (id, val) => setFieldValues(p => ({ ...p, [id]: val }))
+
+  // Auto-fill fields from user profile when form definition loads
+  useEffect(() => {
+    if (!formDef?.fields || !user) return
+    const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+    const sourceValues = {
+      'current_user.name':                user.name,
+      'current_user.email':               user.email,
+      'current_user.department':          user.department_name,
+      'current_user.department.name':     user.department_name,
+      'current_user.unit':                user.unit_name,
+      'current_user.unit.name':           user.unit_name,
+      'current_user.top_department.name': user.department_name,
+      'current_user.date':                today,
+      'form.submitted_at':                today,
+      'approver.initiator.name':          user.name,
+      'approver.initiator.date':          today,
+      'approver.line_manager.name':       user.manager_name,
+      'approver.sn_manager.name':         user.sn_manager_name,
+      'approver.hod.name':                user.hod_name,
+    }
+    const steps = formDef?.approval_template?.steps || []
+    steps.forEach((step, i) => {
+      const n = i + 1
+      if (step.role_type === 'Hierarchy') {
+        const name = step.hierarchy_level === 'manager'    ? user.manager_name
+                   : step.hierarchy_level === 'sn_manager' ? user.sn_manager_name
+                   : step.hierarchy_level === 'hod'        ? user.hod_name
+                   : null
+        if (name) sourceValues[`approver.step_${n}.name`] = name
+      }
+    })
+    formDef.fields.filter(f => f.auto_filled && f.auto_fill_source).forEach(f => {
+      const val = sourceValues[f.auto_fill_source]
+      if (val != null && val !== '') setField(f.id, val)
+    })
+  }, [formDef?.id, user])
 
   const draftMutation = useMutation({
     mutationFn: async () => {
@@ -350,29 +397,6 @@ export default function SubmitForm() {
               <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
               <p className="text-sm text-muted-foreground">Loading form…</p>
             </div>
-          ) : formDef?.pdf_template_path ? (
-            <>
-              <PDFFormFill
-                formDef={formDef}
-                values={fieldValues}
-                onChange={(id, val) => setField(id, val)}
-                currentUser={user}
-              />
-              {error && (
-                <div className="flex items-start gap-2 bg-destructive/10 border border-destructive/30 rounded-xl px-4 py-3 text-sm text-destructive">
-                  <AlertCircle size={15} className="flex-shrink-0 mt-0.5" />
-                  {error}
-                </div>
-              )}
-              <ActionBar
-                draftSaved={draftSaved}
-                onSubmit={() => submitMutation.mutate()}
-                onDraft={() => draftMutation.mutate()}
-                onCancel={() => navigate(-1)}
-                submitLoading={submitMutation.isPending}
-                draftLoading={draftMutation.isPending}
-              />
-            </>
           ) : formDef ? (
             <Card>
               <CardHeader>

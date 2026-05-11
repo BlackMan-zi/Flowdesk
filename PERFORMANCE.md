@@ -7,10 +7,11 @@ This document outlines all performance improvements made and best practices for 
 ## ✅ Performance Fixes Implemented
 
 ### 1. **Fixed N+1 Query Problem** ✓
+
 - **Issue**: `_get_user_role_names()` executed 1 + N database queries
 - **Example**: Checking roles for 10 users = 11 queries!
 - **Fix**: Using SQLAlchemy `selectinload()` to eager load relations
-- **Before**: 
+- **Before**:
   ```python
   for ur in user_roles:
       role = db.query(Role).filter(Role.id == ur.role_id).first()  # N queries
@@ -23,6 +24,7 @@ This document outlines all performance improvements made and best practices for 
 - **Impact**: 10-50x faster role checking
 
 ### 2. **Added Database Indexes** ✓
+
 - **Issue**: Table scans on frequently accessed columns
 - **Indexes Added**:
   - `ix_organization_email_domain` - Auth login lookups
@@ -43,12 +45,14 @@ This document outlines all performance improvements made and best practices for 
 - **Impact**: 10-100x faster queries
 
 ### 3. **Added GZIP Compression** ✓
+
 - **Issue**: JSON responses sent uncompressed (typical 50-100KB payloads)
 - **Fix**: GZipMiddleware with 1KB threshold
 - **Impact**: 60-80% smaller responses
 - **Example**: 100KB → 20KB
 
 ### 4. **Connection Pooling** ✓
+
 - **Issue**: Default pool settings not optimized
 - **Settings Applied**:
   ```python
@@ -68,6 +72,7 @@ This document outlines all performance improvements made and best practices for 
   ```
 
 ### 5. **Rate Limiting** ✓
+
 - **Issue**: No protection against thundering herd
 - **Fix**: slowapi rate limiting
 - **Defaults**:
@@ -77,11 +82,13 @@ This document outlines all performance improvements made and best practices for 
 - **Tunable**: Edit in `main.py` `@limiter.limit()` decorators
 
 ### 6. **Error Handling** ✓
+
 - **Issue**: Unhandled exceptions crash requests
 - **Fix**: Global exception handler + rate limit handler
 - **Impact**: Graceful degradation under load
 
 ### 7. **Response Caching Headers** (TODO)
+
 - **Status**: Ready to implement
 - **Benefit**: Browser/proxy caching reduces API hits
 - **Example**:
@@ -102,6 +109,7 @@ This document outlines all performance improvements made and best practices for 
 ### Query Optimization
 
 #### ✅ Good:
+
 ```python
 # Use eager loading for related data
 from sqlalchemy.orm import selectinload, joinedload
@@ -116,6 +124,7 @@ approvals = db.query(ApprovalInstance)\
 ```
 
 #### ❌ Bad:
+
 ```python
 # Causes N+1 queries
 approvals = db.query(ApprovalInstance).all()
@@ -127,6 +136,7 @@ for ap in approvals:
 ### Pagination
 
 #### Always paginate large result sets:
+
 ```python
 from fastapi import Query
 
@@ -148,6 +158,7 @@ def list_documents(
 ### Caching Strategy
 
 #### Redis Caching for Hot Data:
+
 ```python
 import redis
 
@@ -158,21 +169,22 @@ def get_user_roles(user_id: str) -> List[str]:
     cached = redis_client.get(f"user:{user_id}:roles")
     if cached:
         return json.loads(cached)
-    
+
     # Miss: fetch from database
     roles = db.query(UserRole)...
-    
+
     # Store in cache for 1 hour
     redis_client.setex(f"user:{user_id}:roles", 3600, json.dumps(roles))
     return roles
 ```
 
 #### Invalidate cache on changes:
+
 ```python
 def assign_role(user_id: str, role_id: str):
     db.add(UserRole(...))
     db.commit()
-    
+
     # Invalidate cache
     redis_client.delete(f"user:{user_id}:roles")
 ```
@@ -180,6 +192,7 @@ def assign_role(user_id: str, role_id: str):
 ### Async Operations
 
 #### Move slow operations to background tasks:
+
 ```python
 from fastapi import BackgroundTasks
 
@@ -193,14 +206,14 @@ def generate_document(
     instance = FormInstance(...)
     db.add(instance)
     db.commit()
-    
+
     # Don't wait for PDF generation
     background_tasks.add_task(
         generate_pdf_async,
         form_id=form_id,
         user_id=current_user.id
     )
-    
+
     return {"id": instance.id, "status": "generating"}
 ```
 
@@ -209,6 +222,7 @@ def generate_document(
 ## 📊 Load Testing
 
 ### Benchmark your endpoints:
+
 ```bash
 # Install load testing tools
 pip install locust
@@ -220,12 +234,13 @@ locust -f locustfile.py --host=http://localhost:8000
 ```
 
 ### Example Load Test:
+
 ```python
 from locust import HttpUser, task, between
 
 class FlowDeskUser(HttpUser):
     wait_time = between(1, 3)
-    
+
     def on_start(self):
         # Login
         resp = self.client.post("/auth/login", json={
@@ -233,14 +248,14 @@ class FlowDeskUser(HttpUser):
             "password": "TestPassword123!"
         })
         self.token = resp.json()["access_token"]
-    
+
     @task(3)
     def list_approvals(self):
         self.client.get(
             "/approvals/pending",
             headers={"Authorization": f"Bearer {self.token}"}
         )
-    
+
     @task(1)
     def list_documents(self):
         self.client.get(
@@ -254,6 +269,7 @@ class FlowDeskUser(HttpUser):
 ## 🔧 Monitoring & Metrics
 
 ### Key Metrics to Monitor:
+
 - **Query time**: Slow query log (log all queries > 1 second)
 - **Connection pool**: Active connections vs pool size
 - **Rate limiting**: 429 errors indicating abuse/load
@@ -262,6 +278,7 @@ class FlowDeskUser(HttpUser):
 - **CPU/Memory**: Server resource utilization
 
 ### Prometheus Metrics (TODO):
+
 ```python
 from prometheus_client import Counter, Histogram, Gauge
 
@@ -275,12 +292,14 @@ active_connections = Gauge('active_db_connections', 'Active DB connections')
 ## 🌐 Scaling Strategy
 
 ### Vertical Scaling (Single Server):
+
 1. Increase `pool_size` for database connections
 2. Add Redis for caching
 3. Enable query result caching
 4. Optimize hot query endpoints
 
 ### Horizontal Scaling (Multiple Servers):
+
 1. Use shared Redis for distributed cache
 2. Use shared database (with read replicas)
 3. Add load balancer (nginx, HAProxy)
@@ -288,6 +307,7 @@ active_connections = Gauge('active_db_connections', 'Active DB connections')
 5. Monitor cross-server rate limits
 
 ### Database Scaling:
+
 1. Add read replicas for `SELECT` queries
 2. Implement read/write split
 3. Archive old documents to separate storage

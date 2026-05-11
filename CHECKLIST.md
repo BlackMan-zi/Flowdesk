@@ -65,7 +65,7 @@
 - [x] **N+1 Query Problem**
   - File: `core/permissions.py`
   - Action: Used `selectinload()` for eager loading
-  - Verification: Check permissions.py _get_user_role_names()
+  - Verification: Check permissions.py \_get_user_role_names()
 
 - [x] **Stack Trace Leakage**
   - File: `main.py`
@@ -149,28 +149,33 @@
 ## 🚀 Pre-Deployment Verification
 
 ### Code Quality
+
 - [x] No syntax errors in modified files
 - [x] All imports resolve correctly
 - [x] Type hints are consistent
 - [x] Code follows project style
 
 ### Testing
+
 - [ ] Unit tests pass (run if available)
 - [ ] Integration tests pass
 - [ ] End-to-end tests pass
 - [x] Configuration validation passes
 
 ### Dependencies
+
 - [x] `slowapi` installed
 - [x] All requirements.txt packages installed
 - [x] No version conflicts
 
 ### Database
+
 - [ ] Migration 003_add_performance_indexes.sql executed
 - [ ] Indexes created successfully
 - [ ] Database connectivity verified
 
 ### Security
+
 - [x] SECRET_KEY required in .env
 - [x] CORS whitelist implemented
 - [x] Rate limiting configured
@@ -178,6 +183,7 @@
 - [x] Password validation added
 
 ### Performance
+
 - [x] N+1 queries fixed
 - [x] Database indexes added (pending migration)
 - [x] Response compression enabled
@@ -191,6 +197,7 @@
 ### Manual Testing Checklist
 
 1. **Configuration Loading**
+
    ```bash
    [ ] python -c "from config import settings; print('OK')"
    [ ] Verify all env vars are loaded correctly
@@ -198,6 +205,7 @@
    ```
 
 2. **Rate Limiting**
+
    ```bash
    [ ] curl http://localhost:8000/health  (succeeds)
    [ ] for i in {1..6}; do curl http://localhost:8000/; done
@@ -206,6 +214,7 @@
    ```
 
 3. **Error Handling**
+
    ```bash
    [ ] POST invalid data to endpoint
    [ ] Error response is JSON formatted
@@ -214,6 +223,7 @@
    ```
 
 4. **GZIP Compression**
+
    ```bash
    [ ] curl -H "Accept-Encoding: gzip" http://localhost:8000/docs
    [ ] Response includes Content-Encoding: gzip header
@@ -237,6 +247,7 @@
 ### Before Deploying to Production
 
 **Security**
+
 - [ ] Generate new SECRET_KEY: `openssl rand -hex 32`
 - [ ] Set `ENVIRONMENT=production`
 - [ ] Configure `ALLOWED_ORIGINS` with actual domain(s)
@@ -245,6 +256,7 @@
 - [ ] Review SECURITY.md checklist
 
 **Database**
+
 - [ ] Run migration: `003_add_performance_indexes.sql`
 - [ ] Verify indexes exist: `SHOW INDEXES FROM <table>;`
 - [ ] Test query performance
@@ -252,6 +264,7 @@
 - [ ] Set up replication if needed
 
 **Performance**
+
 - [ ] Run load test with Locust
 - [ ] Verify rate limits work under load
 - [ ] Check query performance
@@ -259,6 +272,7 @@
 - [ ] Review PERFORMANCE.md scaling strategies
 
 **Operations**
+
 - [ ] Set up monitoring (APM, error tracking)
 - [ ] Set up alerting for 429 errors
 - [ ] Configure log aggregation
@@ -266,6 +280,7 @@
 - [ ] Create runbooks for common issues
 
 **Communication**
+
 - [ ] Notify team of changes
 - [ ] Review RATE_LIMITING_MIGRATION.md with frontend team
 - [ ] Document new error responses
@@ -276,6 +291,7 @@
 ## 📈 Success Metrics (Post-Deployment)
 
 ### Security
+
 - [x] ✅ Configuration properly validated
 - [x] ✅ CORS properly restricted
 - [x] ✅ Rate limiting active
@@ -284,6 +300,7 @@
 - [ ] 0 stack traces in responses
 
 ### Performance
+
 - [ ] Query time: P50 < 50ms, P95 < 200ms, P99 < 500ms
 - [ ] Response time: P50 < 100ms, P95 < 300ms, P99 < 1s
 - [ ] Throughput: 100+ requests/second
@@ -291,6 +308,7 @@
 - [ ] Memory usage: Stable, < 80% of available
 
 ### Reliability
+
 - [ ] Uptime: > 99.9%
 - [ ] Error rate: < 0.1% 5xx errors
 - [ ] Rate limit false positives: < 0.01%
@@ -301,12 +319,14 @@
 ## 📝 Documentation for Team
 
 ### For Frontend Team
+
 - [ ] Read RATE_LIMITING_MIGRATION.md
 - [ ] Update login flow to handle 429 responses
 - [ ] Implement exponential backoff for rate-limited requests
 - [ ] Add user-friendly error messages
 
 ### For DevOps Team
+
 - [ ] Review database migration
 - [ ] Set up APM monitoring
 - [ ] Configure log aggregation
@@ -314,12 +334,14 @@
 - [ ] Plan scaling strategy (see PERFORMANCE.md)
 
 ### For Security Team
+
 - [ ] Review SECURITY.md
 - [ ] Verify pre-production checklist
 - [ ] Schedule security audit
 - [ ] Plan incident response drill
 
 ### For QA Team
+
 - [ ] Test rate limiting across endpoints
 - [ ] Test error handling
 - [ ] Test with various network conditions
@@ -331,25 +353,33 @@
 ## 🐛 Troubleshooting Guide
 
 ### Issue: "SECRET_KEY must be at least 32 characters"
+
 **Solution**: Generate new key with `openssl rand -hex 32`
 
 ### Issue: "Import slowapi could not be resolved"
+
 **Solution**: This is VS Code/Pylance issue. Package is installed. Try restarting VS Code.
 
 ### Issue: "ALLOWED_ORIGINS must be explicitly configured for production"
+
 **Solution**: Set in .env: `ALLOWED_ORIGINS=https://yourdomain.com`
 
 ### Issue: "Rate limiting not working"
-**Solution**: 
+
+**Solution**:
+
 1. Check import: `from main import limiter`
 2. Add `request: Request` parameter to endpoint
 3. Verify decorator: `@limiter.limit("X/minute")`
 
 ### Issue: "Database indexes not created"
+
 **Solution**: Run migration: `mysql -u root -p flowdesk < database/migrations/003_add_performance_indexes.sql`
 
 ### Issue: "Slow queries still happening"
+
 **Solution**:
+
 1. Check indexes exist: `SHOW INDEXES FROM table_name;`
 2. Analyze query: `EXPLAIN SELECT ...`
 3. Verify selectinload() is used
@@ -390,7 +420,7 @@ Beyond the initial 10 critical issues:
 **All 7 performance issues**: ✅ FIXED  
 **All 4 documentation guides**: ✅ CREATED  
 **All 1 database migration**: ✅ CREATED  
-**Configuration template**: ✅ CREATED  
+**Configuration template**: ✅ CREATED
 
 **Status**: **🟢 PRODUCTION READY** (pending pre-deployment checklist)
 

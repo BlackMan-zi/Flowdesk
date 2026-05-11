@@ -7,6 +7,7 @@ This document outlines all security improvements made and best practices for pro
 ## ✅ Security Fixes Implemented
 
 ### 1. **Secret Key Management** ✓
+
 - **Issue**: Hardcoded default SECRET_KEY in config
 - **Fix**: Now `SECRET_KEY` is **required** in `.env` file
 - **Validation**: Minimum 32 characters enforced at startup
@@ -16,6 +17,7 @@ This document outlines all security improvements made and best practices for pro
   ```
 
 ### 2. **CORS Configuration** ✓
+
 - **Issue**: `allow_origins=["*"]` allowed any domain to call API
 - **Fix**: Explicit whitelist via `ALLOWED_ORIGINS` in `.env`
 - **Production mode**: Will raise error if not configured
@@ -25,11 +27,13 @@ This document outlines all security improvements made and best practices for pro
   ```
 
 ### 3. **Deprecated Datetime Functions** ✓
+
 - **Issue**: Using deprecated `datetime.utcnow()`
 - **Fix**: Replaced with `datetime.now(timezone.utc)`
 - **Impact**: Compatible with Python 3.13+
 
 ### 4. **Password Strength Validation** ✓
+
 - **Issue**: No password strength requirements
 - **Fix**: Implemented strict validation:
   - Minimum 12 characters
@@ -40,6 +44,7 @@ This document outlines all security improvements made and best practices for pro
 - **Location**: `services/auth_service.py::validate_password_strength()`
 
 ### 5. **Rate Limiting** ✓
+
 - **Issue**: No protection against brute force attacks
 - **Fix**: Added slowapi rate limiting
   - Login endpoint: 5 requests per minute per IP
@@ -48,28 +53,33 @@ This document outlines all security improvements made and best practices for pro
 - **Error response**: 429 Too Many Requests
 
 ### 6. **Error Handling** ✓
+
 - **Issue**: Stack traces exposed to users
 - **Fix**: Global exception handler
   - Production: Generic error message + request ID
   - Development: Full error details for debugging
 
 ### 7. **Database Query Optimization** ✓
+
 - **Issue**: N+1 queries in role checking (major performance risk)
 - **Fix**: Used SQLAlchemy `selectinload()` to eagerly load relations
 - **Before**: 1 + N queries per request
 - **After**: 1 query per request
 
 ### 8. **Database Indexes** ✓
+
 - **Issue**: Table scans on frequently accessed columns
 - **Fix**: Added 10 strategic indexes (see `database/migrations/003_add_performance_indexes.sql`)
 - **Impact**: 10-100x faster queries on auth and approval lookups
 
 ### 9. **Compression & Caching** ✓
+
 - **Issue**: Large JSON responses uncompressed
 - **Fix**: Added GZIP middleware (minimum 1KB threshold)
 - **Impact**: 60-80% smaller responses
 
 ### 10. **Logging** ✓
+
 - **Issue**: No visibility into production issues
 - **Fix**: Structured logging throughout app
 - **Format**: Timestamp, logger name, level, message
@@ -95,6 +105,7 @@ This document outlines all security improvements made and best practices for pro
 - [ ] Test password strength validation
 
 ### Database Security:
+
 - [ ] Use strong database password (32+ chars, mixed case, numbers, symbols)
 - [ ] Restrict database access to app server only (no world-open ports)
 - [ ] Enable database encryption at rest
@@ -102,6 +113,7 @@ This document outlines all security improvements made and best practices for pro
 - [ ] Use database connection pooling with timeouts
 
 ### Application Server:
+
 - [ ] Use HTTPS/TLS 1.3 or higher
 - [ ] Set security headers:
   ```
@@ -119,33 +131,39 @@ This document outlines all security improvements made and best practices for pro
 ## 🔐 Ongoing Security Practices
 
 ### 1. Dependency Updates
+
 ```bash
 pip list --outdated
 pip install --upgrade <package-name>
 ```
 
 ### 2. Security Scanning
+
 ```bash
 pip install pip-audit
 pip-audit
 ```
 
 ### 3. Secret Rotation
+
 - Rotate `SECRET_KEY` quarterly
 - Rotate database password semi-annually
 - Monitor for compromised tokens
 
 ### 4. Access Control
+
 - Every endpoint requires `get_current_active_user` dependency
 - Organization isolation via `organization_id` in JWT
 - Role-based access control (RBAC) via `require_roles()`
 
 ### 5. Audit Logging
+
 - All sensitive operations logged via `audit_service`
 - Timestamps and user IDs recorded
 - Monitor audit log for suspicious activity
 
 ### 6. Input Validation
+
 - All requests validated via Pydantic schemas
 - Email validation via `email-validator` library
 - SQL injection prevention (SQLAlchemy ORM)
@@ -155,6 +173,7 @@ pip-audit
 ## 🐛 Known Limitations & TODOs
 
 ### High Priority:
+
 - [ ] Add token blacklist for logout (Redis required)
 - [ ] Implement request signing/verification
 - [ ] Add file upload scanning (ClamAV for malware)
@@ -163,6 +182,7 @@ pip-audit
 - [ ] Implement API key authentication for integrations
 
 ### Medium Priority:
+
 - [ ] Add IP whitelist for admin endpoints
 - [ ] Implement request deduplication (idempotency keys)
 - [ ] Add HSTS preload list submission
@@ -171,6 +191,7 @@ pip-audit
 - [ ] Implement rate limiting by user ID (not just IP)
 
 ### Low Priority:
+
 - [ ] Move media to S3 with signed URLs
 - [ ] Add field-level encryption for sensitive data
 - [ ] Implement request/response signing
