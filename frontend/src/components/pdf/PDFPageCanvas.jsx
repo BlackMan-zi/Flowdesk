@@ -1,10 +1,7 @@
 import { useEffect, useRef } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/build/pdf.worker.min.mjs',
-  import.meta.url
-).href
+pdfjsLib.GlobalWorkerOptions.workerSrc = import.meta.env.BASE_URL + 'pdf.worker.min.mjs'
 
 /**
  * Renders a single PDF page onto a <canvas> element.

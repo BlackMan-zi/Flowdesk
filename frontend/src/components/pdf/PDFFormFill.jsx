@@ -18,10 +18,7 @@ function useIsMobile() {
   return isMobile
 }
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/build/pdf.worker.min.mjs',
-  import.meta.url
-).href
+pdfjsLib.GlobalWorkerOptions.workerSrc = import.meta.env.BASE_URL + 'pdf.worker.min.mjs'
 
 // ── Table grid input ──────────────────────────────────────────────────────────
 
