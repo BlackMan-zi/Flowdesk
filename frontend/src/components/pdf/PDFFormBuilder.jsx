@@ -1259,8 +1259,9 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
         setNumPages(prev => Math.max(prev, pc))
       }
       toast.success(`PDF template for page ${currentPage} uploaded`)
-    } catch {
-      toast.error('PDF upload failed')
+    } catch (err) {
+      const msg = err?.response?.data?.detail || err?.message || 'PDF upload failed'
+      toast.error(`PDF upload failed: ${msg}`)
     }
     setUploading(false)
   }
