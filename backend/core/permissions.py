@@ -2,7 +2,7 @@ from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session, selectinload
 from typing import List
 from core.security import get_current_active_user
-from models.user import User, UserRole, Role, RoleName
+from models.user import User, UserRole, Role, RoleName, RoleCategory
 from database import get_db
 
 
@@ -45,17 +45,29 @@ def require_admin_or_manager():
 
 
 def require_any_approver():
-    return require_roles(
-        RoleName.admin,
-        RoleName.manager,
-        RoleName.sn_manager,
-        RoleName.hod,
-        RoleName.hr,
-        RoleName.hr_admin,
-        RoleName.finance,
-        RoleName.supply_chain,
-        RoleName.it,
-        RoleName.cfo,
-        RoleName.ceo,
-        RoleName.chief_corporate,
-    )
+    """Allow any user who holds at least one approval role (Hierarchy, Functional, or Executive) or Admin."""
+    async def checker(
+        current_user: User = Depends(get_current_active_user),
+        db: Session = Depends(get_db)
+    ) -> User:
+        user_roles = (
+            db.query(UserRole)
+            .filter(UserRole.user_id == current_user.id)
+            .options(selectinload(UserRole.role))
+            .all()
+        )
+        for ur in user_roles:
+            if ur.role and (
+                ur.role.name == RoleName.admin
+                or ur.role.role_category in (
+                    RoleCategory.hierarchy,
+                    RoleCategory.functional,
+                    RoleCategory.executive,
+                )
+            ):
+                return current_user
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied. An approval role is required."
+        )
+    return checker

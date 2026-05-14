@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { listUsers, createUser, updateUser, deactivateUser, listRoles, createRole, listDepartments } from '../../api/users'
+import { listUsers, createUser, updateUser, deactivateUser, listRoles, createRole, deleteRole, listDepartments } from '../../api/users'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import Card from '../../components/ui/Card'
@@ -262,6 +262,7 @@ export default function AdminUsers() {
   const [error, setError]         = useState('')
   const [search, setSearch]       = useState('')
   const [newRoleName, setNewRoleName] = useState('')
+  const [newRoleCategory, setNewRoleCategory] = useState('Functional')
   const [rolesExpanded, setRolesExpanded] = useState(false)
 
   const { data: users = [], isLoading } = useQuery({
@@ -337,13 +338,22 @@ export default function AdminUsers() {
   })
 
   const createRoleMutation = useMutation({
-    mutationFn: () => createRole({ name: newRoleName.trim(), role_category: 'Functional' }),
+    mutationFn: () => createRole({ name: newRoleName.trim(), role_category: newRoleCategory }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['roles'] })
       setNewRoleName('')
       toast.success(`Role "${newRoleName.trim()}" created.`)
     },
     onError: (err) => toast.error(err.response?.data?.detail || 'Failed to create role.')
+  })
+
+  const deleteRoleMutation = useMutation({
+    mutationFn: (id) => deleteRole(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['roles'] })
+      toast.success('Role deleted.')
+    },
+    onError: (err) => toast.error(err.response?.data?.detail || 'Cannot delete this role.')
   })
 
   const deactivateMutation = useMutation({
@@ -499,7 +509,7 @@ export default function AdminUsers() {
         </div>
       </div>
 
-      {/* Functional Roles management */}
+      {/* Approval Roles management */}
       <Card>
         <button
           onClick={() => setRolesExpanded(o => !o)}
@@ -507,47 +517,76 @@ export default function AdminUsers() {
         >
           <div className="flex items-center gap-2">
             <ShieldCheck size={15} className="text-muted-foreground" />
-            Functional Roles
+            Approval Roles
             <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">
-              {roles.filter(r => r.role_category === 'Functional').length}
+              {roles.filter(r => r.role_category === 'Functional' || r.role_category === 'Executive').length}
             </span>
           </div>
           <span className="text-xs text-muted-foreground">{rolesExpanded ? 'Collapse ▲' : 'Expand ▼'}</span>
         </button>
 
         {rolesExpanded && (
-          <div className="border-t border-border px-5 py-4 space-y-4">
-            {/* Existing functional roles */}
-            <div className="flex flex-wrap gap-2">
-              {roles.filter(r => r.role_category === 'Functional').length === 0 ? (
-                <p className="text-sm text-muted-foreground">No functional roles yet. Create one below.</p>
-              ) : roles.filter(r => r.role_category === 'Functional').map(r => {
-                const holders = users.filter(u => u.roles?.some(ur => ur.id === r.id))
-                return (
-                  <div key={r.id} className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border bg-muted/40 text-sm">
-                    <span className="font-medium text-foreground">{r.name}</span>
-                    {holders.length > 0 ? (
-                      <span className="text-xs text-muted-foreground">
-                        → {holders.map(h => h.name.split(' ')[0]).join(', ')}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-muted-foreground/50 italic">unassigned</span>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
+          <div className="border-t border-border px-5 py-4 space-y-5">
+
+            {/* Functional and Executive roles grouped */}
+            {['Functional', 'Executive'].map(cat => {
+              const catRoles = roles.filter(r => r.role_category === cat)
+              return (
+                <div key={cat}>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">{cat}</p>
+                  {catRoles.length === 0 ? (
+                    <p className="text-sm text-muted-foreground italic">No {cat.toLowerCase()} roles yet.</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {catRoles.map(r => {
+                        const holders = users.filter(u => u.roles?.some(ur => ur.id === r.id))
+                        return (
+                          <div key={r.id} className="group flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border bg-muted/40 text-sm">
+                            <span className="font-medium text-foreground">{r.name}</span>
+                            {holders.length > 0 ? (
+                              <span className="text-xs text-muted-foreground">
+                                → {holders.map(h => h.name.split(' ')[0]).join(', ')}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground/50 italic">unassigned</span>
+                            )}
+                            <button
+                              onClick={() => {
+                                if (window.confirm(`Delete the "${r.name}" role? This cannot be undone.`))
+                                  deleteRoleMutation.mutate(r.id)
+                              }}
+                              title="Delete role"
+                              className="ml-1 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
 
             {/* Create new role */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 pt-1">
               <input
                 type="text"
                 value={newRoleName}
                 onChange={e => setNewRoleName(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && newRoleName.trim() && createRoleMutation.mutate()}
-                placeholder="New role name e.g. Stock Keeper, Legal Approver…"
+                placeholder="New role name e.g. Legal, Compliance Officer…"
                 className="flex-1 h-9 px-3 border border-input rounded-md text-sm bg-background text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               />
+              <select
+                value={newRoleCategory}
+                onChange={e => setNewRoleCategory(e.target.value)}
+                className="h-9 px-2 border border-input rounded-md text-sm bg-background text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                <option value="Functional">Functional</option>
+                <option value="Executive">Executive</option>
+              </select>
               <Button
                 size="sm"
                 onClick={() => createRoleMutation.mutate()}
@@ -558,7 +597,7 @@ export default function AdminUsers() {
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              After creating a role, edit a user to assign it. Roles appear automatically in the approval workflow builder.
+              Create any approval role here, then assign it to a user via Edit. Roles appear automatically in the approval workflow builder.
             </p>
           </div>
         )}

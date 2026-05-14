@@ -47,6 +47,55 @@ def list_roles(
     ).all()
 
 
+@roles_router.delete("/{role_id}", status_code=204)
+def delete_role(
+    role_id: str,
+    current_user: User = Depends(require_roles(RoleName.admin)),
+    db: Session = Depends(get_db)
+):
+    from models.approval import ApprovalTemplateStep, ApprovalTemplateCCRecipient
+
+    role = db.query(Role).filter(
+        Role.id == role_id,
+        Role.organization_id == current_user.organization_id
+    ).first()
+    if not role:
+        raise HTTPException(status_code=404, detail="Role not found")
+
+    template_usage = db.query(ApprovalTemplateStep).filter(
+        ApprovalTemplateStep.role_id == role_id
+    ).count()
+    if template_usage > 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot delete: this role is used in {template_usage} approval template step(s). Remove it from those templates first."
+        )
+
+    cc_usage = db.query(ApprovalTemplateCCRecipient).filter(
+        ApprovalTemplateCCRecipient.role_id == role_id
+    ).count()
+    if cc_usage > 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot delete: this role is used as a CC recipient in {cc_usage} template(s). Remove it first."
+        )
+
+    assigned_count = db.query(UserRole).filter(UserRole.role_id == role_id).count()
+    if assigned_count > 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot delete: {assigned_count} user(s) currently hold this role. Unassign it from all users first."
+        )
+
+    role.is_active = False
+    db.commit()
+    audit_service.log_event(
+        db, current_user.organization_id, "ROLE_DELETED",
+        user_id=current_user.id, entity_type="Role", entity_id=role_id,
+        details={"role_name": role.name}
+    )
+
+
 # ── USERS ─────────────────────────────────────────────────────────────────────
 
 @router.post("", response_model=UserResponse)
