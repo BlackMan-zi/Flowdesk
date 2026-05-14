@@ -1,8 +1,11 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
 from database import get_db
+
+logger = logging.getLogger(__name__)
 from models.user import User, RoleName, UserRole
 from models.form import FormInstance, FormVersion, FormStatus, FormFieldValue
 from models.approval import ApprovalInstance, ApprovalStepStatus, ApprovalTemplateCCRecipient, RoleType
@@ -205,6 +208,7 @@ def approve(
                             if cc.role_id:
                                 ur = db.query(UserRole).filter(UserRole.role_id == cc.role_id).first()
                                 uid = ur.user_id if ur else None
+                        # Email-type CC has no user_id; handled below as an external send
                         _share(uid, "cc")
 
                 db.commit()
@@ -217,6 +221,26 @@ def approve(
                 form_instance_id=instance.id,
                 pdf_data=pdf_bytes
             )
+
+            # Send completion notice to email-type CC recipients (external addresses)
+            if template_id:
+                email_ccs = db.query(ApprovalTemplateCCRecipient).filter(
+                    ApprovalTemplateCCRecipient.template_id == template_id,
+                    ApprovalTemplateCCRecipient.role_type == RoleType.email,
+                    ApprovalTemplateCCRecipient.email.isnot(None)
+                ).all()
+                for ec in email_ccs:
+                    try:
+                        send_completion_email(
+                            to_email=ec.email,
+                            initiator_name=instance.creator.name,
+                            form_name=instance.form_definition.name if instance.form_definition else "Form",
+                            reference_number=instance.reference_number,
+                            form_instance_id=instance.id,
+                            pdf_data=pdf_bytes
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to send CC completion email to {ec.email}: {e}")
         else:
             # Notify next approver
             next_approver_name = None

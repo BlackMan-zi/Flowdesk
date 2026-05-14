@@ -2,11 +2,20 @@ import uuid
 from datetime import datetime
 from sqlalchemy import (
     Column, String, Boolean, DateTime, Integer, Text, ForeignKey,
-    Enum as SAEnum, JSON, Float
+    Enum as SAEnum, JSON, Float, Table
 )
 from sqlalchemy.orm import relationship
 from database import Base
 import enum
+
+
+# Junction table: forms restricted to specific initiator roles
+form_definition_initiator_roles = Table(
+    "form_definition_initiator_roles",
+    Base.metadata,
+    Column("form_definition_id", String(36), ForeignKey("form_definitions.id", ondelete="CASCADE"), primary_key=True),
+    Column("role_id", String(36), ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True),
+)
 
 
 def gen_uuid():
@@ -74,6 +83,11 @@ class FormDefinition(Base):
     instances = relationship("FormInstance", back_populates="form_definition")
     approval_template = relationship("ApprovalTemplate", foreign_keys=[approval_template_id])
     creator = relationship("User", foreign_keys=[created_by])
+    initiator_roles = relationship("Role", secondary=form_definition_initiator_roles)
+
+    @property
+    def initiator_role_ids(self):
+        return [r.id for r in self.initiator_roles]
 
 
 class FormField(Base):

@@ -19,6 +19,7 @@ class RoleType(str, enum.Enum):
     executive = "Executive"          # CFO, CEO, Chief Corporate
     specific_user = "SpecificUser"   # Fixed user defined in template
     selected_at_submission = "SelectedAtSubmission"  # Initiator picks at submit
+    email = "Email"                  # CC recipients only — free-text address
 
 
 class ApprovalStepStatus(str, enum.Enum):
@@ -86,7 +87,11 @@ class ApprovalTemplateStep(Base):
 
 
 class ApprovalTemplateCCRecipient(Base):
-    """People/positions who receive a copy of the completed document."""
+    """People/positions who receive a copy of the completed document.
+
+    Either resolves via role/user/hierarchy, OR is a free-text email address
+    (distribution lists, external accountants, etc.) when `email` is set.
+    """
     __tablename__ = "approval_template_cc_recipients"
 
     id = Column(String(36), primary_key=True, default=gen_uuid)
@@ -95,6 +100,7 @@ class ApprovalTemplateCCRecipient(Base):
     role_id = Column(String(36), ForeignKey("roles.id"), nullable=True)
     specific_user_id = Column(String(36), ForeignKey("users.id"), nullable=True)
     hierarchy_level = Column(String(50), nullable=True)  # "manager", "sn_manager", "hod"
+    email = Column(String(255), nullable=True)  # used when role_type == Email
     label = Column(String(200), nullable=True)  # display label
 
     # Relationships

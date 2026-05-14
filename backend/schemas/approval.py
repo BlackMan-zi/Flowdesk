@@ -20,6 +20,7 @@ class ApprovalTemplateCCRecipientCreate(BaseModel):
     role_id: Optional[str] = None
     specific_user_id: Optional[str] = None
     hierarchy_level: Optional[str] = None
+    email: Optional[str] = None
     label: Optional[str] = None
 
 
@@ -61,6 +62,7 @@ class ApprovalTemplateCCRecipientResponse(BaseModel):
     role_id: Optional[str]
     specific_user_id: Optional[str]
     hierarchy_level: Optional[str]
+    email: Optional[str] = None
     label: Optional[str]
 
     class Config:
