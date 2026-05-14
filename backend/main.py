@@ -43,9 +43,44 @@ limiter = Limiter(key_func=get_remote_address)
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
+def run_migrations():
+    """Run any SQL migration files that haven't been applied yet."""
+    migrations_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "migrations")
+    if not os.path.exists(migrations_dir):
+        return
+
+    from sqlalchemy import text
+    with engine.connect() as conn:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS schema_migrations (
+                filename VARCHAR(255) PRIMARY KEY,
+                applied_at TIMESTAMP DEFAULT NOW()
+            )
+        """))
+        conn.commit()
+
+        applied = {row[0] for row in conn.execute(text("SELECT filename FROM schema_migrations")).fetchall()}
+
+        files = sorted(f for f in os.listdir(migrations_dir) if f.endswith(".sql"))
+        for filename in files:
+            if filename in applied:
+                continue
+            path = os.path.join(migrations_dir, filename)
+            sql = open(path).read()
+            try:
+                conn.execute(text(sql))
+                conn.execute(text("INSERT INTO schema_migrations (filename) VALUES (:f)"), {"f": filename})
+                conn.commit()
+                logger.info(f"Migration applied: {filename}")
+            except Exception as e:
+                conn.rollback()
+                logger.warning(f"Migration skipped ({filename}): {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    run_migrations()
 
     os.makedirs(os.path.join(settings.MEDIA_DIR, "documents"), exist_ok=True)
     os.makedirs(os.path.join(settings.MEDIA_DIR, "attachments"), exist_ok=True)
