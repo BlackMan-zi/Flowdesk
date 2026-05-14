@@ -327,8 +327,8 @@ export default function AdminUsers() {
       payload.hod_id        = payload.hod_id        || null
       return editing ? updateUser(editing.id, payload) : createUser(payload)
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['users'] })
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['users'] })
       setModalOpen(false)
       toast.success(editing ? 'User updated.' : 'User created.')
     },

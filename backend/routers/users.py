@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 from database import get_db
-from models.user import User, Role, UserRole, UserStatus, RoleName
+from models.user import User, Role, UserRole, UserStatus, RoleName, RoleCategory
 from models.organization import Organization
 from schemas.user import UserCreate, UserUpdate, UserResponse, RoleCreate, RoleUpdate, RoleResponse
 from core.security import get_current_active_user
@@ -61,6 +61,9 @@ def update_role(
     if not role:
         raise HTTPException(status_code=404, detail="Role not found")
 
+    if role.role_category in (RoleCategory.system, RoleCategory.hierarchy):
+        raise HTTPException(status_code=400, detail="System and hierarchy roles cannot be renamed.")
+
     role.name = payload.name.strip()
     if payload.description is not None:
         role.description = payload.description
@@ -88,6 +91,9 @@ def delete_role(
     ).first()
     if not role:
         raise HTTPException(status_code=404, detail="Role not found")
+
+    if role.role_category in (RoleCategory.system, RoleCategory.hierarchy):
+        raise HTTPException(status_code=400, detail="System and hierarchy roles cannot be deleted.")
 
     template_usage = db.query(ApprovalTemplateStep).filter(
         ApprovalTemplateStep.role_id == role_id
