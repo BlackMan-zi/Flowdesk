@@ -31,9 +31,27 @@ def create_delegation(
     if delegate.id == current_user.id:
         raise HTTPException(status_code=400, detail="Cannot delegate to yourself")
 
-    # Deactivate any existing active delegation
+    # Validate role exists and belongs to org
+    from models.user import Role, UserRole
+    role = db.query(Role).filter(
+        Role.id == payload.role_id,
+        Role.organization_id == current_user.organization_id
+    ).first()
+    if not role:
+        raise HTTPException(status_code=404, detail="Role not found")
+
+    # Verify the delegator actually holds this role
+    holds_role = db.query(UserRole).filter(
+        UserRole.user_id == current_user.id,
+        UserRole.role_id == payload.role_id
+    ).first()
+    if not holds_role:
+        raise HTTPException(status_code=400, detail="You do not hold this role and cannot delegate it")
+
+    # Deactivate any existing active delegation for this same role
     db.query(Delegation).filter(
         Delegation.original_approver_id == current_user.id,
+        Delegation.role_id == payload.role_id,
         Delegation.is_active == True
     ).update({"is_active": False})
 
@@ -41,6 +59,7 @@ def create_delegation(
         organization_id=current_user.organization_id,
         original_approver_id=current_user.id,
         delegate_user_id=payload.delegate_user_id,
+        role_id=payload.role_id,
         start_date=payload.start_date,
         end_date=payload.end_date,
         reason=payload.reason,
@@ -49,15 +68,23 @@ def create_delegation(
     db.add(delegation)
     db.flush()
 
-    # Immediately transfer any pending/active approval steps to the delegate
-    db.query(ApprovalInstance).filter(
-        ApprovalInstance.organization_id == current_user.organization_id,
-        ApprovalInstance.approver_user_id == current_user.id,
-        ApprovalInstance.status.in_([ApprovalStepStatus.active, ApprovalStepStatus.waiting])
-    ).update({
-        "approver_user_id": payload.delegate_user_id,
-        "delegated_from_user_id": current_user.id
-    }, synchronize_session=False)
+    # Transfer pending/active steps that were triggered by this specific role
+    from models.approval import ApprovalTemplateStep
+    role_step_ids = [
+        s.id for s in db.query(ApprovalTemplateStep).filter(
+            ApprovalTemplateStep.role_id == payload.role_id
+        ).all()
+    ]
+    if role_step_ids:
+        db.query(ApprovalInstance).filter(
+            ApprovalInstance.organization_id == current_user.organization_id,
+            ApprovalInstance.approver_user_id == current_user.id,
+            ApprovalInstance.template_step_id.in_(role_step_ids),
+            ApprovalInstance.status.in_([ApprovalStepStatus.active, ApprovalStepStatus.waiting])
+        ).update({
+            "approver_user_id": payload.delegate_user_id,
+            "delegated_from_user_id": current_user.id
+        }, synchronize_session=False)
 
     db.commit()
     db.refresh(delegation)
@@ -92,13 +119,23 @@ def return_delegation(
     if delegation.original_approver_id != current_user.id and RoleName.admin not in role_names:
         raise HTTPException(status_code=403, detail="Not authorized to return this delegation")
 
-    # Transfer any delegated pending/active steps back to the original approver
-    db.query(ApprovalInstance).filter(
+    # Transfer delegated steps back — scoped to this role if role_id is set
+    from models.approval import ApprovalTemplateStep
+    step_filter = [
         ApprovalInstance.organization_id == delegation.organization_id,
         ApprovalInstance.approver_user_id == delegation.delegate_user_id,
         ApprovalInstance.delegated_from_user_id == delegation.original_approver_id,
         ApprovalInstance.status.in_([ApprovalStepStatus.active, ApprovalStepStatus.waiting])
-    ).update({
+    ]
+    if delegation.role_id:
+        role_step_ids = [
+            s.id for s in db.query(ApprovalTemplateStep).filter(
+                ApprovalTemplateStep.role_id == delegation.role_id
+            ).all()
+        ]
+        step_filter.append(ApprovalInstance.template_step_id.in_(role_step_ids))
+
+    db.query(ApprovalInstance).filter(*step_filter).update({
         "approver_user_id": delegation.original_approver_id,
         "delegated_from_user_id": None
     }, synchronize_session=False)
@@ -139,6 +176,8 @@ def admin_create_delegation(
     db: Session = Depends(get_db)
 ):
     """Admin creates a delegation on behalf of any user."""
+    from models.user import Role, UserRole
+
     original = db.query(User).filter(
         User.id == payload.original_approver_id,
         User.organization_id == current_user.organization_id
@@ -154,9 +193,26 @@ def admin_create_delegation(
     if payload.original_approver_id == payload.delegate_user_id:
         raise HTTPException(status_code=400, detail="Cannot delegate to the same user")
 
-    # Deactivate any existing active delegation for this approver
+    # Validate role exists in org
+    role = db.query(Role).filter(
+        Role.id == payload.role_id,
+        Role.organization_id == current_user.organization_id
+    ).first()
+    if not role:
+        raise HTTPException(status_code=404, detail="Role not found")
+
+    # Verify the original approver holds this role
+    holds_role = db.query(UserRole).filter(
+        UserRole.user_id == payload.original_approver_id,
+        UserRole.role_id == payload.role_id
+    ).first()
+    if not holds_role:
+        raise HTTPException(status_code=400, detail="Original approver does not hold this role")
+
+    # Deactivate any existing active delegation for this same role
     db.query(Delegation).filter(
         Delegation.original_approver_id == payload.original_approver_id,
+        Delegation.role_id == payload.role_id,
         Delegation.is_active == True
     ).update({"is_active": False})
 
@@ -164,6 +220,7 @@ def admin_create_delegation(
         organization_id=current_user.organization_id,
         original_approver_id=payload.original_approver_id,
         delegate_user_id=payload.delegate_user_id,
+        role_id=payload.role_id,
         start_date=payload.start_date,
         end_date=payload.end_date,
         reason=payload.reason,
@@ -172,15 +229,23 @@ def admin_create_delegation(
     db.add(delegation)
     db.flush()
 
-    # Immediately transfer any pending/active approval steps to the delegate
-    db.query(ApprovalInstance).filter(
-        ApprovalInstance.organization_id == current_user.organization_id,
-        ApprovalInstance.approver_user_id == payload.original_approver_id,
-        ApprovalInstance.status.in_([ApprovalStepStatus.active, ApprovalStepStatus.waiting])
-    ).update({
-        "approver_user_id": payload.delegate_user_id,
-        "delegated_from_user_id": payload.original_approver_id
-    }, synchronize_session=False)
+    # Transfer pending/active steps scoped to this role
+    from models.approval import ApprovalTemplateStep
+    role_step_ids = [
+        s.id for s in db.query(ApprovalTemplateStep).filter(
+            ApprovalTemplateStep.role_id == payload.role_id
+        ).all()
+    ]
+    if role_step_ids:
+        db.query(ApprovalInstance).filter(
+            ApprovalInstance.organization_id == current_user.organization_id,
+            ApprovalInstance.approver_user_id == payload.original_approver_id,
+            ApprovalInstance.template_step_id.in_(role_step_ids),
+            ApprovalInstance.status.in_([ApprovalStepStatus.active, ApprovalStepStatus.waiting])
+        ).update({
+            "approver_user_id": payload.delegate_user_id,
+            "delegated_from_user_id": payload.original_approver_id
+        }, synchronize_session=False)
 
     db.commit()
     db.refresh(delegation)

@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { listDelegations, createDelegation, returnDelegation } from '../api/delegations'
-import { listUsers } from '../api/users'
+import { listUsers, listRoles } from '../api/users'
 import { useAuth } from '../context/AuthContext'
 import { toast } from 'sonner'
 import Card, { CardHeader } from '../components/ui/Card'
@@ -22,7 +22,7 @@ export default function Delegations() {
   const { user } = useAuth()
   const qc = useQueryClient()
   const [modalOpen, setModalOpen] = useState(false)
-  const [form, setForm] = useState({ delegate_user_id: '', start_date: '', end_date: '', reason: '' })
+  const [form, setForm] = useState({ delegate_user_id: '', role_id: '', start_date: '', end_date: '', reason: '' })
   const [error, setError] = useState('')
 
   const { data: delegations = [], isLoading } = useQuery({
@@ -36,12 +36,25 @@ export default function Delegations() {
     enabled: modalOpen
   })
 
+  const { data: allRoles = [] } = useQuery({
+    queryKey: ['roles'],
+    queryFn: () => listRoles().then(r => r.data),
+    enabled: modalOpen
+  })
+
+  // user.roles from /auth/me is an array of name strings e.g. ['HR', 'Manager']
+  const myRoleNames = new Set(user?.roles || [])
+  const delegatableRoles = allRoles.filter(r =>
+    myRoleNames.has(r.name) &&
+    ['functional', 'executive', 'hierarchy'].includes(r.role_category)
+  )
+
   const createMutation = useMutation({
     mutationFn: () => createDelegation(form),
     onSuccess: () => {
       qc.invalidateQueries(['delegations'])
       setModalOpen(false)
-      setForm({ delegate_user_id: '', start_date: '', end_date: '', reason: '' })
+      setForm({ delegate_user_id: '', role_id: '', start_date: '', end_date: '', reason: '' })
       toast.success('Delegation created.')
     },
     onError: (err) => setError(err.response?.data?.detail || 'Failed to create delegation.')
@@ -62,7 +75,13 @@ export default function Delegations() {
 
   const columns = [
     {
-      key: 'type', label: 'Role',
+      key: 'role', label: 'Delegated Role',
+      render: r => r.role ? (
+        <span className="font-medium">{r.role.name}</span>
+      ) : <span className="text-muted-foreground text-sm">All roles</span>
+    },
+    {
+      key: 'type', label: 'My Position',
       render: r => (
         <Badge label={r.original_approver_id === user?.id ? 'Delegator' : 'Delegate'}
           variant={r.original_approver_id === user?.id ? 'default' : 'secondary'} />
@@ -117,9 +136,20 @@ export default function Delegations() {
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         title="Create Delegation"
-        subtitle="Delegate your approval rights to another user for a specific period."
+        subtitle="Delegate one of your approval roles to another user for a specific period."
       >
         <div className="space-y-4">
+          <Select
+            label="Approval Role to Delegate *"
+            value={form.role_id}
+            onChange={set('role_id')}
+          >
+            <option value="">Select role…</option>
+            {delegatableRoles.map(r => (
+              <option key={r.id} value={r.id}>{r.name}</option>
+            ))}
+          </Select>
+
           <Select
             label="Delegate To *"
             value={form.delegate_user_id}

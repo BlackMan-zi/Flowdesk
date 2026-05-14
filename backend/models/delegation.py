@@ -16,6 +16,7 @@ class Delegation(Base):
     organization_id = Column(String(36), ForeignKey("organizations.id"), nullable=False)
     original_approver_id = Column(String(36), ForeignKey("users.id"), nullable=False)
     delegate_user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
+    role_id = Column(String(36), ForeignKey("roles.id", ondelete="SET NULL"), nullable=True)
     start_date = Column(Date, nullable=False)
     end_date = Column(Date, nullable=False)
     reason = Column(Text, nullable=True)
@@ -29,3 +30,4 @@ class Delegation(Base):
     original_approver = relationship("User", foreign_keys=[original_approver_id])
     delegate_user = relationship("User", foreign_keys=[delegate_user_id])
     creator = relationship("User", foreign_keys=[created_by])
+    role = relationship("Role", foreign_keys=[role_id])

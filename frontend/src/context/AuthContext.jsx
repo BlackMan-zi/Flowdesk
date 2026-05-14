@@ -25,6 +25,7 @@ export function AuthProvider({ children }) {
   }, [])
 
   const roles = user?.roles || []
+  const roleCategories = new Set(user?.role_categories || [])
 
   // ── Privilege tiers ──────────────────────────────────────────────────────────
   // Admin: full system access + configuration
@@ -33,8 +34,8 @@ export function AuthProvider({ children }) {
   // Report Manager: create users + see reports/dashboard, no system config
   const isReportManager = roles.includes('Report Manager') && !isAdmin
 
-  // Executive: C-suite approvers
-  const isExecutive = roles.some(r => ['CFO', 'CEO', 'Chief Corporate'].includes(r)) && !isAdmin && !isReportManager
+  // Executive: C-suite approvers (anyone with executive role category)
+  const isExecutive = roleCategories.has('executive') && !isAdmin && !isReportManager
 
   // Observer: read-only documents view
   const isObserver = roles.includes('Observer') && !isAdmin && !isReportManager && !isExecutive
@@ -42,12 +43,11 @@ export function AuthProvider({ children }) {
   // HOD: Head of Department — needs both approver queue and own form submissions
   const isHod = roles.includes('HOD') && !isAdmin && !isReportManager
 
-  // Approver: anyone who signs forms
-  const isApprover = roles.some(r =>
-    ['Admin', 'Report Manager', 'Manager', 'SN Manager', 'HOD',
-     'HR', 'HR & Admin', 'Finance', 'Supply Chain', 'IT',
-     'CFO', 'CEO', 'Chief Corporate'].includes(r)
-  )
+  // Approver: admin, report manager, or any functional/executive/hierarchy role holder
+  const isApprover = isAdmin || isReportManager ||
+    roleCategories.has('functional') ||
+    roleCategories.has('executive') ||
+    roleCategories.has('hierarchy')
 
   return (
     <AuthContext.Provider value={{

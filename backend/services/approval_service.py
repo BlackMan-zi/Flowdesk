@@ -77,14 +77,29 @@ def resolve_approver_for_step(
     return None
 
 
-def get_active_delegate(db: Session, user_id: str) -> Optional[str]:
-    """Check if this user has an active delegation; return delegate's user_id."""
+def get_active_delegate(db: Session, user_id: str, role_id: Optional[str] = None) -> Optional[str]:
+    """Return delegate's user_id if an active delegation exists for this user.
+
+    Checks role-specific delegation first; falls back to a general delegation (role_id IS NULL).
+    """
     today = date.today()
-    delegation = db.query(Delegation).filter(
+    base_filter = [
         Delegation.original_approver_id == user_id,
         Delegation.is_active == True,
         Delegation.start_date <= today,
-        Delegation.end_date >= today
+        Delegation.end_date >= today,
+    ]
+    if role_id:
+        delegation = db.query(Delegation).filter(
+            *base_filter,
+            Delegation.role_id == role_id
+        ).first()
+        if delegation:
+            return delegation.delegate_user_id
+    # Fall back to general delegation (not scoped to a specific role)
+    delegation = db.query(Delegation).filter(
+        *base_filter,
+        Delegation.role_id == None  # noqa: E711
     ).first()
     if delegation:
         return delegation.delegate_user_id
@@ -145,7 +160,7 @@ def initialize_approval_steps(
         # Check delegation
         delegated_from = None
         if approver_id and step.delegation_allowed:
-            delegate = get_active_delegate(db, approver_id)
+            delegate = get_active_delegate(db, approver_id, role_id=step.role_id)
             if delegate:
                 delegated_from = approver_id
                 approver_id = delegate
