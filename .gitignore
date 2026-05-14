@@ -62,8 +62,11 @@ backend/media/
 # Editor / tool config
 settings.json
 
-# PDFs at project root (source documents, not tracked)
+# PDFs and images at project root (source documents, not tracked)
 *.pdf
+*.png
+*.jpg
+*.jpeg
 
 # Test / coverage
 .coverage
