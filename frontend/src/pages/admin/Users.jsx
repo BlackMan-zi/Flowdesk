@@ -541,7 +541,7 @@ export default function AdminUsers() {
                       {catRoles.map(r => {
                         const holders = users.filter(u => u.roles?.some(ur => ur.id === r.id))
                         return (
-                          <div key={r.id} className="group flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border bg-muted/40 text-sm">
+                          <div key={r.id} className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border bg-muted/40 text-sm">
                             <span className="font-medium text-foreground">{r.name}</span>
                             {holders.length > 0 ? (
                               <span className="text-xs text-muted-foreground">
@@ -556,7 +556,7 @@ export default function AdminUsers() {
                                   deleteRoleMutation.mutate(r.id)
                               }}
                               title="Delete role"
-                              className="ml-1 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all"
+                              className="ml-1 text-muted-foreground hover:text-destructive transition-colors"
                             >
                               <Trash2 size={13} />
                             </button>
