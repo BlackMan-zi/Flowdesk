@@ -10,6 +10,11 @@ class RoleCreate(BaseModel):
     description: Optional[str] = None
 
 
+class RoleUpdate(BaseModel):
+    name: str
+    description: Optional[str] = None
+
+
 class RoleResponse(BaseModel):
     id: str
     name: str

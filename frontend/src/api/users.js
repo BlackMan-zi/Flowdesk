@@ -8,6 +8,7 @@ export const deactivateUser = (id) => client.delete(`/users/${id}`)
 
 export const listRoles = () => client.get('/roles')
 export const createRole = (data) => client.post('/roles', data)
+export const updateRole = (id, data) => client.patch(`/roles/${id}`, data)
 export const deleteRole = (id) => client.delete(`/roles/${id}`)
 
 export const listDepartments = () => client.get('/departments')

@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { listUsers, createUser, updateUser, deactivateUser, listRoles, createRole, deleteRole, listDepartments } from '../../api/users'
+import { listUsers, createUser, updateUser, deactivateUser, listRoles, createRole, updateRole, deleteRole, listDepartments } from '../../api/users'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import Card from '../../components/ui/Card'
@@ -12,7 +12,7 @@ import Input, { Select } from '../../components/ui/Input'
 import Spinner from '../../components/ui/Spinner'
 import {
   Search, X, Users, Plus, LayoutList, Network,
-  ChevronDown, ChevronRight, Mail, Building2, UserCheck, ShieldCheck, Trash2
+  ChevronDown, ChevronRight, Mail, Building2, UserCheck, ShieldCheck, Trash2, Pencil, Check
 } from 'lucide-react'
 
 // ── Role level ordering ───────────────────────────────────────────────────────
@@ -264,6 +264,8 @@ export default function AdminUsers() {
   const [newRoleName, setNewRoleName] = useState('')
   const [newRoleCategory, setNewRoleCategory] = useState('Functional')
   const [rolesExpanded, setRolesExpanded] = useState(false)
+  const [editingRoleId, setEditingRoleId] = useState(null)
+  const [editingRoleName, setEditingRoleName] = useState('')
 
   const { data: users = [], isLoading } = useQuery({
     queryKey: ['users'],
@@ -354,6 +356,17 @@ export default function AdminUsers() {
       toast.success('Role deleted.')
     },
     onError: (err) => toast.error(err.response?.data?.detail || 'Cannot delete this role.')
+  })
+
+  const updateRoleMutation = useMutation({
+    mutationFn: ({ id, name }) => updateRole(id, { name }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['roles'] })
+      setEditingRoleId(null)
+      setEditingRoleName('')
+      toast.success('Role renamed.')
+    },
+    onError: (err) => toast.error(err.response?.data?.detail || 'Failed to rename role.')
   })
 
   const deactivateMutation = useMutation({
@@ -542,24 +555,64 @@ export default function AdminUsers() {
                         const holders = users.filter(u => u.roles?.some(ur => ur.id === r.id))
                         return (
                           <div key={r.id} className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border bg-muted/40 text-sm">
-                            <span className="font-medium text-foreground">{r.name}</span>
-                            {holders.length > 0 ? (
-                              <span className="text-xs text-muted-foreground">
-                                → {holders.map(h => h.name.split(' ')[0]).join(', ')}
-                              </span>
+                            {editingRoleId === r.id ? (
+                              <>
+                                <input
+                                  autoFocus
+                                  value={editingRoleName}
+                                  onChange={e => setEditingRoleName(e.target.value)}
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter' && editingRoleName.trim())
+                                      updateRoleMutation.mutate({ id: r.id, name: editingRoleName.trim() })
+                                    if (e.key === 'Escape') { setEditingRoleId(null); setEditingRoleName('') }
+                                  }}
+                                  className="w-32 h-6 px-1.5 border border-ring rounded text-sm bg-background text-foreground focus:outline-none"
+                                />
+                                <button
+                                  onClick={() => editingRoleName.trim() && updateRoleMutation.mutate({ id: r.id, name: editingRoleName.trim() })}
+                                  disabled={!editingRoleName.trim()}
+                                  className="text-primary hover:text-primary/80 transition-colors"
+                                  title="Save"
+                                >
+                                  <Check size={13} />
+                                </button>
+                                <button
+                                  onClick={() => { setEditingRoleId(null); setEditingRoleName('') }}
+                                  className="text-muted-foreground hover:text-foreground transition-colors"
+                                  title="Cancel"
+                                >
+                                  <X size={13} />
+                                </button>
+                              </>
                             ) : (
-                              <span className="text-xs text-muted-foreground/50 italic">unassigned</span>
+                              <>
+                                <span className="font-medium text-foreground">{r.name}</span>
+                                {holders.length > 0 ? (
+                                  <span className="text-xs text-muted-foreground">
+                                    → {holders.map(h => h.name.split(' ')[0]).join(', ')}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground/50 italic">unassigned</span>
+                                )}
+                                <button
+                                  onClick={() => { setEditingRoleId(r.id); setEditingRoleName(r.name) }}
+                                  title="Rename role"
+                                  className="ml-1 text-muted-foreground hover:text-primary transition-colors"
+                                >
+                                  <Pencil size={13} />
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    if (window.confirm(`Delete the "${r.name}" role? This cannot be undone.`))
+                                      deleteRoleMutation.mutate(r.id)
+                                  }}
+                                  title="Delete role"
+                                  className="text-muted-foreground hover:text-destructive transition-colors"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </>
                             )}
-                            <button
-                              onClick={() => {
-                                if (window.confirm(`Delete the "${r.name}" role? This cannot be undone.`))
-                                  deleteRoleMutation.mutate(r.id)
-                              }}
-                              title="Delete role"
-                              className="ml-1 text-muted-foreground hover:text-destructive transition-colors"
-                            >
-                              <Trash2 size={13} />
-                            </button>
                           </div>
                         )
                       })}

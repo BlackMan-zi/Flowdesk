@@ -4,7 +4,7 @@ from typing import List
 from database import get_db
 from models.user import User, Role, UserRole, UserStatus, RoleName
 from models.organization import Organization
-from schemas.user import UserCreate, UserUpdate, UserResponse, RoleCreate, RoleResponse
+from schemas.user import UserCreate, UserUpdate, UserResponse, RoleCreate, RoleUpdate, RoleResponse
 from core.security import get_current_active_user
 from core.permissions import require_roles
 from services.auth_service import hash_password, generate_temp_password
@@ -45,6 +45,33 @@ def list_roles(
         Role.organization_id == current_user.organization_id,
         Role.is_active == True
     ).all()
+
+
+@roles_router.patch("/{role_id}", response_model=RoleResponse)
+def update_role(
+    role_id: str,
+    payload: RoleUpdate,
+    current_user: User = Depends(require_roles(RoleName.admin)),
+    db: Session = Depends(get_db)
+):
+    role = db.query(Role).filter(
+        Role.id == role_id,
+        Role.organization_id == current_user.organization_id
+    ).first()
+    if not role:
+        raise HTTPException(status_code=404, detail="Role not found")
+
+    role.name = payload.name.strip()
+    if payload.description is not None:
+        role.description = payload.description
+    db.commit()
+    db.refresh(role)
+    audit_service.log_event(
+        db, current_user.organization_id, "ROLE_UPDATED",
+        user_id=current_user.id, entity_type="Role", entity_id=role_id,
+        details={"new_name": role.name}
+    )
+    return role
 
 
 @roles_router.delete("/{role_id}", status_code=204)
