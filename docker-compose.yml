@@ -18,7 +18,7 @@ services:
       - "5432"
     volumes:
       - flowdesk_pgdata:/var/lib/postgresql/data
-      - ../database/init:/docker-entrypoint-initdb.d
+      - ./database/init:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
       interval: 10s
@@ -27,13 +27,13 @@ services:
 
   # ── FastAPI Backend ─────────────────────────────────────────
   api:
-    build: ../backend
+    build: ./backend
     container_name: flowdesk-api
     restart: unless-stopped
     expose:
       - "8000"
     env_file:
-      - ../.env
+      - .env
     depends_on:
       db:
         condition: service_healthy
@@ -45,8 +45,8 @@ services:
   # Also proxies /api/ and /media/ to the backend
   nginx:
     build:
-      context: ..
-      dockerfile: docker/Dockerfile.nginx
+      context: .
+      dockerfile: Dockerfile.nginx
     container_name: flowdesk-nginx
     restart: unless-stopped
     expose:
