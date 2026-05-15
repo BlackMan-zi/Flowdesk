@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react'
 import { cn } from '../../lib/utils'
 import {
   Plus, Pencil, Trash2, ChevronUp, ChevronDown, GripVertical,
@@ -6,7 +6,7 @@ import {
   ChevronDown as ChevronDownIcon, CheckSquare, Circle,
   Calculator, Paperclip, PenLine, Hash as HashIcon,
   Table as TableIcon, MoreHorizontal,
-  Shield, Workflow, ClipboardList,
+  Shield, Workflow, ClipboardList, Move, Text as TextIcon,
 } from 'lucide-react'
 import {
   DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors,
@@ -35,6 +35,8 @@ export const FIELD_TYPE_META = {
   calculated:  { label: 'Calculated',    icon: Calculator,      group: 'Advanced', defaultWidth: '1/2', isSystem: false },
   file:        { label: 'Attachment',    icon: Paperclip,       group: 'Advanced', defaultWidth: 'full',isSystem: false },
   signature:   { label: 'Signature',     icon: PenLine,         group: 'Advanced', defaultWidth: 'full',isSystem: false },
+  // Layout-only (admin-authored content, not user input)
+  text_static:     { label: 'Static Text',      icon: TextIcon,       group: 'Layout', defaultWidth: 'full',isSystem: true },
   // System blocks (auto-filled, special render)
   reference:       { label: 'Reference No.',    icon: HashIcon,       group: 'System', defaultWidth: '1/3', isSystem: true },
   submission_date: { label: 'Submission Date',  icon: Calendar,       group: 'System', defaultWidth: '1/3', isSystem: true },
@@ -46,8 +48,14 @@ export const FIELD_TYPES_LIST = [
   'text', 'textarea', 'number', 'currency', 'date',
   'dropdown', 'radio', 'checkbox',
   'table', 'calculated', 'file', 'signature',
+  'text_static',
   'reference', 'submission_date', 'classification', 'approval_block',
 ]
+
+// Width fraction → percentage (for free-positioned fields)
+export const WIDTH_TO_PCT = {
+  '1/4': 25, '1/3': 33.33, '1/2': 50, '2/3': 66.67, '3/4': 75, 'full': 100,
+}
 
 const DEFAULT_SECTION = 'General'
 
@@ -160,7 +168,14 @@ function FieldCellBody({ field, accent, formDef, classification, approvalSteps, 
         <span className="absolute top-1 right-1.5 text-[10px] text-destructive font-bold pointer-events-none">*</span>
       )}
 
-      {/* ── System blocks ── */}
+      {/* ── Layout / system blocks ── */}
+      {field.field_type === 'text_static' && (
+        <div className="text-[11px] text-slate-700 whitespace-pre-wrap leading-snug py-1">
+          {field.default_value || (
+            <span className="text-slate-400 italic">Click to edit static text — write instructions, headings, or any copy you want on the form.</span>
+          )}
+        </div>
+      )}
       {field.field_type === 'reference' && (
         <div className="flex items-baseline gap-2">
           <span className="text-[11px] text-slate-600">{field.field_label || 'Reference'}:</span>
@@ -391,6 +406,134 @@ function AddFieldButton({ onAdd }) {
   )
 }
 
+// ── Free-position field (absolutely placed on the body) ──────────────────────
+
+function FreeField({
+  field, accent, formDef, classification, approvalSteps, users, roles,
+  isSelected, onSelect, onUpdate, onDelete, bodyRef,
+}) {
+  const widthPct = WIDTH_TO_PCT[field.grid_width || 'full']
+
+  const handlePointerDown = (e) => {
+    // Don't start drag on a child interactive element
+    if (e.target.closest('button, input, textarea, select')) return
+    e.preventDefault()
+    e.stopPropagation()
+    onSelect()
+    const body = bodyRef.current
+    if (!body) return
+    const rect = body.getBoundingClientRect()
+    const startX = e.clientX
+    const startY = e.clientY
+    const startXPct = field.x_pct ?? 0
+    const startYPct = field.y_pct ?? 0
+
+    const onMove = (ev) => {
+      const dxPct = ((ev.clientX - startX) / rect.width) * 100
+      const dyPct = ((ev.clientY - startY) / rect.height) * 100
+      // Clamp so the field doesn't fly off the page
+      const newX = Math.max(0, Math.min(100 - widthPct, startXPct + dxPct))
+      const newY = Math.max(0, Math.min(100, startYPct + dyPct))
+      onUpdate({ ...field, x_pct: newX, y_pct: newY })
+    }
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+  }
+
+  return (
+    <div
+      className={cn(
+        'group absolute cursor-move select-none touch-none',
+        isSelected && 'z-20'
+      )}
+      style={{
+        left: `${field.x_pct ?? 0}%`,
+        top: `${field.y_pct ?? 0}%`,
+        width: `${widthPct}%`,
+      }}
+      onPointerDown={handlePointerDown}
+    >
+      <FieldCellBody
+        field={field}
+        accent={accent}
+        formDef={formDef}
+        classification={classification}
+        approvalSteps={approvalSteps}
+        users={users}
+        roles={roles}
+        isSelected={isSelected}
+      />
+      <span
+        className="absolute -left-5 top-1/2 -translate-y-1/2 text-primary/60 opacity-0 group-hover:opacity-100 pointer-events-none"
+        title="Drag anywhere"
+      >
+        <Move size={12} />
+      </span>
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); onDelete() }}
+        className="absolute -right-5 top-1/2 -translate-y-1/2 p-0.5 rounded text-slate-300 hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100"
+        title="Delete field"
+      >
+        <Trash2 size={11} />
+      </button>
+    </div>
+  )
+}
+
+// ── Page-break dashed lines (visual A4 boundaries) ────────────────────────────
+
+function PageBreaks({ bodyRef, accent }) {
+  const [pageCount, setPageCount] = useState(1)
+  const [pageHeight, setPageHeight] = useState(0)
+
+  useEffect(() => {
+    if (!bodyRef.current) return
+    const calc = () => {
+      const body = bodyRef.current
+      if (!body) return
+      // Use the body's actual width to derive A4-correct page height.
+      // A4 portrait ratio = 1 : √2 ≈ 1.4142. Allow some margin for header/footer.
+      const w = body.clientWidth
+      // ~80% of A4 height is content (the rest is header/footer); roughly w * 1.13
+      const ph = Math.round(w * 1.13)
+      const h = body.scrollHeight
+      setPageHeight(ph)
+      setPageCount(Math.max(1, Math.ceil(h / ph)))
+    }
+    calc()
+    const ro = new ResizeObserver(calc)
+    ro.observe(bodyRef.current)
+    return () => ro.disconnect()
+  }, [bodyRef])
+
+  if (pageCount <= 1 || pageHeight <= 0) return null
+
+  return (
+    <>
+      {Array.from({ length: pageCount - 1 }).map((_, i) => (
+        <div
+          key={i}
+          className="absolute left-0 right-0 pointer-events-none"
+          style={{ top: `${(i + 1) * pageHeight}px` }}
+        >
+          <div className="border-t-2 border-dashed border-slate-300" />
+          <span
+            className="absolute right-0 -top-3 text-[9px] font-semibold uppercase tracking-wide bg-white px-1.5 py-0.5 rounded border border-slate-200"
+            style={{ color: accent }}
+          >
+            Page {i + 2}
+          </span>
+        </div>
+      ))}
+    </>
+  )
+}
+
 // ── Section block ─────────────────────────────────────────────────────────────
 
 function SectionBlock({
@@ -507,9 +650,14 @@ export default function FormDesignerCanvas({
   sections, fields, approvalSteps, users, roles,
   selectedFieldId, onSelectField,
   onAddSection, onRenameSection, onMoveSection, onDeleteSection,
-  onAddField, onDeleteField, onReorderFields,
+  onAddField, onUpdateField, onDeleteField, onReorderFields,
 }) {
   const accent = accentProp || '#0066B3'
+  const bodyRef = useRef(null)
+
+  // Split flow fields (grid-positioned) vs free fields (absolutely positioned).
+  const flowFields = fields.filter(f => !f.free_position)
+  const freeFields = fields.filter(f => f.free_position)
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -537,7 +685,29 @@ export default function FormDesignerCanvas({
       </div>
 
       {/* Body */}
-      <div className="px-12 py-6 relative">
+      <div ref={bodyRef} className="px-12 py-6 relative" data-canvas-body>
+        {/* A4 page-break dashed lines + label */}
+        <PageBreaks bodyRef={bodyRef} accent={accent} />
+
+        {/* Free-positioned fields render in an overlay above the section flow */}
+        {freeFields.map(f => (
+          <FreeField
+            key={f.id}
+            field={f}
+            accent={accent}
+            formDef={formDef}
+            classification={classification}
+            approvalSteps={approvalSteps}
+            users={users}
+            roles={roles}
+            isSelected={selectedFieldId === f.id}
+            onSelect={() => onSelectField(f.id)}
+            onUpdate={onUpdateField}
+            onDelete={() => onDeleteField(f.id)}
+            bodyRef={bodyRef}
+          />
+        ))}
+
         {/* Title only — Reference / Date / Classification / Approvals are
             now placeable system blocks that you drop wherever you want. */}
         <div className="text-center mb-4">
@@ -547,9 +717,9 @@ export default function FormDesignerCanvas({
           <div className="mx-auto mt-1 h-[2px] w-16 rounded-full" style={{ backgroundColor: accent }} />
         </div>
 
-        {/* Sections */}
+        {/* Sections (flow only — free fields rendered above) */}
         {sections.map((s, idx) => {
-          const inSection = fields.filter(f => (f.section_name || DEFAULT_SECTION) === s)
+          const inSection = flowFields.filter(f => (f.section_name || DEFAULT_SECTION) === s)
           return (
             <SectionBlock
               key={s}

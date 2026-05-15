@@ -63,6 +63,7 @@ const SYSTEM_BLOCK_TO_API = {
   submission_date: { field_type: 'date', auto_fill_source: 'submission_date' },
   classification:  { field_type: 'text', auto_fill_source: 'form_classification' },
   approval_block:  { field_type: 'text', auto_fill_source: 'approval_block' },
+  text_static:     { field_type: 'text', auto_fill_source: 'static_text' },
 }
 
 // Reverse lookup: auto_fill_source → UI type
@@ -208,28 +209,90 @@ function PropertiesPanel({ field, sections, onChange }) {
         </div>
       )}
 
-      {/* Required + read-only toggles */}
-      <div className="flex items-center gap-4 pt-1">
-        <label className="flex items-center gap-1.5 text-xs text-foreground cursor-pointer">
+      {/* Required + read-only toggles (hidden for system blocks that aren't user input) */}
+      {!isSystem && (
+        <div className="flex items-center gap-4 pt-1">
+          <label className="flex items-center gap-1.5 text-xs text-foreground cursor-pointer">
+            <input
+              type="checkbox"
+              checked={!!field.required}
+              onChange={(e) => update({ required: e.target.checked })}
+            />
+            Required
+          </label>
+          <label className="flex items-center gap-1.5 text-xs text-foreground cursor-pointer">
+            <input
+              type="checkbox"
+              checked={!!field.read_only}
+              onChange={(e) => update({ read_only: e.target.checked })}
+            />
+            Read-only
+          </label>
+        </div>
+      )}
+
+      {/* Free position toggle — Word-style drag-anywhere */}
+      <div className="pt-2 border-t border-border space-y-2">
+        <label className="flex items-start gap-2 text-xs text-foreground cursor-pointer">
           <input
             type="checkbox"
-            checked={!!field.required}
-            onChange={(e) => update({ required: e.target.checked })}
+            checked={!!field.free_position}
+            onChange={(e) => update({ free_position: e.target.checked })}
+            className="mt-0.5"
           />
-          Required
+          <span>
+            <span className="font-medium">Free position</span>
+            <span className="block text-[10px] text-muted-foreground leading-snug">
+              Pull this field out of the grid and drag it anywhere on the page.
+            </span>
+          </span>
         </label>
-        <label className="flex items-center gap-1.5 text-xs text-foreground cursor-pointer">
-          <input
-            type="checkbox"
-            checked={!!field.read_only}
-            onChange={(e) => update({ read_only: e.target.checked })}
-          />
-          Read-only
-        </label>
+        {field.free_position && (
+          <div className="grid grid-cols-2 gap-2 pl-5">
+            <div>
+              <label className="text-[10px] text-muted-foreground">X (%)</label>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                step={0.5}
+                value={Math.round((field.x_pct ?? 0) * 10) / 10}
+                onChange={(e) => update({ x_pct: Number(e.target.value) || 0 })}
+                className="text-xs"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-muted-foreground">Y (%)</label>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                step={0.5}
+                value={Math.round((field.y_pct ?? 0) * 10) / 10}
+                onChange={(e) => update({ y_pct: Number(e.target.value) || 0 })}
+                className="text-xs"
+              />
+            </div>
+          </div>
+        )}
       </div>
 
+      {/* Static text content editor */}
+      {field.field_type === 'text_static' && (
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-foreground">Text content</label>
+          <textarea
+            value={field.default_value || ''}
+            onChange={(e) => update({ default_value: e.target.value })}
+            rows={5}
+            className="w-full text-sm border border-border bg-background rounded-md px-2.5 py-1.5"
+            placeholder="Write instruction copy, headings, or any text you want shown on the form."
+          />
+        </div>
+      )}
+
       {/* Default value */}
-      {!hasOptions && field.field_type !== 'signature' && field.field_type !== 'file' && field.field_type !== 'table' && (
+      {!hasOptions && !isSystem && field.field_type !== 'signature' && field.field_type !== 'file' && field.field_type !== 'table' && (
         <div className="space-y-1">
           <label className="text-xs font-medium text-foreground">Default value</label>
           <Input
@@ -482,6 +545,7 @@ export default function FormDesigner() {
       submission_date: 'Date',
       classification:  'Classification',
       approval_block:  'Approvals',
+      text_static:     'Static Text',
     }
     const baseLabel = labelDefaults[type] || meta?.label || 'Field'
     const existingNames = fields.map(f => f.field_name)
@@ -709,6 +773,7 @@ export default function FormDesigner() {
               onMoveSection={moveSection}
               onDeleteSection={deleteSection}
               onAddField={addField}
+              onUpdateField={updateField}
               onDeleteField={deleteField}
               onReorderFields={reorderFields}
             />
