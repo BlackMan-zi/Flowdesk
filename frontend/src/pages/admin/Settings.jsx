@@ -14,10 +14,37 @@ import { Alert } from '../../components/ui/alert'
 import { cn } from '../../lib/utils'
 import {
   Upload, Trash2, Image as ImageIcon, Building2, Palette, Shield,
-  Plus, X, Save, AlertCircle,
+  Plus, X, Save, AlertCircle, Check, GripVertical,
 } from 'lucide-react'
 
-const DEFAULT_LABELS = ['Public', 'Internal', 'Confidential', 'Restricted']
+// ── Classification labels: defaults + suggested colors ────────────────────────
+
+const DEFAULT_LABELS = [
+  { name: 'Public',       color: '#22C55E' },
+  { name: 'Internal',     color: '#EAB308' },
+  { name: 'Confidential', color: '#EF4444' },
+  { name: 'Restricted',   color: '#64748B' },
+]
+
+const SUGGESTED_COLORS = {
+  public: '#22C55E',
+  internal: '#EAB308',
+  confidential: '#EF4444',
+  secret: '#DC2626',
+  restricted: '#64748B',
+  private: '#A855F7',
+  draft: '#94A3B8',
+}
+
+function suggestColor(name) {
+  return SUGGESTED_COLORS[(name || '').trim().toLowerCase()] || '#64748B'
+}
+
+// Hex → rgb to compute "did the admin pick a near-white color we shouldn't use"
+function tintedBg(hex) {
+  if (!hex) return undefined
+  return `${hex}1A`  // ~10% alpha
+}
 
 // ── Image upload card ─────────────────────────────────────────────────────────
 
@@ -25,7 +52,6 @@ function LetterheadImageCard({ kind, hasImage, onUpload, onDelete, fetchObjectUr
   const fileRef = useRef(null)
   const [previewUrl, setPreviewUrl] = useState(null)
   const [busy, setBusy] = useState(false)
-  // Bump this to force a re-fetch after upload/delete
   const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
@@ -34,10 +60,7 @@ function LetterheadImageCard({ kind, hasImage, onUpload, onDelete, fetchObjectUr
     if (hasImage) {
       fetchObjectUrl()
         .then(url => {
-          if (cancelled) {
-            URL.revokeObjectURL(url)
-            return
-          }
+          if (cancelled) { URL.revokeObjectURL(url); return }
           revokeUrl = url
           setPreviewUrl(url)
         })
@@ -53,8 +76,8 @@ function LetterheadImageCard({ kind, hasImage, onUpload, onDelete, fetchObjectUr
 
   const handleFile = async (file) => {
     if (!file) return
-    if (file.size > 4 * 1024 * 1024) {
-      toast.error('Image is larger than 4 MB.')
+    if (file.size > 8 * 1024 * 1024) {
+      toast.error('Image is larger than 8 MB.')
       return
     }
     setBusy(true)
@@ -94,7 +117,8 @@ function LetterheadImageCard({ kind, hasImage, onUpload, onDelete, fetchObjectUr
               {isHeader ? 'Header (top of every form PDF)' : 'Footer (bottom of every form PDF)'}
             </h3>
             <p className="text-xs text-muted-foreground mt-0.5">
-              PNG, JPG, or WEBP. Max 4&nbsp;MB. Wide aspect ratio recommended ({isHeader ? '~ 1600×200' : '~ 1600×100'}).
+              Any image format — PNG, JPG, WEBP, GIF, BMP, TIFF, ICO, AVIF. Max&nbsp;8&nbsp;MB.
+              Wide aspect ratio recommended ({isHeader ? '~ 1600×200' : '~ 1600×100'}).
             </p>
           </div>
           {hasImage && (
@@ -104,7 +128,6 @@ function LetterheadImageCard({ kind, hasImage, onUpload, onDelete, fetchObjectUr
           )}
         </div>
 
-        {/* Preview */}
         <div
           className={cn(
             'rounded-lg border-2 border-dashed border-border bg-muted/20 overflow-hidden',
@@ -121,9 +144,7 @@ function LetterheadImageCard({ kind, hasImage, onUpload, onDelete, fetchObjectUr
           ) : (
             <div className="text-center px-4 py-6">
               <ImageIcon size={20} className="text-muted-foreground/50 mx-auto" />
-              <p className="text-xs text-muted-foreground mt-1.5">
-                No {kind} uploaded yet.
-              </p>
+              <p className="text-xs text-muted-foreground mt-1.5">No {kind} uploaded yet.</p>
             </div>
           )}
         </div>
@@ -132,16 +153,11 @@ function LetterheadImageCard({ kind, hasImage, onUpload, onDelete, fetchObjectUr
           <input
             ref={fileRef}
             type="file"
-            accept="image/png,image/jpeg,image/webp"
+            accept="image/*"
             className="hidden"
-            onChange={e => handleFile(e.target.files?.[0])}
+            onChange={e => { handleFile(e.target.files?.[0]); e.target.value = '' }}
           />
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => fileRef.current?.click()}
-            disabled={busy}
-          >
+          <Button size="sm" variant="outline" onClick={() => fileRef.current?.click()} disabled={busy}>
             <Upload size={13} className="mr-1.5" />
             {hasImage ? 'Replace' : 'Upload'}
           </Button>
@@ -152,7 +168,47 @@ function LetterheadImageCard({ kind, hasImage, onUpload, onDelete, fetchObjectUr
   )
 }
 
-// ── Classification labels editor ──────────────────────────────────────────────
+// ── Classification labels editor (color-aware) ────────────────────────────────
+
+function LabelChip({ label, onColorChange, onRemove }) {
+  const inputRef = useRef(null)
+  const color = label.color || suggestColor(label.name)
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 pl-1 pr-2 py-1 rounded-full border text-xs font-medium"
+      style={{
+        backgroundColor: tintedBg(color),
+        borderColor: `${color}66`,
+        color: color,
+      }}
+    >
+      <button
+        type="button"
+        title="Change color"
+        onClick={() => inputRef.current?.click()}
+        className="w-4 h-4 rounded-full border border-white/40 ring-1 ring-black/5 cursor-pointer flex-shrink-0"
+        style={{ backgroundColor: color }}
+      />
+      <input
+        ref={inputRef}
+        type="color"
+        value={color}
+        onChange={e => onColorChange(e.target.value.toUpperCase())}
+        className="hidden"
+      />
+      <span>{label.name}</span>
+      <button
+        type="button"
+        onClick={onRemove}
+        title="Remove"
+        className="opacity-60 hover:opacity-100 transition-opacity"
+        style={{ color }}
+      >
+        <X size={12} />
+      </button>
+    </span>
+  )
+}
 
 function ClassificationLabelsEditor({ labels, onChange }) {
   const [draft, setDraft] = useState('')
@@ -161,18 +217,17 @@ function ClassificationLabelsEditor({ labels, onChange }) {
   const add = () => {
     const v = draft.trim()
     if (!v) return
-    if (list.some(l => l.toLowerCase() === v.toLowerCase())) {
+    if (list.some(l => l.name.toLowerCase() === v.toLowerCase())) {
       toast.error('That label already exists.')
       return
     }
-    onChange([...list, v])
+    onChange([...list, { name: v, color: suggestColor(v) }])
     setDraft('')
   }
 
-  const remove = (label) => {
-    onChange(list.filter(l => l !== label))
-  }
-
+  const remove = (name) => onChange(list.filter(l => l.name !== name))
+  const setColor = (name, color) =>
+    onChange(list.map(l => (l.name === name ? { ...l, color } : l)))
   const reset = () => onChange(DEFAULT_LABELS)
 
   return (
@@ -184,25 +239,18 @@ function ClassificationLabelsEditor({ labels, onChange }) {
             Document Classification Labels
           </h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Shown on every form so the requester can mark its sensitivity. Order is preserved.
+            These show up when an admin creates or edits a form — they pick which one applies. Click a label's color dot to change its color.
           </p>
         </div>
 
         <div className="flex flex-wrap gap-2">
           {list.map(label => (
-            <span
-              key={label}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-muted text-foreground text-xs"
-            >
-              {label}
-              <button
-                onClick={() => remove(label)}
-                className="text-muted-foreground hover:text-destructive transition-colors"
-                title="Remove"
-              >
-                <X size={12} />
-              </button>
-            </span>
+            <LabelChip
+              key={label.name}
+              label={label}
+              onColorChange={(c) => setColor(label.name, c)}
+              onRemove={() => remove(label.name)}
+            />
           ))}
           {!list.length && (
             <p className="text-xs text-muted-foreground italic">No labels — forms will not show a classification field.</p>
@@ -220,9 +268,7 @@ function ClassificationLabelsEditor({ labels, onChange }) {
           <Button size="sm" variant="outline" onClick={add}>
             <Plus size={13} className="mr-1" /> Add
           </Button>
-          <Button size="sm" variant="ghost" onClick={reset}>
-            Reset to defaults
-          </Button>
+          <Button size="sm" variant="ghost" onClick={reset}>Reset to defaults</Button>
         </div>
       </CardContent>
     </Card>
@@ -239,7 +285,6 @@ export default function Settings() {
   })
   const org = orgRes?.data
 
-  // Local draft state for non-image fields, synced from org once loaded
   const [accent, setAccent] = useState('')
   const [labels, setLabels] = useState(DEFAULT_LABELS)
   const initRef = useRef(false)
@@ -247,9 +292,11 @@ export default function Settings() {
   useEffect(() => {
     if (org && !initRef.current) {
       setAccent(org.letterhead_accent || '')
-      setLabels(org.classification_labels && org.classification_labels.length
-        ? org.classification_labels
-        : DEFAULT_LABELS)
+      setLabels(
+        org.classification_labels && org.classification_labels.length
+          ? org.classification_labels
+          : DEFAULT_LABELS
+      )
       initRef.current = true
     }
   }, [org])
@@ -271,7 +318,7 @@ export default function Settings() {
     onSuccess: () => {
       toast.success('Settings saved.')
       qc.invalidateQueries({ queryKey: ['my-organization'] })
-      initRef.current = false   // re-sync from server
+      initRef.current = false
     },
     onError: (err) => {
       toast.error(err?.response?.data?.detail || 'Save failed.')
@@ -314,8 +361,7 @@ export default function Settings() {
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
             <Building2 size={18} className="text-muted-foreground" />
@@ -325,20 +371,27 @@ export default function Settings() {
             Letterhead and classification options applied to every form created in <strong>{org.name}</strong>.
           </p>
         </div>
-        <Button onClick={() => updateMut.mutate()} disabled={!dirty || updateMut.isPending}>
-          <Save size={14} className="mr-1.5" />
-          {updateMut.isPending ? 'Saving…' : 'Save changes'}
-        </Button>
+
+        {/* Save state indicator — explicit feedback instead of a grayed button */}
+        {dirty ? (
+          <Button onClick={() => updateMut.mutate()} disabled={updateMut.isPending}>
+            <Save size={14} className="mr-1.5" />
+            {updateMut.isPending ? 'Saving…' : 'Save changes'}
+          </Button>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 text-xs text-emerald-600 font-medium bg-emerald-500/10 px-3 py-2 rounded-md border border-emerald-500/20">
+            <Check size={14} /> All changes saved
+          </span>
+        )}
       </div>
 
       {dirty && (
         <Alert>
           <AlertCircle size={14} className="inline mr-1.5" />
-          You have unsaved changes.
+          You have unsaved changes to accent color and/or classification labels. Image uploads save automatically.
         </Alert>
       )}
 
-      {/* Letterhead images */}
       <div className="grid gap-4 md:grid-cols-2">
         <LetterheadImageCard
           kind="header"
@@ -358,7 +411,6 @@ export default function Settings() {
         />
       </div>
 
-      {/* Accent color */}
       <Card>
         <CardContent className="p-5 space-y-3">
           <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
@@ -383,15 +435,12 @@ export default function Settings() {
               maxLength={9}
             />
             {accent && (
-              <Button size="sm" variant="ghost" onClick={() => setAccent('')}>
-                Clear
-              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setAccent('')}>Clear</Button>
             )}
           </div>
         </CardContent>
       </Card>
 
-      {/* Classification labels */}
       <ClassificationLabelsEditor labels={labels} onChange={setLabels} />
     </div>
   )

@@ -1,6 +1,24 @@
 from pydantic import BaseModel, field_validator
-from typing import Optional, List
+from typing import Optional, List, Union
 from datetime import datetime
+
+
+class ClassificationLabel(BaseModel):
+    name: str
+    color: Optional[str] = None   # hex like "#EF4444"
+
+
+def _normalize_labels(value) -> Optional[List[dict]]:
+    """Accept either list[str] (legacy) or list[{name,color}] and normalize to dicts."""
+    if value is None:
+        return None
+    out: List[dict] = []
+    for item in value:
+        if isinstance(item, str):
+            out.append({"name": item, "color": None})
+        elif isinstance(item, dict) and item.get("name"):
+            out.append({"name": item["name"], "color": item.get("color")})
+    return out
 
 
 class OrganizationCreate(BaseModel):
@@ -14,7 +32,12 @@ class OrganizationUpdate(BaseModel):
     subscription_plan: Optional[str] = None
     is_active: Optional[bool] = None
     letterhead_accent: Optional[str] = None
-    classification_labels: Optional[List[str]] = None
+    classification_labels: Optional[List[Union[ClassificationLabel, str]]] = None
+
+    @field_validator("classification_labels", mode="before")
+    @classmethod
+    def _normalize(cls, v):
+        return _normalize_labels(v)
 
 
 class OrganizationResponse(BaseModel):
@@ -28,7 +51,7 @@ class OrganizationResponse(BaseModel):
     has_header_image: bool = False
     has_footer_image: bool = False
     letterhead_accent: Optional[str] = None
-    classification_labels: Optional[List[str]] = None
+    classification_labels: Optional[List[ClassificationLabel]] = None
 
     class Config:
         from_attributes = True
@@ -37,6 +60,11 @@ class OrganizationResponse(BaseModel):
     @classmethod
     def _coerce_bool(cls, v):
         return bool(v)
+
+    @field_validator("classification_labels", mode="before")
+    @classmethod
+    def _normalize_for_response(cls, v):
+        return _normalize_labels(v)
 
 
 class DepartmentCreate(BaseModel):

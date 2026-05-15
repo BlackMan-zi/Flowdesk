@@ -9,7 +9,29 @@ def gen_uuid():
     return str(uuid.uuid4())
 
 
-DEFAULT_CLASSIFICATION_LABELS = ["Public", "Internal", "Confidential", "Restricted"]
+# Defaults — colors chosen so common labels are intuitive at a glance.
+DEFAULT_CLASSIFICATION_LABELS = [
+    {"name": "Public",       "color": "#22C55E"},  # green
+    {"name": "Internal",     "color": "#EAB308"},  # yellow
+    {"name": "Confidential", "color": "#EF4444"},  # red
+    {"name": "Restricted",   "color": "#64748B"},  # slate
+]
+
+# Map of well-known label names → suggested color, used when admins add a new
+# label by name and we want to auto-pick a sensible default.
+SUGGESTED_LABEL_COLORS = {
+    "public":       "#22C55E",
+    "internal":     "#EAB308",
+    "confidential": "#EF4444",
+    "secret":       "#DC2626",
+    "restricted":   "#64748B",
+    "private":      "#A855F7",
+    "draft":        "#94A3B8",
+}
+
+
+def suggest_label_color(name: str) -> str:
+    return SUGGESTED_LABEL_COLORS.get((name or "").strip().lower(), "#64748B")
 
 
 class Organization(Base):

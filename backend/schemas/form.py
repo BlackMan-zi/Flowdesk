@@ -69,6 +69,7 @@ class FormDefinitionCreate(BaseModel):
     allow_backdating: bool = False
     allow_attachments: bool = True
     approval_template_id: Optional[str] = None
+    confidentiality: Optional[str] = None  # matches one of org.classification_labels[].name
     fields: List[FormFieldCreate] = []
 
 
@@ -82,6 +83,7 @@ class FormDefinitionUpdate(BaseModel):
     allow_backdating: Optional[bool] = None
     allow_attachments: Optional[bool] = None
     approval_template_id: Optional[str] = None
+    confidentiality: Optional[str] = None
     is_active: Optional[bool] = None
 
 
@@ -121,6 +123,7 @@ class FormDefinitionResponse(BaseModel):
     approval_template_id: Optional[str]
     approval_template: Optional[ApprovalTemplateBrief] = None
     pdf_template_path: Optional[str] = None
+    confidentiality: Optional[str] = None
     is_active: bool
     fields: List[FormFieldResponse] = []
 

@@ -7,6 +7,7 @@ import {
   listApprovalTemplates
 } from '../../api/forms'
 import { listDepartments } from '../../api/users'
+import { getMyOrganization } from '../../api/settings'
 import { Card, CardContent } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Badge } from '../../components/ui/Badge'
@@ -15,8 +16,16 @@ import { Alert } from '../../components/ui/alert'
 import { cn } from '../../lib/utils'
 import {
   Plus, LayoutTemplate, Settings, Search, X, Trash2, AlertTriangle,
-  Building2, Eye, EyeOff, FolderOpen
+  Building2, Eye, EyeOff, FolderOpen, Shield
 } from 'lucide-react'
+
+// Defaults to use when the org hasn't customised classification labels yet.
+const FALLBACK_CLASSIFICATION_LABELS = [
+  { name: 'Public',       color: '#22C55E' },
+  { name: 'Internal',     color: '#EAB308' },
+  { name: 'Confidential', color: '#EF4444' },
+  { name: 'Restricted',   color: '#64748B' },
+]
 
 // ── Department multi-select picker ────────────────────────────────────────────
 
@@ -174,6 +183,7 @@ const EMPTY_FORM = {
   allow_backdating: false,
   allow_attachments: true,
   approval_template_id: '',
+  confidentiality: '',
   fields: []
 }
 
@@ -202,6 +212,14 @@ export default function AdminFormDefinitions() {
     queryFn: () => listDepartments().then(r => r.data),
     enabled: modalOpen
   })
+  const { data: org } = useQuery({
+    queryKey: ['my-organization'],
+    queryFn: () => getMyOrganization().then(r => r.data),
+  })
+  const classificationLabels = useMemo(() => {
+    const list = org?.classification_labels
+    return list && list.length ? list : FALLBACK_CLASSIFICATION_LABELS
+  }, [org])
 
   const set = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.value }))
   const setBool = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.checked }))
@@ -224,6 +242,7 @@ export default function AdminFormDefinitions() {
       allow_backdating: d.allow_backdating,
       allow_attachments: d.allow_attachments,
       approval_template_id: d.approval_template_id || '',
+      confidentiality: d.confidentiality || '',
       fields: d.fields || []
     })
     setError('')
@@ -260,6 +279,7 @@ export default function AdminFormDefinitions() {
         allow_backdating: form.allow_backdating,
         allow_attachments: form.allow_attachments,
         approval_template_id: form.approval_template_id || null,
+        confidentiality: form.confidentiality || null,
       }
       return editing ? updateFormDefinition(editing.id, payload) : createFormDefinition(payload)
     },
@@ -376,9 +396,21 @@ export default function AdminFormDefinitions() {
                 {filtered.map(r => (
                   <tr key={r.id} className="hover:bg-muted/20 transition-colors">
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <FolderOpen size={14} className="text-primary flex-shrink-0" />
                         <span className="font-medium text-foreground">{r.name}</span>
+                        {r.confidentiality && (() => {
+                          const label = classificationLabels.find(l => l.name === r.confidentiality)
+                          const color = label?.color || '#64748B'
+                          return (
+                            <span
+                              className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border"
+                              style={{ color, borderColor: `${color}66`, backgroundColor: `${color}1A` }}
+                            >
+                              {r.confidentiality}
+                            </span>
+                          )
+                        })()}
                       </div>
                       {r.description && (
                         <p className="text-xs text-muted-foreground mt-0.5 pl-5 line-clamp-1">{r.description}</p>
@@ -536,6 +568,52 @@ export default function AdminFormDefinitions() {
                 )}
               </div>
             )}
+
+            {/* Classification */}
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                <Shield size={13} className="text-muted-foreground" />
+                Document Classification
+                <span className="text-xs text-muted-foreground font-normal ml-1">— shown at the top of every submitted form</span>
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setForm(p => ({ ...p, confidentiality: '' }))}
+                  className={cn(
+                    'px-3 py-1.5 rounded-full border text-xs font-medium transition-colors',
+                    !form.confidentiality
+                      ? 'bg-muted border-foreground/30 text-foreground'
+                      : 'border-border text-muted-foreground hover:border-foreground/40'
+                  )}
+                >
+                  None
+                </button>
+                {classificationLabels.map(label => {
+                  const selected = form.confidentiality === label.name
+                  const color = label.color || '#64748B'
+                  return (
+                    <button
+                      type="button"
+                      key={label.name}
+                      onClick={() => setForm(p => ({ ...p, confidentiality: label.name }))}
+                      className="px-3 py-1.5 rounded-full border text-xs font-medium transition-all"
+                      style={{
+                        backgroundColor: selected ? `${color}26` : 'transparent',
+                        borderColor: selected ? color : `${color}66`,
+                        color: color,
+                        boxShadow: selected ? `0 0 0 1px ${color}` : 'none',
+                      }}
+                    >
+                      {label.name}
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Manage available labels in <strong>Configuration → Organization</strong>.
+              </p>
+            </div>
 
             {/* Toggles */}
             <div className="flex gap-6 pt-1">

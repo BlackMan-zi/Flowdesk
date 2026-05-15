@@ -22,8 +22,12 @@ from config import settings as app_settings
 router = APIRouter(prefix="/settings", tags=["Settings"])
 
 
-ALLOWED_IMAGE_TYPES = {"image/png", "image/jpeg", "image/jpg", "image/webp"}
-MAX_IMAGE_BYTES = 4 * 1024 * 1024  # 4 MB
+MAX_IMAGE_BYTES = 8 * 1024 * 1024  # 8 MB
+
+# Accept any browser-displayable image format. We refuse SVG by default to
+# avoid script injection — admins who really need vector logos can switch to
+# a rasterised export. PDFs are not accepted as letterhead images.
+_ALLOWED_EXTS = {"png", "jpg", "jpeg", "webp", "gif", "bmp", "tiff", "tif", "ico", "avif"}
 
 
 def _branding_dir(org_id: str) -> str:
@@ -32,9 +36,25 @@ def _branding_dir(org_id: str) -> str:
     return path
 
 
+def _resolve_ext(file: UploadFile) -> str:
+    ext = (file.filename or "").rsplit(".", 1)[-1].lower()
+    if ext in _ALLOWED_EXTS:
+        return ext
+    # Fall back to MIME-derived extension for browsers that send a generic name
+    ct = (file.content_type or "").lower()
+    if ct.startswith("image/"):
+        guess = ct.split("/", 1)[1].split(";", 1)[0]
+        if guess in _ALLOWED_EXTS:
+            return guess
+    return "png"
+
+
 def _save_image(file: UploadFile, dest_path: str) -> None:
-    if file.content_type not in ALLOWED_IMAGE_TYPES:
-        raise HTTPException(status_code=400, detail="Only PNG, JPG, or WEBP images are allowed.")
+    ct = (file.content_type or "").lower()
+    if ct and not ct.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Uploaded file must be an image.")
+    if ct == "image/svg+xml":
+        raise HTTPException(status_code=400, detail="SVG uploads are not supported — please export to PNG.")
     # Stream to disk, enforce size limit
     total = 0
     with open(dest_path, "wb") as out:
@@ -46,7 +66,7 @@ def _save_image(file: UploadFile, dest_path: str) -> None:
             if total > MAX_IMAGE_BYTES:
                 out.close()
                 os.remove(dest_path)
-                raise HTTPException(status_code=400, detail="Image exceeds 4 MB limit.")
+                raise HTTPException(status_code=400, detail="Image exceeds 8 MB limit.")
             out.write(chunk)
 
 
@@ -93,12 +113,10 @@ async def upload_header_image(
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
 
-    ext = (file.filename or "").rsplit(".", 1)[-1].lower() or "png"
-    if ext not in ("png", "jpg", "jpeg", "webp"):
-        ext = "png"
+    ext = _resolve_ext(file)
     dest = os.path.join(_branding_dir(org.id), f"header.{ext}")
     # Remove any previous header file with a different extension
-    for prev_ext in ("png", "jpg", "jpeg", "webp"):
+    for prev_ext in _ALLOWED_EXTS:
         prev = os.path.join(_branding_dir(org.id), f"header.{prev_ext}")
         if prev != dest and os.path.exists(prev):
             os.remove(prev)
@@ -119,11 +137,9 @@ async def upload_footer_image(
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
 
-    ext = (file.filename or "").rsplit(".", 1)[-1].lower() or "png"
-    if ext not in ("png", "jpg", "jpeg", "webp"):
-        ext = "png"
+    ext = _resolve_ext(file)
     dest = os.path.join(_branding_dir(org.id), f"footer.{ext}")
-    for prev_ext in ("png", "jpg", "jpeg", "webp"):
+    for prev_ext in _ALLOWED_EXTS:
         prev = os.path.join(_branding_dir(org.id), f"footer.{prev_ext}")
         if prev != dest and os.path.exists(prev):
             os.remove(prev)
