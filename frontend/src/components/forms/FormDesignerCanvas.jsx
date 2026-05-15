@@ -703,9 +703,17 @@ function FreeField({
   )
 }
 
-// ── Page-break dashed lines (visual A4 boundaries) ────────────────────────────
+// ── Page boundaries (multi-page rendering chrome) ────────────────────────────
+//
+// At each A4 page boundary, render a strip showing:
+//   - the previous page's footer (compressed)
+//   - "End of page N · Page N+1 of M" labels
+//   - the next page's header (compressed)
+// This makes the canvas look like a multi-page document while the underlying
+// body remains a single tall scrollable element. Real content-aware page
+// splitting lands at fill / PDF-export time (Phase D / E).
 
-function PageBreaks({ bodyRef, accent }) {
+function PageBreaks({ bodyRef, accent, headerUrl, footerUrl }) {
   const [pageCount, setPageCount] = useState(1)
   const [pageHeight, setPageHeight] = useState(0)
 
@@ -714,10 +722,8 @@ function PageBreaks({ bodyRef, accent }) {
     const calc = () => {
       const body = bodyRef.current
       if (!body) return
-      // Use the body's actual width to derive A4-correct page height.
-      // A4 portrait ratio = 1 : √2 ≈ 1.4142. Allow some margin for header/footer.
+      // A4 portrait body area ≈ width × 1.13 (after deducting header & footer bands).
       const w = body.clientWidth
-      // ~80% of A4 height is content (the rest is header/footer); roughly w * 1.13
       const ph = Math.round(w * 1.13)
       const h = body.scrollHeight
       setPageHeight(ph)
@@ -731,21 +737,50 @@ function PageBreaks({ bodyRef, accent }) {
 
   if (pageCount <= 1 || pageHeight <= 0) return null
 
+  const CHROME_HEIGHT = 120
+
   return (
     <>
       {Array.from({ length: pageCount - 1 }).map((_, i) => (
         <div
           key={i}
           className="absolute left-0 right-0 pointer-events-none"
-          style={{ top: `${(i + 1) * pageHeight}px` }}
+          style={{
+            top: `${(i + 1) * pageHeight - CHROME_HEIGHT / 2}px`,
+            height: `${CHROME_HEIGHT}px`,
+            zIndex: 5,
+          }}
         >
-          <div className="border-t-2 border-dashed border-slate-300" />
-          <span
-            className="absolute right-0 -top-3 text-[9px] font-semibold uppercase tracking-wide bg-white px-1.5 py-0.5 rounded border border-slate-200"
-            style={{ color: accent }}
-          >
-            Page {i + 2}
-          </span>
+          <div className="w-full h-full flex flex-col bg-white border-y-2 border-dashed border-slate-300 shadow-sm">
+            {/* Previous page's footer */}
+            <div className="flex-1 flex items-center justify-center px-12 border-b border-slate-100 min-h-0">
+              {footerUrl ? (
+                <img src={footerUrl} alt="" className="max-h-full max-w-full object-contain opacity-90" />
+              ) : (
+                <span className="text-[9px] text-slate-400 italic">— end of page —</span>
+              )}
+            </div>
+            {/* Page labels */}
+            <div className="flex items-center justify-between px-3 py-1 bg-slate-50/80 border-y border-slate-200">
+              <span className="text-[9px] font-semibold uppercase tracking-wider text-slate-500">
+                End of page {i + 1}
+              </span>
+              <span
+                className="text-[9px] font-semibold uppercase tracking-wider rounded-full px-2 py-0.5"
+                style={{ color: accent, borderColor: `${accent}33`, backgroundColor: `${accent}10`, borderWidth: 1, borderStyle: 'solid' }}
+              >
+                Page {i + 2} of {pageCount}
+              </span>
+            </div>
+            {/* Next page's header */}
+            <div className="flex-1 flex items-center justify-center px-12 border-t border-slate-100 min-h-0">
+              {headerUrl ? (
+                <img src={headerUrl} alt="" className="max-h-full max-w-full object-contain opacity-90" />
+              ) : (
+                <span className="text-[9px] text-slate-400 italic">— start of page —</span>
+              )}
+            </div>
+          </div>
         </div>
       ))}
     </>
@@ -915,8 +950,8 @@ export default function FormDesignerCanvas({
 
       {/* Body */}
       <div ref={bodyRef} className="px-12 py-6 relative" data-canvas-body>
-        {/* A4 page-break dashed lines + label */}
-        <PageBreaks bodyRef={bodyRef} accent={accent} />
+        {/* Multi-page rendering chrome (footer of page N + label strip + header of page N+1) */}
+        <PageBreaks bodyRef={bodyRef} accent={accent} headerUrl={headerUrl} footerUrl={footerUrl} />
 
         {/* Free-positioned fields render in an overlay above the section flow */}
         {freeFields.map(f => (
