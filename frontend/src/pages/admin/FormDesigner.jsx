@@ -31,7 +31,8 @@ import {
 } from 'lucide-react'
 import ApprovalEditor, { stepsToApiPayload, stepsFromApi } from '../../components/forms/ApprovalEditor'
 import InitiatorRolesPanel from '../../components/forms/InitiatorRolesPanel'
-import FormDesignerCanvas, { FIELD_TYPE_META, FIELD_TYPES_LIST } from '../../components/forms/FormDesignerCanvas'
+import FormDesignerCanvas, { FIELD_TYPE_META, FIELD_TYPES_LIST, columnLetter } from '../../components/forms/FormDesignerCanvas'
+import Toolbox from '../../components/forms/Toolbox'
 import { evaluate as evalFormula, SUPPORTED_FUNCTIONS } from '../../lib/formula'
 import LetterheadPage from '../../components/letterhead/LetterheadPage'
 import {
@@ -564,6 +565,138 @@ function TabButton({ active, onClick, icon: Icon, label, count, hint }) {
   )
 }
 
+// ── Formula bar (top) ────────────────────────────────────────────────────────
+
+function FormulaBar({ selectedField, selectedColumnIdx, onUpdateField }) {
+  // Decide what the formula bar is editing:
+  //  - calculated field         → field.calculation_formula
+  //  - selected table column    → field.table_columns[idx].formula
+  //  - otherwise                → disabled / hint
+  const target = (() => {
+    if (!selectedField) return null
+    if (selectedField.field_type === 'calculated') {
+      return {
+        scope: 'calculated',
+        formula: selectedField.calculation_formula || '',
+        label: `${selectedField.field_label || 'Calculated'}`,
+        commit: (v) => onUpdateField({ ...selectedField, calculation_formula: v, calculation_enabled: true }),
+      }
+    }
+    if (selectedField.field_type === 'table' && selectedColumnIdx != null) {
+      const col = selectedField.table_columns?.[selectedColumnIdx]
+      if (!col) return null
+      return {
+        scope: 'column',
+        formula: col.formula || '',
+        label: `Column ${columnLetter(selectedColumnIdx)} · ${col.label || col.key}`,
+        commit: (v) => {
+          const cols = [...(selectedField.table_columns || [])]
+          cols[selectedColumnIdx] = { ...cols[selectedColumnIdx], formula: v }
+          onUpdateField({ ...selectedField, table_columns: cols })
+        },
+      }
+    }
+    return null
+  })()
+
+  const [draft, setDraft] = useState('')
+  useEffect(() => { setDraft(target?.formula || '') }, [target?.scope, target?.label])
+
+  const disabled = !target
+
+  return (
+    <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/40">
+      <span className="inline-flex items-center gap-1 text-xs font-mono font-bold text-primary">
+        <span className="italic">f</span>x
+      </span>
+      <span className={cn(
+        'text-[10px] uppercase tracking-wide font-semibold min-w-[150px] truncate',
+        disabled ? 'text-muted-foreground/50' : 'text-muted-foreground'
+      )}>
+        {target ? target.label : 'Select a calculated field or a table column to edit its formula'}
+      </span>
+      <Input
+        value={disabled ? '' : draft}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={() => target && draft !== target.formula && target.commit(draft)}
+        onKeyDown={e => {
+          if (e.key === 'Enter' && target) target.commit(draft)
+          if (e.key === 'Escape') setDraft(target?.formula || '')
+        }}
+        disabled={disabled}
+        placeholder={disabled ? '' : '=qty * unit_cost  or  =B2*C2  or  =SUM(items.total)'}
+        className="flex-1 font-mono text-xs"
+      />
+    </div>
+  )
+}
+
+// ── Table toolbar (bottom, contextual) ───────────────────────────────────────
+
+function TableToolbar({ field, selectedColumnIdx, onInsertColumn, onDeleteColumn, onDistribute, onToggleTotal }) {
+  const cols = field.table_columns || []
+  const hasCol = selectedColumnIdx != null
+  const letter = hasCol ? columnLetter(selectedColumnIdx) : ''
+  return (
+    <div className="flex items-center gap-2 px-3 py-1.5 border-t border-border bg-muted/40 text-xs">
+      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mr-2">
+        Table
+        {hasCol && <span className="ml-1 text-primary font-mono">· {letter}</span>}
+      </span>
+      <button
+        disabled={!hasCol}
+        onClick={() => onInsertColumn(field, selectedColumnIdx)}
+        className="px-2 py-1 rounded border border-border bg-background hover:border-primary hover:text-primary disabled:opacity-40 disabled:cursor-not-allowed"
+        title="Insert a new column to the LEFT of the selected one"
+      >
+        ◧ Insert left
+      </button>
+      <button
+        disabled={!hasCol}
+        onClick={() => onInsertColumn(field, selectedColumnIdx + 1)}
+        className="px-2 py-1 rounded border border-border bg-background hover:border-primary hover:text-primary disabled:opacity-40 disabled:cursor-not-allowed"
+        title="Insert a new column to the RIGHT of the selected one"
+      >
+        ◨ Insert right
+      </button>
+      <button
+        disabled={!hasCol || cols.length <= 1}
+        onClick={() => onDeleteColumn(field, selectedColumnIdx)}
+        className="px-2 py-1 rounded border border-border bg-background hover:border-destructive hover:text-destructive disabled:opacity-40 disabled:cursor-not-allowed"
+        title="Delete the selected column"
+      >
+        🗑 Delete column
+      </button>
+      <div className="w-px h-4 bg-border" />
+      <button
+        onClick={() => onDistribute(field)}
+        disabled={cols.length === 0}
+        className="px-2 py-1 rounded border border-border bg-background hover:border-primary hover:text-primary disabled:opacity-40"
+        title="Make all columns the same width"
+      >
+        ⇔ Distribute evenly
+      </button>
+      <button
+        disabled={!hasCol}
+        onClick={() => onToggleTotal(field, selectedColumnIdx)}
+        className={cn(
+          'px-2 py-1 rounded border bg-background hover:border-primary hover:text-primary disabled:opacity-40 disabled:cursor-not-allowed',
+          hasCol && cols[selectedColumnIdx]?.show_total
+            ? 'border-primary text-primary'
+            : 'border-border'
+        )}
+        title="Toggle showing the sum of this column at the bottom"
+      >
+        Σ Sum at bottom
+      </button>
+      <div className="flex-1" />
+      <span className="text-[10px] text-muted-foreground italic">
+        Click a column letter to select it · drag header dividers to resize
+      </span>
+    </div>
+  )
+}
+
 // ── Main designer page ───────────────────────────────────────────────────────
 
 export default function FormDesigner() {
@@ -591,6 +724,7 @@ export default function FormDesigner() {
   // Local working state — list of field drafts in render order.
   const [fields, setFields] = useState([])
   const [selectedId, setSelectedId] = useState(null)
+  const [selectedColumnIdx, setSelectedColumnIdx] = useState(null)
   const [sections, setSections] = useState([DEFAULT_SECTION])
   const [previewOpen, setPreviewOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
@@ -600,6 +734,9 @@ export default function FormDesigner() {
   const [approvalSteps, setApprovalSteps] = useState([])
   const [initiatorRoleIds, setInitiatorRoleIds] = useState([])
   const initRef = useRef(false)
+
+  // Reset column selection whenever the selected field changes.
+  useEffect(() => { setSelectedColumnIdx(null) }, [selectedId])
 
   // Seed once we have form + roles + users (the step adapter needs them for
   // name resolution). Save-success re-seeds explicitly from the response.
@@ -671,6 +808,43 @@ export default function FormDesigner() {
     }
     setFields(prev => [...prev, newField])
     setSelectedId(tempId)
+  }
+
+  // Add a field via the left toolbox — drops into the selected field's
+  // section, or the last section if nothing is selected.
+  const addFromToolbox = (type) => {
+    const sel = fields.find(f => f.id === selectedId)
+    const targetSection = sel?.section_name || sections[sections.length - 1] || DEFAULT_SECTION
+    if (!sections.includes(targetSection)) {
+      setSections(prev => [...prev, targetSection])
+    }
+    addField(targetSection, type)
+  }
+
+  // ── Table column operations (used by the bottom Table toolbar) ──────────────
+  const insertColumn = (tableField, atIdx) => {
+    const cols = [...(tableField.table_columns || [])]
+    const newCol = { key: `col_${cols.length + 1}`, label: '', type: 'text' }
+    cols.splice(atIdx, 0, newCol)
+    updateField({ ...tableField, table_columns: cols })
+    setSelectedColumnIdx(atIdx)
+  }
+  const deleteColumn = (tableField, atIdx) => {
+    const cols = (tableField.table_columns || []).filter((_, i) => i !== atIdx)
+    updateField({ ...tableField, table_columns: cols })
+    setSelectedColumnIdx(null)
+  }
+  const distributeColumns = (tableField) => {
+    const cols = tableField.table_columns || []
+    if (cols.length === 0) return
+    const w = `${(100 / cols.length).toFixed(1)}%`
+    updateField({ ...tableField, table_columns: cols.map(c => ({ ...c, width: w })) })
+  }
+  const toggleColumnTotal = (tableField, atIdx) => {
+    const cols = [...(tableField.table_columns || [])]
+    if (!cols[atIdx]) return
+    cols[atIdx] = { ...cols[atIdx], show_total: !cols[atIdx].show_total }
+    updateField({ ...tableField, table_columns: cols })
   }
 
   // Reorder fields within a single section (used by the canvas DnD)
@@ -872,45 +1046,73 @@ export default function FormDesigner() {
       )}
 
       {tab === 'fields' && (
-        <div className="flex-1 grid grid-cols-[1fr_320px] overflow-hidden">
-          {/* ── Canvas: letterhead-styled WYSIWYG editor ────────────────── */}
-          <div className="overflow-y-auto bg-muted/30 p-6">
-            <FormDesignerCanvas
-              formDef={formDef}
-              headerUrl={previewUrls.header}
-              footerUrl={previewUrls.footer}
-              accent={org?.letterhead_accent}
-              classification={
-                formDef.confidentiality
-                  ? (org?.classification_labels || []).find(l => l.name === formDef.confidentiality) || null
-                  : null
-              }
-              sections={sections}
-              fields={fields}
-              approvalSteps={approvalSteps}
-              users={users}
-              roles={roles}
-              selectedFieldId={selectedId}
-              onSelectField={setSelectedId}
-              onAddSection={addSection}
-              onRenameSection={renameSection}
-              onMoveSection={moveSection}
-              onDeleteSection={deleteSection}
-              onAddField={addField}
-              onUpdateField={updateField}
-              onDeleteField={deleteField}
-              onReorderFields={reorderFields}
-            />
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Formula bar (top) */}
+          <FormulaBar
+            selectedField={selectedField}
+            selectedColumnIdx={selectedColumnIdx}
+            onUpdateField={updateField}
+          />
+
+          {/* Body: toolbox | canvas | properties */}
+          <div className="flex-1 grid grid-cols-[200px_1fr_320px] overflow-hidden">
+            {/* Toolbox */}
+            <Toolbox onAdd={addFromToolbox} />
+
+            {/* Canvas */}
+            <div className="overflow-y-auto bg-muted/30 p-6">
+              <FormDesignerCanvas
+                formDef={formDef}
+                headerUrl={previewUrls.header}
+                footerUrl={previewUrls.footer}
+                accent={org?.letterhead_accent}
+                classification={
+                  formDef.confidentiality
+                    ? (org?.classification_labels || []).find(l => l.name === formDef.confidentiality) || null
+                    : null
+                }
+                sections={sections}
+                fields={fields}
+                approvalSteps={approvalSteps}
+                users={users}
+                roles={roles}
+                selectedFieldId={selectedId}
+                onSelectField={setSelectedId}
+                selectedColumnIdx={selectedColumnIdx}
+                onSelectColumn={setSelectedColumnIdx}
+                onAddSection={addSection}
+                onRenameSection={renameSection}
+                onMoveSection={moveSection}
+                onDeleteSection={deleteSection}
+                onAddField={addField}
+                onUpdateField={updateField}
+                onDeleteField={deleteField}
+                onReorderFields={reorderFields}
+              />
+            </div>
+
+            {/* Properties drawer */}
+            <aside className="border-l border-border bg-card overflow-y-auto p-4">
+              <PropertiesPanel
+                field={selectedField}
+                fields={fields}
+                sections={sections}
+                onChange={updateField}
+              />
+            </aside>
           </div>
-          {/* ── Properties drawer ────────────────────────────────────────── */}
-          <aside className="border-l border-border bg-card overflow-y-auto p-4">
-            <PropertiesPanel
+
+          {/* Table toolbar (bottom, contextual) */}
+          {selectedField?.field_type === 'table' && (
+            <TableToolbar
               field={selectedField}
-              fields={fields}
-              sections={sections}
-              onChange={updateField}
+              selectedColumnIdx={selectedColumnIdx}
+              onInsertColumn={insertColumn}
+              onDeleteColumn={deleteColumn}
+              onDistribute={distributeColumns}
+              onToggleTotal={toggleColumnTotal}
             />
-          </aside>
+          )}
         </div>
       )}
 

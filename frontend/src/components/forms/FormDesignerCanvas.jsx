@@ -148,9 +148,38 @@ function ApprovalRows({ steps, accent, users, roles }) {
 
 // ── Field cell body — what the cell renders inside the grid ───────────────────
 
-// ── Table preview with drag-to-resize columns ────────────────────────────────
+// ── Column-letter helper (A, B, C, ..., Z, AA, AB...) ────────────────────────
 
-function TablePreview({ field, accent, isSelected, onUpdate }) {
+export function columnLetter(idx) {
+  let n = idx
+  let s = ''
+  do {
+    s = String.fromCharCode(65 + (n % 26)) + s
+    n = Math.floor(n / 26) - 1
+  } while (n >= 0)
+  return s
+}
+
+// Build a per-row context map for formula evaluation that includes BOTH
+// the user's column keys AND Excel-style cell-letter aliases (A, A2, B, B2,
+// ...). Row number is informational — letter alone or with number resolves
+// to the same value within a per-row formula.
+export function rowFormulaContext(row, columns, rowNumber = 2) {
+  const ctx = { ...row }
+  columns.forEach((c, i) => {
+    const letter = columnLetter(i)
+    const v = row[c.key]
+    ctx[letter] = v
+    ctx[`${letter}${rowNumber}`] = v
+    // Also map row 1 for consistency (most users will write =B2*C2 anyway)
+    ctx[`${letter}1`] = v
+  })
+  return ctx
+}
+
+// ── Table preview with drag-to-resize columns + column-letter headers ────────
+
+function TablePreview({ field, accent, isSelected, onUpdate, selectedColumnIdx, onSelectColumn }) {
   const tableRef = useRef(null)
 
   const cols = field.table_columns?.length
@@ -163,8 +192,12 @@ function TablePreview({ field, accent, isSelected, onUpdate }) {
     for (const c of cols) {
       row[c.key] = (c.type === 'number' || c.type === 'currency') ? i * 10 : `Item ${i}`
     }
+    // Evaluate per-column formulas with both column-name AND Excel-letter context
     for (const c of cols) {
-      if (c.formula) row[c.key] = evalFormula(c.formula, row)
+      if (c.formula) {
+        const ctx = rowFormulaContext(row, cols, i + 1)
+        row[c.key] = evalFormula(c.formula, ctx)
+      }
     }
     return row
   })
@@ -232,11 +265,38 @@ function TablePreview({ field, accent, isSelected, onUpdate }) {
             ))}
           </colgroup>
           <thead>
+            {/* Column-letter strip (Excel-style A, B, C…) */}
+            {isSelected && (
+              <tr className="bg-slate-200 text-[8px] text-slate-600">
+                {cols.map((c, i) => (
+                  <th
+                    key={i}
+                    onClick={(e) => { e.stopPropagation(); onSelectColumn && onSelectColumn(i) }}
+                    className={cn(
+                      'text-center px-1 py-0.5 border-b border-slate-300 font-mono font-bold cursor-pointer select-none',
+                      selectedColumnIdx === i ? 'bg-primary text-primary-foreground' : 'hover:bg-slate-300'
+                    )}
+                    title={`Column ${columnLetter(i)} — click to select`}
+                  >
+                    {columnLetter(i)}
+                  </th>
+                ))}
+              </tr>
+            )}
+            {/* Column labels (admin-defined) */}
             <tr className="bg-slate-100">
               {cols.map((c, i) => (
                 <th
                   key={i}
-                  className="relative text-left px-2 py-1 border-b border-slate-300 font-semibold text-slate-600 truncate"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    if (isSelected && onSelectColumn) onSelectColumn(i)
+                  }}
+                  className={cn(
+                    'relative text-left px-2 py-1 border-b border-slate-300 font-semibold text-slate-600 truncate',
+                    isSelected && 'cursor-pointer',
+                    selectedColumnIdx === i && 'bg-primary/15 text-primary'
+                  )}
                 >
                   {c.label || `Col ${i + 1}`}
                   {c.formula && (
@@ -279,7 +339,7 @@ function TablePreview({ field, accent, isSelected, onUpdate }) {
         </table>
         {canResize && (
           <div className="mt-1 text-[9px] text-primary/60 italic">
-            Drag the line between column headers to resize.
+            Drag the line between column headers to resize · click a column letter to edit it.
           </div>
         )}
       </div>
@@ -287,7 +347,7 @@ function TablePreview({ field, accent, isSelected, onUpdate }) {
   )
 }
 
-function FieldCellBody({ field, accent, formDef, classification, approvalSteps, users, roles, isSelected, isOverlay, onUpdate }) {
+function FieldCellBody({ field, accent, formDef, classification, approvalSteps, users, roles, isSelected, isOverlay, onUpdate, selectedColumnIdx, onSelectColumn }) {
   const meta = FIELD_TYPE_META[field.field_type] || FIELD_TYPE_META.text
   const preview = previewValue(field)
 
@@ -379,6 +439,8 @@ function FieldCellBody({ field, accent, formDef, classification, approvalSteps, 
           accent={accent}
           isSelected={isSelected}
           onUpdate={onUpdate}
+          selectedColumnIdx={selectedColumnIdx}
+          onSelectColumn={onSelectColumn}
         />
       )}
       {field.field_type === 'signature' && (
@@ -428,7 +490,7 @@ function FieldCellBody({ field, accent, formDef, classification, approvalSteps, 
 
 // ── Sortable wrapper ──────────────────────────────────────────────────────────
 
-function SortableFieldCell({ field, accent, formDef, classification, approvalSteps, users, roles, isSelected, onSelect, onUpdate, onDelete }) {
+function SortableFieldCell({ field, accent, formDef, classification, approvalSteps, users, roles, isSelected, onSelect, onUpdate, onDelete, selectedColumnIdx, onSelectColumn }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: field.id })
 
@@ -458,6 +520,8 @@ function SortableFieldCell({ field, accent, formDef, classification, approvalSte
         roles={roles}
         isSelected={isSelected}
         onUpdate={onUpdate}
+        selectedColumnIdx={selectedColumnIdx}
+        onSelectColumn={onSelectColumn}
       />
       <span
         {...attributes}
@@ -676,6 +740,7 @@ function SectionBlock({
   section, fields, accent, formDef, classification, approvalSteps, users, roles,
   sectionIdx, totalSections,
   selectedFieldId, onSelectField, onAddField, onUpdateField, onDeleteField,
+  selectedColumnIdx, onSelectColumn,
   onRenameSection, onMoveSection, onDeleteSection,
   sensors, onDragEnd,
 }) {
@@ -770,9 +835,15 @@ function SectionBlock({
                 onSelect={() => onSelectField(f.id)}
                 onUpdate={onUpdateField}
                 onDelete={() => onDeleteField(f.id)}
+                selectedColumnIdx={selectedFieldId === f.id ? selectedColumnIdx : null}
+                onSelectColumn={selectedFieldId === f.id ? onSelectColumn : null}
               />
             ))}
-            <AddFieldButton onAdd={onAddField} />
+            {fields.length === 0 && (
+              <div className="col-span-12 text-center py-3 text-[11px] text-muted-foreground italic border border-dashed border-border rounded-md">
+                Empty — pick a field type from the toolbox on the left.
+              </div>
+            )}
           </div>
         </SortableContext>
       </DndContext>
@@ -786,6 +857,7 @@ export default function FormDesignerCanvas({
   formDef, headerUrl, footerUrl, accent: accentProp, classification,
   sections, fields, approvalSteps, users, roles,
   selectedFieldId, onSelectField,
+  selectedColumnIdx, onSelectColumn,
   onAddSection, onRenameSection, onMoveSection, onDeleteSection,
   onAddField, onUpdateField, onDeleteField, onReorderFields,
 }) {
@@ -872,6 +944,8 @@ export default function FormDesignerCanvas({
               totalSections={sections.length}
               selectedFieldId={selectedFieldId}
               onSelectField={onSelectField}
+              selectedColumnIdx={selectedColumnIdx}
+              onSelectColumn={onSelectColumn}
               onAddField={(t) => onAddField(s, t)}
               onUpdateField={onUpdateField}
               onDeleteField={onDeleteField}
