@@ -79,6 +79,7 @@ class ApprovalTemplateStep(Base):
 
     skip_if_missing = Column(Boolean, default=False)
     delegation_allowed = Column(Boolean, default=True)
+    is_required = Column(Boolean, default=True)                       # optional steps can be skipped without sign-back
 
     # Relationships
     template = relationship("ApprovalTemplate", back_populates="steps")

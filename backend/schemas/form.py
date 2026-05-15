@@ -29,6 +29,9 @@ class FormFieldCreate(BaseModel):
     y_pct: Optional[float] = None
     width_pct: Optional[float] = None
     height_pct: Optional[float] = None
+    # Schema-designer 12-col layout
+    grid_width: Optional[str] = None         # '1/4' | '1/3' | '1/2' | '2/3' | '3/4' | 'full'
+    free_position: Optional[bool] = False
     filled_by: Optional[str] = 'initiator'
 
 
@@ -55,6 +58,8 @@ class FormFieldResponse(BaseModel):
     y_pct: Optional[float] = None
     width_pct: Optional[float] = None
     height_pct: Optional[float] = None
+    grid_width: Optional[str] = None
+    free_position: Optional[bool] = False
     filled_by: Optional[str] = 'initiator'
 
     class Config:
@@ -100,6 +105,7 @@ class ApprovalTemplateStepBrief(BaseModel):
     specific_user_id: Optional[str] = None
     hierarchy_level: Optional[str] = None  # 'manager' | 'sn_manager' | 'hod'
     skip_if_missing: bool = False
+    is_required: bool = True
 
     class Config:
         from_attributes = True

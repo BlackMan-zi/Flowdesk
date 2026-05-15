@@ -120,6 +120,10 @@ class FormField(Base):
     y_pct = Column(Float, nullable=True)
     width_pct = Column(Float, nullable=True)
     height_pct = Column(Float, nullable=True)
+    # Schema-designer layout (new canvas): width fraction in a 12-col grid
+    # and a free-position opt-in for Round A drag-anywhere mode.
+    grid_width = Column(String(10), nullable=True, default='full')   # '1/4' | '1/3' | '1/2' | '2/3' | '3/4' | 'full'
+    free_position = Column(Boolean, default=False)
     # Field responsibility: who fills this field
     filled_by = Column(String(20), default='initiator', nullable=True)  # initiator|line_manager|sn_manager|hod|any
     is_active = Column(Boolean, default=True)

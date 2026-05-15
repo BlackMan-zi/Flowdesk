@@ -370,6 +370,8 @@ def update_form_fields_layout(
             f.y_pct = fd.y_pct
             f.width_pct = fd.width_pct
             f.height_pct = fd.height_pct
+            f.grid_width = fd.grid_width
+            f.free_position = bool(fd.free_position)
             f.filled_by = fd.filled_by or 'initiator'
             f.is_active = True
         else:
@@ -379,6 +381,8 @@ def update_form_fields_layout(
                 field_label=fd.field_label,
                 field_type=fd.field_type,
                 section_name=fd.section_name,
+                grid_width=fd.grid_width,
+                free_position=bool(fd.free_position),
                 required=fd.required,
                 auto_filled=fd.auto_filled,
                 options=fd.options,
@@ -742,7 +746,8 @@ def create_template(
             specific_user_id=step_data.specific_user_id,
             hierarchy_level=step_data.hierarchy_level,
             skip_if_missing=step_data.skip_if_missing,
-            delegation_allowed=step_data.delegation_allowed
+            delegation_allowed=step_data.delegation_allowed,
+            is_required=step_data.is_required,
         )
         db.add(step)
 
@@ -824,7 +829,8 @@ def update_template(
                 specific_user_id=step_data.specific_user_id,
                 hierarchy_level=step_data.hierarchy_level,
                 skip_if_missing=step_data.skip_if_missing,
-                delegation_allowed=step_data.delegation_allowed
+                delegation_allowed=step_data.delegation_allowed,
+                is_required=step_data.is_required,
             ))
 
     if payload.cc_recipients is not None:

@@ -13,6 +13,7 @@ class ApprovalTemplateStepCreate(BaseModel):
     hierarchy_level: Optional[str] = None  # "manager", "sn_manager", "hod"
     skip_if_missing: bool = False
     delegation_allowed: bool = True
+    is_required: bool = True
 
 
 class ApprovalTemplateCCRecipientCreate(BaseModel):
@@ -51,6 +52,7 @@ class ApprovalTemplateStepResponse(BaseModel):
     hierarchy_level: Optional[str]
     skip_if_missing: bool
     delegation_allowed: bool
+    is_required: bool = True
 
     class Config:
         from_attributes = True

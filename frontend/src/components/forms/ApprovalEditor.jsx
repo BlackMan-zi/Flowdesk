@@ -203,11 +203,22 @@ function StepCard({ step, index, isEditing, onToggleEdit, onUpdate, onDelete, on
           <label className="flex items-center gap-2 cursor-pointer pt-0.5">
             <input
               type="checkbox"
+              checked={step.is_required !== false}
+              onChange={e => onUpdate({ is_required: e.target.checked })}
+              className="rounded accent-primary w-3 h-3 flex-shrink-0"
+            />
+            <span className="text-[10px] text-muted-foreground">
+              <strong>Required</strong> — sign-off must be obtained (uncheck to make optional)
+            </span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer pt-0.5">
+            <input
+              type="checkbox"
               checked={!!step.skip_if_missing}
               onChange={e => onUpdate({ skip_if_missing: e.target.checked })}
               className="rounded accent-primary w-3 h-3 flex-shrink-0"
             />
-            <span className="text-[10px] text-muted-foreground">Skip step if approver not found</span>
+            <span className="text-[10px] text-muted-foreground">Skip step if approver not found in hierarchy</span>
           </label>
         </div>
       )}
@@ -239,6 +250,7 @@ export default function ApprovalEditor({ steps, onChange, users, roles }) {
       role_id: null, role_name: null,
       specific_user_id: null, specific_user_name: null,
       skip_if_missing: false,
+      is_required: true,
     }
     onChange([...steps, newStep])
     setEditingIdx(steps.length)
@@ -322,6 +334,7 @@ export function stepsToApiPayload(steps) {
     hierarchy_level:  s.source_type === 'hierarchy'     ? (s.hierarchy_level || 'manager') : null,
     skip_if_missing:  !!s.skip_if_missing,
     delegation_allowed: true,
+    is_required:      s.is_required !== false,
   }))
 }
 
@@ -345,6 +358,7 @@ export function stepsFromApi(apiSteps = [], roles = [], users = []) {
       specific_user_id: s.specific_user_id || null,
       specific_user_name: user?.name || null,
       skip_if_missing: !!s.skip_if_missing,
+      is_required: s.is_required !== false,
     }
   })
 }

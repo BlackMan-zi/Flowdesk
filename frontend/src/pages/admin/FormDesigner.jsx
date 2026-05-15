@@ -31,34 +31,64 @@ import {
 } from 'lucide-react'
 import ApprovalEditor, { stepsToApiPayload, stepsFromApi } from '../../components/forms/ApprovalEditor'
 import InitiatorRolesPanel from '../../components/forms/InitiatorRolesPanel'
-import FormDesignerCanvas from '../../components/forms/FormDesignerCanvas'
+import FormDesignerCanvas, { FIELD_TYPE_META, FIELD_TYPES_LIST } from '../../components/forms/FormDesignerCanvas'
 import LetterheadPage from '../../components/letterhead/LetterheadPage'
 import {
   fetchHeaderImageObjectUrl, fetchFooterImageObjectUrl,
 } from '../../api/settings'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/Modal'
 
-// ── Field type catalogue ──────────────────────────────────────────────────────
+// ── Field type catalogue (shared with canvas) ────────────────────────────────
 
-const FIELD_TYPES = [
-  { value: 'text',       label: 'Short Text',  icon: Type,           group: 'Input' },
-  { value: 'textarea',   label: 'Paragraph',   icon: AlignLeft,      group: 'Input' },
-  { value: 'number',     label: 'Number',      icon: Hash,           group: 'Input' },
-  { value: 'currency',   label: 'Currency',    icon: DollarSign,     group: 'Input' },
-  { value: 'date',       label: 'Date',        icon: Calendar,       group: 'Input' },
-  { value: 'dropdown',   label: 'Dropdown',    icon: ChevronDownIcon,group: 'Selection' },
-  { value: 'radio',      label: 'Radio',       icon: Circle,         group: 'Selection' },
-  { value: 'checkbox',   label: 'Checkbox',    icon: CheckSquare,    group: 'Selection' },
-  { value: 'table',      label: 'Table',       icon: TableIcon,      group: 'Advanced' },
-  { value: 'calculated', label: 'Calculated',  icon: Calculator,     group: 'Advanced' },
-  { value: 'reference',  label: 'Reference No',icon: HashIcon,       group: 'Advanced' },
-  { value: 'file',       label: 'Attachment',  icon: Paperclip,      group: 'Advanced' },
-  { value: 'signature',  label: 'Signature',   icon: PenLine,        group: 'Advanced' },
-]
-
-const FT = Object.fromEntries(FIELD_TYPES.map(t => [t.value, t]))
+const FT = FIELD_TYPE_META
 
 const DEFAULT_SECTION = 'General'
+
+const WIDTH_OPTIONS = [
+  { value: '1/4',  label: '1/4 (25%)' },
+  { value: '1/3',  label: '1/3 (33%)' },
+  { value: '1/2',  label: '1/2 (50%)' },
+  { value: '2/3',  label: '2/3 (66%)' },
+  { value: '3/4',  label: '3/4 (75%)' },
+  { value: 'full', label: 'Full width' },
+]
+
+// System block types → API representation.
+// System blocks aren't real input fields — they're rendered specially based on
+// auto_fill_source. We store them as text/date with a known auto_fill_source so
+// existing approval/instance code keeps working without schema migrations on
+// the FieldType enum.
+const SYSTEM_BLOCK_TO_API = {
+  reference:       { field_type: 'text', auto_fill_source: 'reference_number' },
+  submission_date: { field_type: 'date', auto_fill_source: 'submission_date' },
+  classification:  { field_type: 'text', auto_fill_source: 'form_classification' },
+  approval_block:  { field_type: 'text', auto_fill_source: 'approval_block' },
+}
+
+// Reverse lookup: auto_fill_source → UI type
+const API_TO_SYSTEM_BLOCK = Object.fromEntries(
+  Object.entries(SYSTEM_BLOCK_TO_API).map(([ui, api]) => [api.auto_fill_source, ui])
+)
+
+function toApiField(f) {
+  const sys = SYSTEM_BLOCK_TO_API[f.field_type]
+  if (sys) {
+    return {
+      ...f,
+      field_type: sys.field_type,
+      auto_filled: true,
+      auto_fill_source: sys.auto_fill_source,
+    }
+  }
+  return f
+}
+
+function fromApiField(f) {
+  if (f.auto_fill_source && API_TO_SYSTEM_BLOCK[f.auto_fill_source]) {
+    return { ...f, field_type: API_TO_SYSTEM_BLOCK[f.auto_fill_source] }
+  }
+  return f
+}
 
 // Auto-generate a snake_case field_name from a label
 function slugify(label) {
@@ -93,6 +123,7 @@ function PropertiesPanel({ field, sections, onChange }) {
     onChange({ ...field, validation_rules: { ...(field.validation_rules || {}), ...patch } })
 
   const hasOptions = field.field_type === 'dropdown' || field.field_type === 'radio' || field.field_type === 'checkbox'
+  const isSystem = FT[field.field_type]?.isSystem
 
   return (
     <div className="space-y-4">
@@ -108,12 +139,26 @@ function PropertiesPanel({ field, sections, onChange }) {
           onChange={(e) => update({ field_type: e.target.value })}
           className="w-full text-sm border border-border bg-background rounded-md px-2.5 py-1.5"
         >
-          {['Input', 'Selection', 'Advanced'].map(group => (
+          {['Input', 'Selection', 'Advanced', 'System'].map(group => (
             <optgroup key={group} label={group}>
-              {FIELD_TYPES.filter(t => t.group === group).map(t => (
-                <option key={t.value} value={t.value}>{t.label}</option>
+              {FIELD_TYPES_LIST.filter(t => FT[t].group === group).map(t => (
+                <option key={t} value={t}>{FT[t].label}</option>
               ))}
             </optgroup>
+          ))}
+        </select>
+      </div>
+
+      {/* Width */}
+      <div className="space-y-1">
+        <label className="text-xs font-medium text-foreground">Width</label>
+        <select
+          value={field.grid_width || FT[field.field_type]?.defaultWidth || 'full'}
+          onChange={(e) => update({ grid_width: e.target.value })}
+          className="w-full text-sm border border-border bg-background rounded-md px-2.5 py-1.5"
+        >
+          {WIDTH_OPTIONS.map(w => (
+            <option key={w.value} value={w.value}>{w.label}</option>
           ))}
         </select>
       </div>
@@ -400,7 +445,7 @@ export default function FormDesigner() {
 
   const seedFromForm = (def) => {
     const loaded = (def.fields || []).map(f => ({
-      ...f,
+      ...fromApiField(f),
       section_name: f.section_name || DEFAULT_SECTION,
     }))
     setFields(loaded)
@@ -430,7 +475,15 @@ export default function FormDesigner() {
 
   // Field operations
   const addField = (sectionName, type) => {
-    const baseLabel = FT[type]?.label || 'Field'
+    const meta = FT[type]
+    // System-block labels default to a human-friendly word, not "Reference No.".
+    const labelDefaults = {
+      reference:       'Reference',
+      submission_date: 'Date',
+      classification:  'Classification',
+      approval_block:  'Approvals',
+    }
+    const baseLabel = labelDefaults[type] || meta?.label || 'Field'
     const existingNames = fields.map(f => f.field_name)
     const tempId = `__new__${Date.now()}__${Math.random().toString(36).slice(2, 7)}`
     const newField = {
@@ -439,10 +492,14 @@ export default function FormDesigner() {
       field_label: baseLabel,
       field_type: type,
       section_name: sectionName || DEFAULT_SECTION,
-      required: false,
+      grid_width: meta?.defaultWidth || 'full',
+      required: meta?.isSystem ? false : false,        // system blocks aren't required user input
       placeholder: '',
       options: type === 'dropdown' || type === 'radio' || type === 'checkbox' ? ['Option A', 'Option B'] : null,
-      table_columns: type === 'table' ? [{ key: 'description', label: 'Description', type: 'text' }, { key: 'qty', label: 'Qty', type: 'number' }] : null,
+      table_columns: type === 'table'
+        ? [{ key: 'description', label: 'Description', type: 'text' },
+           { key: 'qty', label: 'Qty', type: 'number' }]
+        : null,
     }
     setFields(prev => [...prev, newField])
     setSelectedId(tempId)
@@ -515,10 +572,13 @@ export default function FormDesigner() {
       sections.forEach(s => {
         fields.filter(f => (f.section_name || DEFAULT_SECTION) === s).forEach(f => ordered.push(f))
       })
-      const payload = ordered.map(f => ({
-        ...f,
-        id: f.id && !String(f.id).startsWith('__new__') ? f.id : undefined,
-      }))
+      const payload = ordered.map(f => {
+        const api = toApiField(f)
+        return {
+          ...api,
+          id: api.id && !String(api.id).startsWith('__new__') ? api.id : undefined,
+        }
+      })
       await replaceFormFields(id, payload)
 
       // 2) Approval template (only touch if the user has interacted with it
