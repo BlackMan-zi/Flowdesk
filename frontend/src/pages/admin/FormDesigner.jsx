@@ -782,6 +782,7 @@ export default function FormDesigner() {
   const [selectedId, setSelectedId] = useState(null)
   const [selectedColumnIdx, setSelectedColumnIdx] = useState(null)
   const [sections, setSections] = useState([DEFAULT_SECTION])
+  const [sectionLayouts, setSectionLayouts] = useState({ [DEFAULT_SECTION]: 'grid' })
   const [previewOpen, setPreviewOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [previewUrls, setPreviewUrls] = useState({ header: null, footer: null })
@@ -823,7 +824,13 @@ export default function FormDesigner() {
     }))
     setFields(loaded)
     const found = Array.from(new Set(loaded.map(f => f.section_name)))
-    setSections(found.length ? found : [DEFAULT_SECTION])
+    const finalSections = found.length ? found : [DEFAULT_SECTION]
+    setSections(finalSections)
+    // Backfill missing layout entries with 'grid' so the UI always has a value.
+    const storedLayouts = def.section_layouts || {}
+    setSectionLayouts(
+      Object.fromEntries(finalSections.map(s => [s, storedLayouts[s] || 'grid']))
+    )
     setApprovalSteps(stepsFromApi(def.approval_template?.steps || [], roles, users))
     setInitiatorRoleIds(def.initiator_role_ids || [])
   }
@@ -952,17 +959,28 @@ export default function FormDesigner() {
     let i = 2
     while (sections.includes(name)) name = `New Section ${i++}`
     setSections([...sections, name])
+    setSectionLayouts(prev => ({ ...prev, [name]: 'grid' }))
   }
   const renameSection = (oldName, newName) => {
     if (!newName.trim() || (sections.includes(newName) && newName !== oldName)) return
     setSections(prev => prev.map(s => (s === oldName ? newName : s)))
     setFields(prev => prev.map(f => ((f.section_name || DEFAULT_SECTION) === oldName ? { ...f, section_name: newName } : f)))
+    setSectionLayouts(prev => {
+      const next = { ...prev }
+      if (oldName in next) { next[newName] = next[oldName]; delete next[oldName] }
+      return next
+    })
   }
   const deleteSection = (name) => {
     if (sections.length <= 1) return toast.error('At least one section is required.')
     const fallback = sections.find(s => s !== name)
     setSections(prev => prev.filter(s => s !== name))
     setFields(prev => prev.map(f => ((f.section_name || DEFAULT_SECTION) === name ? { ...f, section_name: fallback } : f)))
+    setSectionLayouts(prev => {
+      const next = { ...prev }
+      delete next[name]
+      return next
+    })
   }
   const moveSection = (idx, delta) => {
     setSections(prev => {
@@ -972,6 +990,9 @@ export default function FormDesigner() {
       ;[copy[idx], copy[target]] = [copy[target], copy[idx]]
       return copy
     })
+  }
+  const setSectionLayout = (name, layout) => {
+    setSectionLayouts(prev => ({ ...prev, [name]: layout }))
   }
 
   // Save: persist fields + approval template + initiator-role restriction,
@@ -1005,8 +1026,12 @@ export default function FormDesigner() {
         await updateFormDefinition(id, { approval_template_id: res.data.id })
       }
 
-      // 3) Initiator role restriction — always send (empty list = open to all).
-      await updateFormDefinition(id, { initiator_role_ids: initiatorRoleIds })
+      // 3) Initiator role restriction + section layouts — always send (empty
+      // map / list = open to all / all sections default to 'grid').
+      await updateFormDefinition(id, {
+        initiator_role_ids: initiatorRoleIds,
+        section_layouts: sectionLayouts,
+      })
 
       // 4) Refetch
       const fresh = await getFormDefinition(id).then(r => r.data)
@@ -1142,6 +1167,7 @@ export default function FormDesigner() {
                     : null
                 }
                 sections={sections}
+                sectionLayouts={sectionLayouts}
                 fields={fields}
                 approvalSteps={approvalSteps}
                 users={users}
@@ -1155,6 +1181,7 @@ export default function FormDesigner() {
                 onRenameSection={renameSection}
                 onMoveSection={moveSection}
                 onDeleteSection={deleteSection}
+                onSetSectionLayout={setSectionLayout}
                 onAddField={addField}
                 onUpdateField={updateField}
                 onDeleteField={deleteField}
@@ -1195,7 +1222,7 @@ export default function FormDesigner() {
           </DialogHeader>
           <div className="bg-muted/30 rounded-lg p-4 max-h-[75vh] overflow-y-auto">
             <FormFillerCanvas
-              formDef={{ ...formDef, fields }}
+              formDef={{ ...formDef, fields, section_layouts: sectionLayouts }}
               headerUrl={previewUrls.header}
               footerUrl={previewUrls.footer}
               accent={org?.letterhead_accent}

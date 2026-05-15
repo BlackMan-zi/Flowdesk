@@ -7,6 +7,7 @@ import {
   Calculator, Paperclip, PenLine, Hash as HashIcon,
   Table as TableIcon, MoreHorizontal,
   Shield, Workflow, ClipboardList, Move, Text as TextIcon,
+  LayoutGrid, Columns, Rows3, Check,
 } from 'lucide-react'
 import {
   DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors,
@@ -507,7 +508,7 @@ function FieldCellBody({ field, accent, formDef, classification, approvalSteps, 
 
 // ── Sortable wrapper ──────────────────────────────────────────────────────────
 
-function SortableFieldCell({ field, accent, formDef, classification, approvalSteps, users, roles, isSelected, onSelect, onUpdate, onDelete, selectedColumnIdx, onSelectColumn, onCellClick }) {
+function SortableFieldCell({ field, accent, formDef, classification, approvalSteps, users, roles, isSelected, onSelect, onUpdate, onDelete, selectedColumnIdx, onSelectColumn, onCellClick, layout }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: field.id })
 
@@ -517,7 +518,10 @@ function SortableFieldCell({ field, accent, formDef, classification, approvalSte
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.4 : 1,
-    gridColumn: `span ${span} / span ${span}`,
+    // In 'grid' mode the field claims a 12-col span. In 'row' or 'stack', the
+    // parent's grid-template-columns handles column placement, so we keep
+    // span=auto and let the container decide.
+    ...(layout === 'grid' || !layout ? { gridColumn: `span ${span} / span ${span}` } : {}),
   }
 
   return (
@@ -625,8 +629,11 @@ function FreeField({
 }) {
   const widthPct = WIDTH_TO_PCT[field.grid_width || 'full']
 
+  // x_pct is % of body width (still 0-100). y_pct is now ABSOLUTE PIXELS from
+  // the body's top-left, repurposed so the body can grow with the dragged
+  // fields instead of fighting its own height to position them. Storing it
+  // on the existing y_pct column avoids a DB migration.
   const handlePointerDown = (e) => {
-    // Don't start drag on a child interactive element
     if (e.target.closest('button, input, textarea, select')) return
     e.preventDefault()
     e.stopPropagation()
@@ -637,14 +644,13 @@ function FreeField({
     const startX = e.clientX
     const startY = e.clientY
     const startXPct = field.x_pct ?? 0
-    const startYPct = field.y_pct ?? 0
+    const startYPx  = field.y_pct ?? 0
 
     const onMove = (ev) => {
       const dxPct = ((ev.clientX - startX) / rect.width) * 100
-      const dyPct = ((ev.clientY - startY) / rect.height) * 100
-      // Clamp so the field doesn't fly off the page
-      const newX = Math.max(0, Math.min(100 - widthPct, startXPct + dxPct))
-      const newY = Math.max(0, Math.min(100, startYPct + dyPct))
+      const dyPx  = ev.clientY - startY
+      const newX  = Math.max(0, Math.min(100 - widthPct, startXPct + dxPct))
+      const newY  = Math.max(0, startYPx + dyPx)
       onUpdate({ ...field, x_pct: newX, y_pct: newY })
     }
     const onUp = () => {
@@ -663,7 +669,7 @@ function FreeField({
       )}
       style={{
         left: `${field.x_pct ?? 0}%`,
-        top: `${field.y_pct ?? 0}%`,
+        top: `${field.y_pct ?? 0}px`,
         width: `${widthPct}%`,
       }}
       onPointerDown={handlePointerDown}
@@ -795,11 +801,28 @@ function SectionBlock({
   selectedFieldId, onSelectField, onAddField, onUpdateField, onDeleteField,
   selectedColumnIdx, onSelectColumn, onCellClick,
   onRenameSection, onMoveSection, onDeleteSection,
+  layout = 'grid', onSetLayout,
   sensors, onDragEnd,
 }) {
   const [editingName, setEditingName] = useState(false)
   const [draftName, setDraftName] = useState(section)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [layoutOpen, setLayoutOpen] = useState(false)
+
+  // Container style per layout mode.
+  const containerCls = layout === 'stack' ? 'grid grid-cols-1 gap-y-2'
+                     : layout === 'row'   ? 'grid gap-x-3'
+                     :                      'grid grid-cols-12 gap-x-4 gap-y-1.5'
+  const containerStyle = layout === 'row' && fields.length > 0
+    ? { gridTemplateColumns: `repeat(${fields.length}, minmax(0, 1fr))` }
+    : undefined
+
+  const LAYOUT_OPTIONS = [
+    { value: 'grid',  label: 'Grid',  icon: LayoutGrid, hint: 'wrap by width' },
+    { value: 'row',   label: 'Row',   icon: Columns,    hint: 'one line, equal columns' },
+    { value: 'stack', label: 'Stack', icon: Rows3,      hint: 'one per line, full width' },
+  ]
+  const CurrentLayoutIcon = (LAYOUT_OPTIONS.find(o => o.value === layout) || LAYOUT_OPTIONS[0]).icon
 
   const commitRename = () => {
     setEditingName(false)
@@ -836,6 +859,45 @@ function SectionBlock({
           </h2>
         )}
         <div className="flex-1 h-px bg-slate-200" />
+
+        {/* Quick layout selector (always visible — this is the "decide horizontal vs stack" control) */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setLayoutOpen(!layoutOpen)}
+            className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-slate-500 hover:text-foreground hover:bg-slate-100 rounded transition-colors"
+            title="Section layout"
+          >
+            <CurrentLayoutIcon size={11} />
+            <span className="capitalize">{layout}</span>
+            <ChevronDownIcon size={9} />
+          </button>
+          {layoutOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setLayoutOpen(false)} />
+              <div className="absolute z-20 right-0 top-full mt-1 w-44 bg-white border border-border rounded-md shadow-lg py-1">
+                {LAYOUT_OPTIONS.map(o => {
+                  const Icon = o.icon
+                  return (
+                    <button
+                      key={o.value}
+                      onClick={() => { onSetLayout && onSetLayout(o.value); setLayoutOpen(false) }}
+                      className="w-full text-left px-2.5 py-1.5 text-[11px] hover:bg-muted flex items-center gap-2"
+                    >
+                      <Icon size={11} className="text-slate-500 flex-shrink-0" />
+                      <span className="flex-1">
+                        <span className="font-medium">{o.label}</span>
+                        <span className="text-slate-400 ml-1">{o.hint}</span>
+                      </span>
+                      {layout === o.value && <Check size={10} className="text-primary flex-shrink-0" />}
+                    </button>
+                  )
+                })}
+              </div>
+            </>
+          )}
+        </div>
+
         <div className="relative opacity-0 group-hover/sec:opacity-100 transition-opacity">
           <button
             type="button"
@@ -873,7 +935,7 @@ function SectionBlock({
         onDragEnd={(e) => onDragEnd(e, section)}
       >
         <SortableContext items={fields.map(f => f.id)} strategy={rectSortingStrategy}>
-          <div className="grid grid-cols-12 gap-x-4 gap-y-1.5">
+          <div className={containerCls} style={containerStyle}>
             {fields.map(f => (
               <SortableFieldCell
                 key={f.id}
@@ -891,10 +953,14 @@ function SectionBlock({
                 selectedColumnIdx={selectedFieldId === f.id ? selectedColumnIdx : null}
                 onSelectColumn={selectedFieldId === f.id ? onSelectColumn : null}
                 onCellClick={selectedFieldId === f.id ? onCellClick : null}
+                layout={layout}
               />
             ))}
             {fields.length === 0 && (
-              <div className="col-span-12 text-center py-3 text-[11px] text-muted-foreground italic border border-dashed border-border rounded-md">
+              <div className={cn(
+                'text-center py-3 text-[11px] text-muted-foreground italic border border-dashed border-border rounded-md',
+                layout === 'grid' ? 'col-span-12' : ''
+              )}>
                 Empty — pick a field type from the toolbox on the left.
               </div>
             )}
@@ -909,11 +975,12 @@ function SectionBlock({
 
 export default function FormDesignerCanvas({
   formDef, headerUrl, footerUrl, accent: accentProp, classification,
-  sections, fields, approvalSteps, users, roles,
+  sections, sectionLayouts, fields, approvalSteps, users, roles,
   selectedFieldId, onSelectField,
   selectedColumnIdx, onSelectColumn,
   onCellClick,
   onAddSection, onRenameSection, onMoveSection, onDeleteSection,
+  onSetSectionLayout,
   onAddField, onUpdateField, onDeleteField, onReorderFields,
 }) {
   const accent = accentProp || '#0066B3'
@@ -922,6 +989,15 @@ export default function FormDesignerCanvas({
   // Split flow fields (grid-positioned) vs free fields (absolutely positioned).
   const flowFields = fields.filter(f => !f.free_position)
   const freeFields = fields.filter(f => f.free_position)
+
+  // Make the body tall enough to encompass the lowest free field so the
+  // section / page chrome doesn't clip when fields are dragged far down.
+  // Field-height estimate is conservative (80px) so there's some breathing
+  // room below the lowest field.
+  const FREE_FIELD_HEIGHT_PADDING = 80
+  const minBodyPx = freeFields.length
+    ? Math.max(...freeFields.map(f => (f.y_pct ?? 0) + FREE_FIELD_HEIGHT_PADDING))
+    : 0
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -949,7 +1025,12 @@ export default function FormDesignerCanvas({
       </div>
 
       {/* Body */}
-      <div ref={bodyRef} className="px-12 py-6 relative" data-canvas-body>
+      <div
+        ref={bodyRef}
+        className="px-12 py-6 relative"
+        data-canvas-body
+        style={minBodyPx > 0 ? { minHeight: `${minBodyPx}px` } : undefined}
+      >
         {/* Multi-page rendering chrome (footer of page N + label strip + header of page N+1) */}
         <PageBreaks bodyRef={bodyRef} accent={accent} headerUrl={headerUrl} footerUrl={footerUrl} />
 
@@ -1008,6 +1089,8 @@ export default function FormDesignerCanvas({
               onRenameSection={(n) => onRenameSection(s, n)}
               onMoveSection={(d) => onMoveSection(idx, d)}
               onDeleteSection={() => onDeleteSection(s)}
+              layout={sectionLayouts?.[s] || 'grid'}
+              onSetLayout={(l) => onSetSectionLayout && onSetSectionLayout(s, l)}
               sensors={sensors}
               onDragEnd={handleDragEnd}
             />

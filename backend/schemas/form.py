@@ -78,6 +78,7 @@ class FormDefinitionCreate(BaseModel):
     allow_attachments: bool = True
     approval_template_id: Optional[str] = None
     confidentiality: Optional[str] = None  # matches one of org.classification_labels[].name
+    section_layouts: Optional[Dict[str, str]] = None  # { section_name: 'grid'|'row'|'stack' }
     fields: List[FormFieldCreate] = []
 
 
@@ -93,6 +94,7 @@ class FormDefinitionUpdate(BaseModel):
     allow_attachments: Optional[bool] = None
     approval_template_id: Optional[str] = None
     confidentiality: Optional[str] = None
+    section_layouts: Optional[Dict[str, str]] = None
     is_active: Optional[bool] = None
 
 
@@ -135,6 +137,7 @@ class FormDefinitionResponse(BaseModel):
     approval_template: Optional[ApprovalTemplateBrief] = None
     pdf_template_path: Optional[str] = None
     confidentiality: Optional[str] = None
+    section_layouts: Optional[Dict[str, str]] = None
     is_active: bool
     fields: List[FormFieldResponse] = []
 

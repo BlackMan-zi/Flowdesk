@@ -48,6 +48,7 @@ def create_form_definition(
         allow_backdating=payload.allow_backdating,
         allow_attachments=payload.allow_attachments,
         approval_template_id=payload.approval_template_id,
+        section_layouts=payload.section_layouts or {},
         created_by=current_user.id
     )
     db.add(form_def)

@@ -74,6 +74,7 @@ class FormDefinition(Base):
     approval_template_id = Column(String(36), ForeignKey("approval_templates.id"), nullable=True)
     pdf_template_path = Column(String(500), nullable=True)    # path to uploaded PDF background
     confidentiality = Column(String(100), nullable=True)      # references one of org's classification_labels by name
+    section_layouts = Column(JSON, nullable=True, default=dict)  # { section_name: 'grid'|'row'|'stack' }; missing → 'grid'
     is_active = Column(Boolean, default=True)
     created_by = Column(String(36), ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)

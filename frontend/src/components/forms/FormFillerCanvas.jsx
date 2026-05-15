@@ -606,13 +606,22 @@ function FieldCell({
   )
 }
 
-// ── Section block (grid layout) ──────────────────────────────────────────────
+// ── Section block (layout-aware: grid / row / stack) ─────────────────────────
 
 function SectionBlock({
   section, fields, accent, formDef, classification, approvalSteps, users, roles, user,
   fieldValues, onFieldChange, pendingFiles, onFilesChange, referenceNumber, disabled,
+  layout = 'grid',
 }) {
   if (!fields.length) return null
+
+  const containerCls = layout === 'stack' ? 'grid grid-cols-1 gap-y-2'
+                     : layout === 'row'   ? 'grid gap-x-3'
+                     :                      'grid grid-cols-12 gap-x-3 gap-y-1.5'
+  const containerStyle = layout === 'row'
+    ? { gridTemplateColumns: `repeat(${fields.length}, minmax(0, 1fr))` }
+    : undefined
+
   return (
     <div className="mb-5">
       <div className="flex items-center gap-2 mb-2">
@@ -622,11 +631,13 @@ function SectionBlock({
         </h2>
         <div className="flex-1 h-px bg-slate-200" />
       </div>
-      <div className="grid grid-cols-12 gap-x-3 gap-y-1.5">
+      <div className={containerCls} style={containerStyle}>
         {fields.map(f => {
+          const isGrid = layout === 'grid'
           const span = WIDTH_TO_SPAN[f.grid_width || 'full']
+          const cellStyle = isGrid ? { gridColumn: `span ${span} / span ${span}` } : undefined
           return (
-            <div key={f.id} style={{ gridColumn: `span ${span} / span ${span}` }}>
+            <div key={f.id} style={cellStyle}>
               <FieldCell
                 field={f}
                 value={fieldValues[f.id]}
@@ -655,12 +666,14 @@ function SectionBlock({
 
 function FreeField(props) {
   const widthPct = WIDTH_TO_PCT[props.field.grid_width || 'full']
+  // y_pct is now interpreted as absolute pixels from the body's top (matches
+  // FormDesignerCanvas after the auto-grow fix).
   return (
     <div
       className="absolute"
       style={{
         left: `${props.field.x_pct ?? 0}%`,
-        top: `${props.field.y_pct ?? 0}%`,
+        top: `${props.field.y_pct ?? 0}px`,
         width: `${widthPct}%`,
         zIndex: 10,
       }}
@@ -686,6 +699,14 @@ export default function FormFillerCanvas({
   const flowFields = activeFields.filter(f => !f.free_position)
   const freeFields = activeFields.filter(f => f.free_position)
 
+  const sectionLayouts = formDef.section_layouts || {}
+
+  // Auto-grow body so the lowest free-positioned field fits with padding.
+  const FREE_FIELD_HEIGHT_PADDING = 80
+  const minBodyPx = freeFields.length
+    ? Math.max(...freeFields.map(f => (f.y_pct ?? 0) + FREE_FIELD_HEIGHT_PADDING))
+    : 0
+
   // Resolve section list while preserving display order.
   const sections = useMemo(() => {
     const seen = new Set()
@@ -710,7 +731,11 @@ export default function FormFillerCanvas({
       </div>
 
       {/* Body */}
-      <div ref={bodyRef} className="px-12 py-6 relative">
+      <div
+        ref={bodyRef}
+        className="px-12 py-6 relative"
+        style={minBodyPx > 0 ? { minHeight: `${minBodyPx}px` } : undefined}
+      >
         <PageBreaks bodyRef={bodyRef} accent={accent} headerUrl={headerUrl} footerUrl={footerUrl} />
 
         {/* Free-positioned fields render absolutely */}
@@ -763,6 +788,7 @@ export default function FormFillerCanvas({
               onFilesChange={onFilesChange}
               referenceNumber={referenceNumber}
               disabled={disabled}
+              layout={sectionLayouts[s] || 'grid'}
             />
           )
         })}
