@@ -723,28 +723,7 @@ function FreeField({
 // body remains a single tall scrollable element. Real content-aware page
 // splitting lands at fill / PDF-export time (Phase D / E).
 
-function PageBreaks({ bodyRef, accent, headerUrl, footerUrl }) {
-  const [pageCount, setPageCount] = useState(1)
-  const [pageHeight, setPageHeight] = useState(0)
-
-  useEffect(() => {
-    if (!bodyRef.current) return
-    const calc = () => {
-      const body = bodyRef.current
-      if (!body) return
-      // A4 portrait body area ≈ width × 1.13 (after deducting header & footer bands).
-      const w = body.clientWidth
-      const ph = Math.round(w * 1.13)
-      const h = body.scrollHeight
-      setPageHeight(ph)
-      setPageCount(Math.max(1, Math.ceil(h / ph)))
-    }
-    calc()
-    const ro = new ResizeObserver(calc)
-    ro.observe(bodyRef.current)
-    return () => ro.disconnect()
-  }, [bodyRef])
-
+function PageBreaks({ pageCount, pageHeight, accent, headerUrl, footerUrl }) {
   if (pageCount <= 1 || pageHeight <= 0) return null
 
   const CHROME_HEIGHT = 120
@@ -1003,6 +982,33 @@ export default function FormDesignerCanvas({
     ? Math.max(...freeFields.map(f => (f.y_pct ?? 0) + FREE_FIELD_HEIGHT_PADDING))
     : 0
 
+  // Page metrics: track A4-equivalent page count + height. body grows to a
+  // full multiple of pageHeight so admins always see a fresh page below the
+  // last one (so they can add content / drag free fields onto page 2+).
+  const [pageMetrics, setPageMetrics] = useState({ pageCount: 1, pageHeight: 0 })
+  useEffect(() => {
+    if (!bodyRef.current) return
+    const body = bodyRef.current
+    const calc = () => {
+      // Use the body's clientWidth → A4 portrait ratio ≈ 1.13 for the
+      // *body* area (after the header / footer bands are deducted).
+      const w = body.clientWidth
+      const ph = Math.round(w * 1.13)
+      // scrollHeight = the height the body wants to be (natural content
+      // height, ignoring any minHeight we apply via state). Use the larger of
+      // natural-content and our free-field minimum.
+      const naturalH = Math.max(body.scrollHeight, minBodyPx)
+      const count = Math.max(1, Math.ceil(naturalH / ph))
+      setPageMetrics(prev => (prev.pageCount === count && prev.pageHeight === ph) ? prev : { pageCount: count, pageHeight: ph })
+    }
+    calc()
+    const ro = new ResizeObserver(calc)
+    ro.observe(body)
+    return () => ro.disconnect()
+  }, [minBodyPx, fields.length])
+
+  const bodyMinHeightPx = Math.max(minBodyPx, pageMetrics.pageCount * pageMetrics.pageHeight)
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -1033,10 +1039,16 @@ export default function FormDesignerCanvas({
         ref={bodyRef}
         className="px-12 py-6 relative"
         data-canvas-body
-        style={minBodyPx > 0 ? { minHeight: `${minBodyPx}px` } : undefined}
+        style={bodyMinHeightPx > 0 ? { minHeight: `${bodyMinHeightPx}px` } : undefined}
       >
         {/* Multi-page rendering chrome (footer of page N + label strip + header of page N+1) */}
-        <PageBreaks bodyRef={bodyRef} accent={accent} headerUrl={headerUrl} footerUrl={footerUrl} />
+        <PageBreaks
+          pageCount={pageMetrics.pageCount}
+          pageHeight={pageMetrics.pageHeight}
+          accent={accent}
+          headerUrl={headerUrl}
+          footerUrl={footerUrl}
+        />
 
         {/* Free-positioned fields render in an overlay above the section flow */}
         {freeFields.map(f => (

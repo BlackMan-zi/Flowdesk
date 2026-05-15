@@ -1044,7 +1044,21 @@ export default function FormDesigner() {
       setSelectedId(prev => (fresh.fields || []).some(f => f.id === prev) ? prev : null)
       qc.invalidateQueries({ queryKey: ['form-definitions'] })
     },
-    onError: (err) => toast.error(err?.response?.data?.detail || 'Save failed.'),
+    onError: (err) => {
+      // Surface the real backend error in the toast instead of the generic
+      // "Save failed." so we can diagnose without opening the network tab.
+      // FastAPI usually returns detail as a string for 4xx, but for 422 it's
+      // a list of validation errors — handle both.
+      const data = err?.response?.data
+      let msg = 'Save failed.'
+      if (typeof data?.detail === 'string') msg = data.detail
+      else if (Array.isArray(data?.detail) && data.detail[0]) {
+        const e = data.detail[0]
+        msg = `${e.loc?.join('.') || 'request'}: ${e.msg || 'invalid'}`
+      } else if (err?.message) msg = err.message
+      console.error('Save error:', err?.response?.status, data || err)
+      toast.error(msg)
+    },
   })
 
   // Delete the entire form definition (cancels any in-flight instances).

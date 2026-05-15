@@ -37,27 +37,7 @@ function uiType(field) {
 
 // ── Multi-page chrome (header/footer at each A4 boundary) ────────────────────
 
-function PageBreaks({ bodyRef, accent, headerUrl, footerUrl }) {
-  const [pageCount, setPageCount] = useState(1)
-  const [pageHeight, setPageHeight] = useState(0)
-
-  useEffect(() => {
-    if (!bodyRef.current) return
-    const calc = () => {
-      const body = bodyRef.current
-      if (!body) return
-      const w = body.clientWidth
-      const ph = Math.round(w * 1.13)
-      const h = body.scrollHeight
-      setPageHeight(ph)
-      setPageCount(Math.max(1, Math.ceil(h / ph)))
-    }
-    calc()
-    const ro = new ResizeObserver(calc)
-    ro.observe(bodyRef.current)
-    return () => ro.disconnect()
-  }, [bodyRef])
-
+function PageBreaks({ pageCount, pageHeight, accent, headerUrl, footerUrl }) {
   if (pageCount <= 1 || pageHeight <= 0) return null
   const CHROME_HEIGHT = 120
 
@@ -707,6 +687,27 @@ export default function FormFillerCanvas({
     ? Math.max(...freeFields.map(f => (f.y_pct ?? 0) + FREE_FIELD_HEIGHT_PADDING))
     : 0
 
+  // Page metrics — body grows to a full multiple of pageHeight so the second
+  // page is always fully visible below the page-break chrome.
+  const [pageMetrics, setPageMetrics] = useState({ pageCount: 1, pageHeight: 0 })
+  useEffect(() => {
+    if (!bodyRef.current) return
+    const body = bodyRef.current
+    const calc = () => {
+      const w = body.clientWidth
+      const ph = Math.round(w * 1.13)
+      const naturalH = Math.max(body.scrollHeight, minBodyPx)
+      const count = Math.max(1, Math.ceil(naturalH / ph))
+      setPageMetrics(prev => (prev.pageCount === count && prev.pageHeight === ph) ? prev : { pageCount: count, pageHeight: ph })
+    }
+    calc()
+    const ro = new ResizeObserver(calc)
+    ro.observe(body)
+    return () => ro.disconnect()
+  }, [minBodyPx, activeFields.length])
+
+  const bodyMinHeightPx = Math.max(minBodyPx, pageMetrics.pageCount * pageMetrics.pageHeight)
+
   // Resolve section list while preserving display order.
   const sections = useMemo(() => {
     const seen = new Set()
@@ -734,9 +735,15 @@ export default function FormFillerCanvas({
       <div
         ref={bodyRef}
         className="px-12 py-6 relative"
-        style={minBodyPx > 0 ? { minHeight: `${minBodyPx}px` } : undefined}
+        style={bodyMinHeightPx > 0 ? { minHeight: `${bodyMinHeightPx}px` } : undefined}
       >
-        <PageBreaks bodyRef={bodyRef} accent={accent} headerUrl={headerUrl} footerUrl={footerUrl} />
+        <PageBreaks
+          pageCount={pageMetrics.pageCount}
+          pageHeight={pageMetrics.pageHeight}
+          accent={accent}
+          headerUrl={headerUrl}
+          footerUrl={footerUrl}
+        />
 
         {/* Free-positioned fields render absolutely */}
         {freeFields.map(f => (
