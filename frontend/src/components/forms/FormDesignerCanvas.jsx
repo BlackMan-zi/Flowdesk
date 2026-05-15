@@ -148,7 +148,146 @@ function ApprovalRows({ steps, accent, users, roles }) {
 
 // ── Field cell body — what the cell renders inside the grid ───────────────────
 
-function FieldCellBody({ field, accent, formDef, classification, approvalSteps, users, roles, isSelected, isOverlay }) {
+// ── Table preview with drag-to-resize columns ────────────────────────────────
+
+function TablePreview({ field, accent, isSelected, onUpdate }) {
+  const tableRef = useRef(null)
+
+  const cols = field.table_columns?.length
+    ? field.table_columns
+    : [{ key: 'col1', label: 'Column 1', type: 'text' }]
+
+  // Sample rows: 3 rows with 10, 20, 30 in numeric cols and "Item N" in text cols
+  const sampleRows = [1, 2, 3].map(i => {
+    const row = {}
+    for (const c of cols) {
+      row[c.key] = (c.type === 'number' || c.type === 'currency') ? i * 10 : `Item ${i}`
+    }
+    for (const c of cols) {
+      if (c.formula) row[c.key] = evalFormula(c.formula, row)
+    }
+    return row
+  })
+  const totals = {}
+  for (const c of cols) {
+    if (c.show_total) {
+      totals[c.key] = sampleRows.reduce((s, r) => s + (parseFloat(r[c.key]) || 0), 0)
+    }
+  }
+  const hasTotals = Object.keys(totals).length > 0
+
+  const startResize = (e, colIdx) => {
+    if (!onUpdate || colIdx >= cols.length - 1) return
+    e.preventDefault()
+    e.stopPropagation()
+    const table = tableRef.current
+    if (!table) return
+    const tableWidth = table.getBoundingClientRect().width
+    const ths = Array.from(table.querySelectorAll('thead th'))
+    if (ths.length < 2) return
+    const initialPx = ths.map(th => th.getBoundingClientRect().width)
+    const startX = e.clientX
+    const MIN_PX = 36
+
+    const onMove = (ev) => {
+      const dx = ev.clientX - startX
+      const newPx = [...initialPx]
+      // Adjust dragged column + immediate neighbour to preserve total width
+      const moved = Math.max(
+        MIN_PX - initialPx[colIdx],
+        Math.min(initialPx[colIdx + 1] - MIN_PX, dx)
+      )
+      newPx[colIdx]     = initialPx[colIdx]     + moved
+      newPx[colIdx + 1] = initialPx[colIdx + 1] - moved
+      const updatedCols = cols.map((c, i) => ({
+        ...c,
+        width: `${((newPx[i] / tableWidth) * 100).toFixed(1)}%`,
+      }))
+      onUpdate({ ...field, table_columns: updatedCols })
+    }
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+  }
+
+  const canResize = isSelected && !!onUpdate
+
+  return (
+    <>
+      <p className="text-[10px] font-semibold uppercase tracking-wide mb-1" style={{ color: accent }}>
+        {field.field_label || 'Table'}
+      </p>
+      <div className="relative">
+        <table
+          ref={tableRef}
+          className="w-full border border-slate-300 text-[10px]"
+          style={{ tableLayout: 'fixed' }}
+        >
+          <colgroup>
+            {cols.map((c, i) => (
+              <col key={i} style={c.width ? { width: c.width } : undefined} />
+            ))}
+          </colgroup>
+          <thead>
+            <tr className="bg-slate-100">
+              {cols.map((c, i) => (
+                <th
+                  key={i}
+                  className="relative text-left px-2 py-1 border-b border-slate-300 font-semibold text-slate-600 truncate"
+                >
+                  {c.label || `Col ${i + 1}`}
+                  {c.formula && (
+                    <span title={`= ${c.formula}`} className="ml-1 text-primary/70 font-mono">ƒ</span>
+                  )}
+                  {canResize && i < cols.length - 1 && (
+                    <span
+                      onPointerDown={(e) => startResize(e, i)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="absolute -right-[3px] top-0 bottom-0 w-[6px] cursor-col-resize hover:bg-primary/40 active:bg-primary/60 z-10"
+                      title="Drag to resize"
+                    />
+                  )}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {sampleRows.map((row, ri) => (
+              <tr key={ri}>
+                {cols.map((c, ci) => (
+                  <td key={ci} className="px-2 py-1 text-slate-500 italic border-b border-slate-100 truncate">
+                    {typeof row[c.key] === 'string' && row[c.key].startsWith('#ERROR')
+                      ? <span className="text-destructive not-italic">{row[c.key]}</span>
+                      : String(row[c.key] ?? '—')}
+                  </td>
+                ))}
+              </tr>
+            ))}
+            {hasTotals && (
+              <tr className="bg-slate-50 font-semibold">
+                {cols.map((c, ci) => (
+                  <td key={ci} className="px-2 py-1 text-slate-700 border-t border-slate-300 truncate">
+                    {ci === 0 ? 'Total' : (c.show_total ? String(totals[c.key]) : '')}
+                  </td>
+                ))}
+              </tr>
+            )}
+          </tbody>
+        </table>
+        {canResize && (
+          <div className="mt-1 text-[9px] text-primary/60 italic">
+            Drag the line between column headers to resize.
+          </div>
+        )}
+      </div>
+    </>
+  )
+}
+
+function FieldCellBody({ field, accent, formDef, classification, approvalSteps, users, roles, isSelected, isOverlay, onUpdate }) {
   const meta = FIELD_TYPE_META[field.field_type] || FIELD_TYPE_META.text
   const preview = previewValue(field)
 
@@ -234,81 +373,14 @@ function FieldCellBody({ field, accent, formDef, classification, approvalSteps, 
           </div>
         </>
       )}
-      {field.field_type === 'table' && (() => {
-        const cols = field.table_columns?.length
-          ? field.table_columns
-          : [{ key: 'col1', label: 'Column 1', type: 'text' }]
-
-        // Sample rows: 3 rows with 1, 2, 3 in numeric cols and "Item N" in text cols
-        const sampleRows = [1, 2, 3].map(i => {
-          const row = {}
-          for (const c of cols) {
-            row[c.key] = (c.type === 'number' || c.type === 'currency') ? i * 10 : `Item ${i}`
-          }
-          // Evaluate per-column formulas after the raw sample is built
-          for (const c of cols) {
-            if (c.formula) row[c.key] = evalFormula(c.formula, row)
-          }
-          return row
-        })
-
-        const totals = {}
-        for (const c of cols) {
-          if (c.show_total) {
-            totals[c.key] = sampleRows.reduce((s, r) => s + (parseFloat(r[c.key]) || 0), 0)
-          }
-        }
-        const hasTotals = Object.keys(totals).length > 0
-
-        return (
-          <>
-            <p className="text-[10px] font-semibold uppercase tracking-wide mb-1" style={{ color: accent }}>
-              {field.field_label || 'Table'}
-            </p>
-            <table className="w-full border border-slate-300 text-[10px]" style={{ tableLayout: 'fixed' }}>
-              <colgroup>
-                {cols.map((c, i) => (
-                  <col key={i} style={c.width ? { width: c.width } : undefined} />
-                ))}
-              </colgroup>
-              <thead>
-                <tr className="bg-slate-100">
-                  {cols.map((c, i) => (
-                    <th key={i} className="text-left px-2 py-1 border-b border-slate-300 font-semibold text-slate-600">
-                      {c.label || `Col ${i + 1}`}
-                      {c.formula && (
-                        <span title={`= ${c.formula}`} className="ml-1 text-primary/70 font-mono">ƒ</span>
-                      )}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {sampleRows.map((row, ri) => (
-                  <tr key={ri}>
-                    {cols.map((c, ci) => (
-                      <td key={ci} className="px-2 py-1 text-slate-500 italic border-b border-slate-100">
-                        {typeof row[c.key] === 'string' && row[c.key].startsWith('#ERROR')
-                          ? <span className="text-destructive not-italic">{row[c.key]}</span>
-                          : String(row[c.key] ?? '—')}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-                {hasTotals && (
-                  <tr className="bg-slate-50 font-semibold">
-                    {cols.map((c, ci) => (
-                      <td key={ci} className="px-2 py-1 text-slate-700 border-t border-slate-300">
-                        {ci === 0 ? 'Total' : (c.show_total ? String(totals[c.key]) : '')}
-                      </td>
-                    ))}
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </>
-        )
-      })()}
+      {field.field_type === 'table' && (
+        <TablePreview
+          field={field}
+          accent={accent}
+          isSelected={isSelected}
+          onUpdate={onUpdate}
+        />
+      )}
       {field.field_type === 'signature' && (
         <div className="flex items-baseline gap-2">
           <span className="text-[11px] text-slate-600 whitespace-nowrap">{field.field_label || 'Signature'}:</span>
@@ -356,7 +428,7 @@ function FieldCellBody({ field, accent, formDef, classification, approvalSteps, 
 
 // ── Sortable wrapper ──────────────────────────────────────────────────────────
 
-function SortableFieldCell({ field, accent, formDef, classification, approvalSteps, users, roles, isSelected, onSelect, onDelete }) {
+function SortableFieldCell({ field, accent, formDef, classification, approvalSteps, users, roles, isSelected, onSelect, onUpdate, onDelete }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: field.id })
 
@@ -385,6 +457,7 @@ function SortableFieldCell({ field, accent, formDef, classification, approvalSte
         users={users}
         roles={roles}
         isSelected={isSelected}
+        onUpdate={onUpdate}
       />
       <span
         {...attributes}
@@ -522,6 +595,7 @@ function FreeField({
         users={users}
         roles={roles}
         isSelected={isSelected}
+        onUpdate={onUpdate}
       />
       <span
         className="absolute -left-5 top-1/2 -translate-y-1/2 text-primary/60 opacity-0 group-hover:opacity-100 pointer-events-none"
@@ -601,7 +675,7 @@ function PageBreaks({ bodyRef, accent }) {
 function SectionBlock({
   section, fields, accent, formDef, classification, approvalSteps, users, roles,
   sectionIdx, totalSections,
-  selectedFieldId, onSelectField, onAddField, onDeleteField,
+  selectedFieldId, onSelectField, onAddField, onUpdateField, onDeleteField,
   onRenameSection, onMoveSection, onDeleteSection,
   sensors, onDragEnd,
 }) {
@@ -694,6 +768,7 @@ function SectionBlock({
                 roles={roles}
                 isSelected={selectedFieldId === f.id}
                 onSelect={() => onSelectField(f.id)}
+                onUpdate={onUpdateField}
                 onDelete={() => onDeleteField(f.id)}
               />
             ))}
@@ -798,6 +873,7 @@ export default function FormDesignerCanvas({
               selectedFieldId={selectedFieldId}
               onSelectField={onSelectField}
               onAddField={(t) => onAddField(s, t)}
+              onUpdateField={onUpdateField}
               onDeleteField={onDeleteField}
               onRenameSection={(n) => onRenameSection(s, n)}
               onMoveSection={(d) => onMoveSection(idx, d)}

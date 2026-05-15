@@ -413,6 +413,9 @@ function PropertiesPanel({ field, fields = [], sections, onChange }) {
       {field.field_type === 'table' && (
         <div className="space-y-2">
           <label className="text-xs font-medium text-foreground">Columns</label>
+          <p className="text-[10px] text-muted-foreground -mt-1">
+            Resize a column by dragging the line between headers on the canvas (table must be selected).
+          </p>
           <div className="space-y-2">
             {(field.table_columns || []).map((col, idx) => (
               <div key={idx} className="border border-border rounded-md p-2 space-y-1.5 bg-muted/20">
@@ -451,33 +454,18 @@ function PropertiesPanel({ field, fields = [], sections, onChange }) {
                     <Trash2 size={12} />
                   </button>
                 </div>
-                <div className="grid grid-cols-2 gap-1.5">
-                  <div>
-                    <label className="text-[10px] text-muted-foreground">Width</label>
-                    <Input
-                      value={col.width || ''}
-                      onChange={(e) => {
-                        const cols = [...(field.table_columns || [])]
-                        cols[idx] = { ...cols[idx], width: e.target.value }
-                        update({ table_columns: cols })
-                      }}
-                      placeholder="e.g. 80px or 25%"
-                      className="text-xs"
-                    />
-                  </div>
-                  <label className="flex items-end gap-1.5 cursor-pointer pb-1">
-                    <input
-                      type="checkbox"
-                      checked={!!col.show_total}
-                      onChange={(e) => {
-                        const cols = [...(field.table_columns || [])]
-                        cols[idx] = { ...cols[idx], show_total: e.target.checked }
-                        update({ table_columns: cols })
-                      }}
-                    />
-                    <span className="text-[10px] text-foreground">Sum at bottom</span>
-                  </label>
-                </div>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={!!col.show_total}
+                    onChange={(e) => {
+                      const cols = [...(field.table_columns || [])]
+                      cols[idx] = { ...cols[idx], show_total: e.target.checked }
+                      update({ table_columns: cols })
+                    }}
+                  />
+                  <span className="text-[10px] text-foreground">Sum this column at the bottom</span>
+                </label>
                 {(col.type === 'number' || col.type === 'currency') && (
                   <div>
                     <label className="text-[10px] text-muted-foreground">
