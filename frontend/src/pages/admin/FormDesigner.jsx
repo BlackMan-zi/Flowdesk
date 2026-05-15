@@ -13,7 +13,7 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import {
   getFormDefinition, replaceFormFields, createApprovalTemplate, updateApprovalTemplate,
-  updateFormDefinition,
+  updateFormDefinition, deleteFormDefinition,
 } from '../../api/forms'
 import { listUsers, listRoles } from '../../api/users'
 import { getMyOrganization } from '../../api/settings'
@@ -32,6 +32,7 @@ import {
 import ApprovalEditor, { stepsToApiPayload, stepsFromApi } from '../../components/forms/ApprovalEditor'
 import InitiatorRolesPanel from '../../components/forms/InitiatorRolesPanel'
 import FormDesignerCanvas, { FIELD_TYPE_META, FIELD_TYPES_LIST } from '../../components/forms/FormDesignerCanvas'
+import { evaluate as evalFormula, SUPPORTED_FUNCTIONS } from '../../lib/formula'
 import LetterheadPage from '../../components/letterhead/LetterheadPage'
 import {
   fetchHeaderImageObjectUrl, fetchFooterImageObjectUrl,
@@ -109,7 +110,85 @@ function ensureUnique(name, existing) {
 
 // ── Properties panel ──────────────────────────────────────────────────────────
 
-function PropertiesPanel({ field, sections, onChange }) {
+// Build a sample context (field name → value) used to preview formulas
+// while designing. Numeric types get 100, currency 1000, table fields
+// get 3 rows of sample numbers across numeric columns.
+function buildSampleContext(fields) {
+  const ctx = {}
+  for (const f of fields) {
+    const key = f.field_name
+    if (!key) continue
+    switch (f.field_type) {
+      case 'number':     ctx[key] = 100; break
+      case 'currency':   ctx[key] = 1000; break
+      case 'date':       ctx[key] = new Date().toISOString().slice(0, 10); break
+      case 'text':       ctx[key] = 'Sample'; break
+      case 'textarea':   ctx[key] = 'Sample text'; break
+      case 'dropdown':   ctx[key] = f.options?.[0] || ''; break
+      case 'radio':      ctx[key] = f.options?.[0] || ''; break
+      case 'checkbox':   ctx[key] = false; break
+      case 'table': {
+        const cols = f.table_columns || []
+        ctx[key] = [1, 2, 3].map(i => {
+          const row = {}
+          for (const c of cols) {
+            row[c.key] = c.type === 'number' || c.type === 'currency' ? i * 10 : `Item ${i}`
+          }
+          return row
+        })
+        break
+      }
+      default: ctx[key] = ''
+    }
+  }
+  return ctx
+}
+
+// ── Calculation editor — formula input + live preview + reference helpers ────
+
+function CalculationEditor({ field, allFields, onChange }) {
+  const formula = field.calculation_formula || ''
+  const sampleContext = useMemo(() => buildSampleContext(allFields), [allFields])
+  const result = useMemo(() => {
+    if (!formula.trim()) return null
+    return evalFormula(formula, sampleContext)
+  }, [formula, sampleContext])
+
+  const isError = typeof result === 'string' && result.startsWith('#ERROR')
+
+  return (
+    <div className="space-y-1.5">
+      <label className="text-xs font-medium text-foreground">
+        Formula
+        <span className="ml-1 text-[10px] text-muted-foreground font-normal">
+          — e.g. <code>qty * unit_price</code> or <code>SUM(items.total)</code>
+        </span>
+      </label>
+      <Input
+        value={formula}
+        onChange={(e) => onChange({ ...field, calculation_formula: e.target.value, calculation_enabled: true })}
+        className="font-mono text-xs"
+        placeholder="qty * unit_price"
+      />
+      {formula.trim() && (
+        <div className={cn(
+          'rounded-md border px-2 py-1.5 text-[10px]',
+          isError
+            ? 'border-destructive/40 bg-destructive/5 text-destructive'
+            : 'border-border bg-muted/30 text-foreground'
+        )}>
+          <span className="text-muted-foreground">With sample values: </span>
+          <span className="font-mono font-medium">{isError ? result : String(result ?? '')}</span>
+        </div>
+      )}
+      <p className="text-[10px] text-muted-foreground leading-snug">
+        Available: {SUPPORTED_FUNCTIONS.join(', ')}. Reference table columns with <code>tableName.columnName</code>.
+      </p>
+    </div>
+  )
+}
+
+function PropertiesPanel({ field, fields = [], sections, onChange }) {
   if (!field) {
     return (
       <div className="text-center py-12 px-4 text-xs text-muted-foreground">
@@ -318,20 +397,9 @@ function PropertiesPanel({ field, sections, onChange }) {
         </div>
       )}
 
-      {/* Calculation formula */}
+      {/* Calculation formula with live preview */}
       {field.field_type === 'calculated' && (
-        <div className="space-y-1.5">
-          <label className="text-xs font-medium text-foreground">
-            Formula
-            <span className="ml-1 text-[10px] text-muted-foreground font-normal">— reference other fields by name e.g. <code>qty * unit_price</code></span>
-          </label>
-          <Input
-            value={field.calculation_formula || ''}
-            onChange={(e) => update({ calculation_formula: e.target.value, calculation_enabled: true })}
-            className="font-mono text-xs"
-            placeholder="qty * unit_price"
-          />
-        </div>
+        <CalculationEditor field={field} allFields={fields} onChange={update} />
       )}
 
       {/* Reference prefix */}
@@ -341,46 +409,93 @@ function PropertiesPanel({ field, sections, onChange }) {
         </Alert>
       )}
 
-      {/* Table columns — simple editor */}
+      {/* Table columns — full editor with width, formula, show-total */}
       {field.field_type === 'table' && (
-        <div className="space-y-1.5">
+        <div className="space-y-2">
           <label className="text-xs font-medium text-foreground">Columns</label>
-          <div className="space-y-1">
+          <div className="space-y-2">
             {(field.table_columns || []).map((col, idx) => (
-              <div key={idx} className="flex items-center gap-1">
-                <Input
-                  value={col.label || ''}
-                  onChange={(e) => {
-                    const cols = [...(field.table_columns || [])]
-                    cols[idx] = { ...cols[idx], label: e.target.value, key: slugify(e.target.value) || `col_${idx + 1}` }
-                    update({ table_columns: cols })
-                  }}
-                  placeholder={`Column ${idx + 1}`}
-                  className="flex-1 text-xs"
-                />
-                <select
-                  value={col.type || 'text'}
-                  onChange={(e) => {
-                    const cols = [...(field.table_columns || [])]
-                    cols[idx] = { ...cols[idx], type: e.target.value }
-                    update({ table_columns: cols })
-                  }}
-                  className="text-xs border border-border bg-background rounded-md px-1.5 py-1"
-                >
-                  <option value="text">text</option>
-                  <option value="number">number</option>
-                  <option value="currency">currency</option>
-                  <option value="date">date</option>
-                </select>
-                <button
-                  type="button"
-                  onClick={() => {
-                    update({ table_columns: (field.table_columns || []).filter((_, i) => i !== idx) })
-                  }}
-                  className="p-1 text-muted-foreground hover:text-destructive"
-                >
-                  <Trash2 size={12} />
-                </button>
+              <div key={idx} className="border border-border rounded-md p-2 space-y-1.5 bg-muted/20">
+                <div className="flex items-center gap-1">
+                  <Input
+                    value={col.label || ''}
+                    onChange={(e) => {
+                      const cols = [...(field.table_columns || [])]
+                      cols[idx] = { ...cols[idx], label: e.target.value, key: slugify(e.target.value) || `col_${idx + 1}` }
+                      update({ table_columns: cols })
+                    }}
+                    placeholder={`Column ${idx + 1}`}
+                    className="flex-1 text-xs"
+                  />
+                  <select
+                    value={col.type || 'text'}
+                    onChange={(e) => {
+                      const cols = [...(field.table_columns || [])]
+                      cols[idx] = { ...cols[idx], type: e.target.value }
+                      update({ table_columns: cols })
+                    }}
+                    className="text-xs border border-border bg-background rounded-md px-1.5 py-1"
+                  >
+                    <option value="text">text</option>
+                    <option value="number">number</option>
+                    <option value="currency">currency</option>
+                    <option value="date">date</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      update({ table_columns: (field.table_columns || []).filter((_, i) => i !== idx) })
+                    }}
+                    className="p-1 text-muted-foreground hover:text-destructive"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <div>
+                    <label className="text-[10px] text-muted-foreground">Width</label>
+                    <Input
+                      value={col.width || ''}
+                      onChange={(e) => {
+                        const cols = [...(field.table_columns || [])]
+                        cols[idx] = { ...cols[idx], width: e.target.value }
+                        update({ table_columns: cols })
+                      }}
+                      placeholder="e.g. 80px or 25%"
+                      className="text-xs"
+                    />
+                  </div>
+                  <label className="flex items-end gap-1.5 cursor-pointer pb-1">
+                    <input
+                      type="checkbox"
+                      checked={!!col.show_total}
+                      onChange={(e) => {
+                        const cols = [...(field.table_columns || [])]
+                        cols[idx] = { ...cols[idx], show_total: e.target.checked }
+                        update({ table_columns: cols })
+                      }}
+                    />
+                    <span className="text-[10px] text-foreground">Sum at bottom</span>
+                  </label>
+                </div>
+                {(col.type === 'number' || col.type === 'currency') && (
+                  <div>
+                    <label className="text-[10px] text-muted-foreground">
+                      Per-row formula
+                      <span className="ml-1 text-muted-foreground/70">— other columns by name, e.g. <code>qty * unit_cost</code></span>
+                    </label>
+                    <Input
+                      value={col.formula || ''}
+                      onChange={(e) => {
+                        const cols = [...(field.table_columns || [])]
+                        cols[idx] = { ...cols[idx], formula: e.target.value }
+                        update({ table_columns: cols })
+                      }}
+                      placeholder="qty * unit_cost"
+                      className="font-mono text-xs"
+                    />
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -490,6 +605,7 @@ export default function FormDesigner() {
   const [selectedId, setSelectedId] = useState(null)
   const [sections, setSections] = useState([DEFAULT_SECTION])
   const [previewOpen, setPreviewOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
   const [previewUrls, setPreviewUrls] = useState({ header: null, footer: null })
   // Tab + approval + initiator state
   const [tab, setTab] = useState('fields')          // 'fields' | 'approval' | 'initiator'
@@ -675,6 +791,17 @@ export default function FormDesigner() {
     onError: (err) => toast.error(err?.response?.data?.detail || 'Save failed.'),
   })
 
+  // Delete the entire form definition (cancels any in-flight instances).
+  const deleteMut = useMutation({
+    mutationFn: () => deleteFormDefinition(id),
+    onSuccess: () => {
+      toast.success('Form deleted.')
+      qc.invalidateQueries({ queryKey: ['form-definitions'] })
+      navigate('/admin/form-definitions')
+    },
+    onError: (err) => toast.error(err?.response?.data?.detail || 'Delete failed.'),
+  })
+
   const selectedField = fields.find(f => f.id === selectedId) || null
 
   if (isLoading || !formDef) {
@@ -710,6 +837,15 @@ export default function FormDesigner() {
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => setPreviewOpen(true)}>
             <Eye size={13} className="mr-1.5" /> Preview
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+            onClick={() => setDeleteOpen(true)}
+            title="Delete the entire form"
+          >
+            <Trash2 size={13} className="mr-1.5" /> Delete
           </Button>
           <Button onClick={() => saveMut.mutate()} disabled={saveMut.isPending} size="sm">
             <Save size={13} className="mr-1.5" />
@@ -782,6 +918,7 @@ export default function FormDesigner() {
           <aside className="border-l border-border bg-card overflow-y-auto p-4">
             <PropertiesPanel
               field={selectedField}
+              fields={fields}
               sections={sections}
               onChange={updateField}
             />
@@ -837,6 +974,35 @@ export default function FormDesigner() {
                 </div>
               </LetterheadPage>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete form confirmation */}
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-destructive">Delete this form?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <p>
+              You're about to delete <strong>{formDef.printed_title || formDef.name}</strong> permanently.
+            </p>
+            <p className="text-muted-foreground">
+              Any forms currently under review will be cancelled. This cannot be undone.
+            </p>
+          </div>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="ghost" onClick={() => setDeleteOpen(false)} disabled={deleteMut.isPending}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => deleteMut.mutate()}
+              disabled={deleteMut.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteMut.isPending ? 'Deleting…' : 'Delete permanently'}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
