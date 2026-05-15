@@ -45,9 +45,19 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def run_migrations():
-    """Run any SQL migration files that haven't been applied yet."""
-    migrations_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "migrations")
-    if not os.path.exists(migrations_dir):
+    """Run any SQL migration files that haven't been applied yet.
+
+    Tries two locations so the same code works in dev and prod:
+      - backend/migrations (Dockerfile copies database/migrations here)
+      - ../database/migrations (local repo layout, no Docker)
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    candidates = [
+        os.path.join(here, "migrations"),
+        os.path.join(here, "..", "database", "migrations"),
+    ]
+    migrations_dir = next((p for p in candidates if os.path.isdir(p)), None)
+    if not migrations_dir:
         return
 
     from sqlalchemy import text
