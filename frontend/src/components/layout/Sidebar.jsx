@@ -107,6 +107,7 @@ function AdminNav() {
           <NavItem to="/admin/form-definitions" icon={FormInput} label="Form Definitions" />
           <NavItem to="/admin/approval-templates" icon={GitBranch} label="Approval Templates" />
           <NavItem to="/admin/delegations" icon={UserCheck} label="All Delegations" />
+          <NavItem to="/admin/settings" icon={Settings} label="Organization" />
           <NavItem to="/logs" icon={Activity} label="Audit Logs" />
         </CollapsibleContent>
       </Collapsible>

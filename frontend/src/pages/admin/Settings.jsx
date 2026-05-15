@@ -1,0 +1,398 @@
+import React, { useState, useEffect, useRef, useMemo } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
+import {
+  getMyOrganization, updateMyOrganization,
+  uploadHeaderImage, uploadFooterImage,
+  deleteHeaderImage, deleteFooterImage,
+  fetchHeaderImageObjectUrl, fetchFooterImageObjectUrl,
+} from '../../api/settings'
+import { Card, CardContent } from '../../components/ui/Card'
+import { Button } from '../../components/ui/Button'
+import { Input } from '../../components/ui/Input'
+import { Alert } from '../../components/ui/alert'
+import { cn } from '../../lib/utils'
+import {
+  Upload, Trash2, Image as ImageIcon, Building2, Palette, Shield,
+  Plus, X, Save, AlertCircle,
+} from 'lucide-react'
+
+const DEFAULT_LABELS = ['Public', 'Internal', 'Confidential', 'Restricted']
+
+// ── Image upload card ─────────────────────────────────────────────────────────
+
+function LetterheadImageCard({ kind, hasImage, onUpload, onDelete, fetchObjectUrl, accentColor }) {
+  const fileRef = useRef(null)
+  const [previewUrl, setPreviewUrl] = useState(null)
+  const [busy, setBusy] = useState(false)
+  // Bump this to force a re-fetch after upload/delete
+  const [refreshKey, setRefreshKey] = useState(0)
+
+  useEffect(() => {
+    let revokeUrl = null
+    let cancelled = false
+    if (hasImage) {
+      fetchObjectUrl()
+        .then(url => {
+          if (cancelled) {
+            URL.revokeObjectURL(url)
+            return
+          }
+          revokeUrl = url
+          setPreviewUrl(url)
+        })
+        .catch(() => setPreviewUrl(null))
+    } else {
+      setPreviewUrl(null)
+    }
+    return () => {
+      cancelled = true
+      if (revokeUrl) URL.revokeObjectURL(revokeUrl)
+    }
+  }, [hasImage, refreshKey, fetchObjectUrl])
+
+  const handleFile = async (file) => {
+    if (!file) return
+    if (file.size > 4 * 1024 * 1024) {
+      toast.error('Image is larger than 4 MB.')
+      return
+    }
+    setBusy(true)
+    try {
+      await onUpload(file)
+      setRefreshKey(k => k + 1)
+      toast.success(`${kind === 'header' ? 'Header' : 'Footer'} uploaded.`)
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || 'Upload failed.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    setBusy(true)
+    try {
+      await onDelete()
+      setRefreshKey(k => k + 1)
+      toast.success(`${kind === 'header' ? 'Header' : 'Footer'} removed.`)
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || 'Delete failed.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const isHeader = kind === 'header'
+
+  return (
+    <Card>
+      <CardContent className="p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <ImageIcon size={14} className="text-muted-foreground" />
+              {isHeader ? 'Header (top of every form PDF)' : 'Footer (bottom of every form PDF)'}
+            </h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              PNG, JPG, or WEBP. Max 4&nbsp;MB. Wide aspect ratio recommended ({isHeader ? '~ 1600×200' : '~ 1600×100'}).
+            </p>
+          </div>
+          {hasImage && (
+            <Button size="sm" variant="ghost" onClick={handleDelete} disabled={busy}>
+              <Trash2 size={13} className="mr-1" /> Remove
+            </Button>
+          )}
+        </div>
+
+        {/* Preview */}
+        <div
+          className={cn(
+            'rounded-lg border-2 border-dashed border-border bg-muted/20 overflow-hidden',
+            'flex items-center justify-center min-h-[120px]'
+          )}
+          style={accentColor ? { borderColor: `${accentColor}40` } : undefined}
+        >
+          {previewUrl ? (
+            <img
+              src={previewUrl}
+              alt={`${kind} preview`}
+              className="max-w-full max-h-[200px] object-contain"
+            />
+          ) : (
+            <div className="text-center px-4 py-6">
+              <ImageIcon size={20} className="text-muted-foreground/50 mx-auto" />
+              <p className="text-xs text-muted-foreground mt-1.5">
+                No {kind} uploaded yet.
+              </p>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            className="hidden"
+            onChange={e => handleFile(e.target.files?.[0])}
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => fileRef.current?.click()}
+            disabled={busy}
+          >
+            <Upload size={13} className="mr-1.5" />
+            {hasImage ? 'Replace' : 'Upload'}
+          </Button>
+          {busy && <span className="text-xs text-muted-foreground">Working…</span>}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+// ── Classification labels editor ──────────────────────────────────────────────
+
+function ClassificationLabelsEditor({ labels, onChange }) {
+  const [draft, setDraft] = useState('')
+  const list = labels && labels.length ? labels : DEFAULT_LABELS
+
+  const add = () => {
+    const v = draft.trim()
+    if (!v) return
+    if (list.some(l => l.toLowerCase() === v.toLowerCase())) {
+      toast.error('That label already exists.')
+      return
+    }
+    onChange([...list, v])
+    setDraft('')
+  }
+
+  const remove = (label) => {
+    onChange(list.filter(l => l !== label))
+  }
+
+  const reset = () => onChange(DEFAULT_LABELS)
+
+  return (
+    <Card>
+      <CardContent className="p-5 space-y-4">
+        <div>
+          <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+            <Shield size={14} className="text-muted-foreground" />
+            Document Classification Labels
+          </h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Shown on every form so the requester can mark its sensitivity. Order is preserved.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {list.map(label => (
+            <span
+              key={label}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-muted text-foreground text-xs"
+            >
+              {label}
+              <button
+                onClick={() => remove(label)}
+                className="text-muted-foreground hover:text-destructive transition-colors"
+                title="Remove"
+              >
+                <X size={12} />
+              </button>
+            </span>
+          ))}
+          {!list.length && (
+            <p className="text-xs text-muted-foreground italic">No labels — forms will not show a classification field.</p>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Input
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add() } }}
+            placeholder="Add label e.g. Strictly Private"
+            className="flex-1"
+          />
+          <Button size="sm" variant="outline" onClick={add}>
+            <Plus size={13} className="mr-1" /> Add
+          </Button>
+          <Button size="sm" variant="ghost" onClick={reset}>
+            Reset to defaults
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
+
+export default function Settings() {
+  const qc = useQueryClient()
+  const { data: orgRes, isLoading } = useQuery({
+    queryKey: ['my-organization'],
+    queryFn: getMyOrganization,
+  })
+  const org = orgRes?.data
+
+  // Local draft state for non-image fields, synced from org once loaded
+  const [accent, setAccent] = useState('')
+  const [labels, setLabels] = useState(DEFAULT_LABELS)
+  const initRef = useRef(false)
+
+  useEffect(() => {
+    if (org && !initRef.current) {
+      setAccent(org.letterhead_accent || '')
+      setLabels(org.classification_labels && org.classification_labels.length
+        ? org.classification_labels
+        : DEFAULT_LABELS)
+      initRef.current = true
+    }
+  }, [org])
+
+  const dirty = useMemo(() => {
+    if (!org) return false
+    const accentChanged = (org.letterhead_accent || '') !== accent
+    const orgLabels = org.classification_labels && org.classification_labels.length
+      ? org.classification_labels : DEFAULT_LABELS
+    const labelsChanged = JSON.stringify(orgLabels) !== JSON.stringify(labels)
+    return accentChanged || labelsChanged
+  }, [org, accent, labels])
+
+  const updateMut = useMutation({
+    mutationFn: () => updateMyOrganization({
+      letterhead_accent: accent || null,
+      classification_labels: labels,
+    }),
+    onSuccess: () => {
+      toast.success('Settings saved.')
+      qc.invalidateQueries({ queryKey: ['my-organization'] })
+      initRef.current = false   // re-sync from server
+    },
+    onError: (err) => {
+      toast.error(err?.response?.data?.detail || 'Save failed.')
+    },
+  })
+
+  const uploadHeaderMut = useMutation({
+    mutationFn: uploadHeaderImage,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['my-organization'] }),
+  })
+  const uploadFooterMut = useMutation({
+    mutationFn: uploadFooterImage,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['my-organization'] }),
+  })
+  const deleteHeaderMut = useMutation({
+    mutationFn: deleteHeaderImage,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['my-organization'] }),
+  })
+  const deleteFooterMut = useMutation({
+    mutationFn: deleteFooterImage,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['my-organization'] }),
+  })
+
+  if (isLoading) {
+    return (
+      <div className="p-6">
+        <div className="h-6 w-48 bg-muted rounded animate-pulse mb-3" />
+        <div className="h-40 bg-muted rounded animate-pulse" />
+      </div>
+    )
+  }
+
+  if (!org) {
+    return (
+      <div className="p-6">
+        <Alert variant="destructive">Could not load organization settings.</Alert>
+      </div>
+    )
+  }
+
+  return (
+    <div className="p-6 max-w-4xl mx-auto space-y-6">
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
+            <Building2 size={18} className="text-muted-foreground" />
+            Organization Settings
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Letterhead and classification options applied to every form created in <strong>{org.name}</strong>.
+          </p>
+        </div>
+        <Button onClick={() => updateMut.mutate()} disabled={!dirty || updateMut.isPending}>
+          <Save size={14} className="mr-1.5" />
+          {updateMut.isPending ? 'Saving…' : 'Save changes'}
+        </Button>
+      </div>
+
+      {dirty && (
+        <Alert>
+          <AlertCircle size={14} className="inline mr-1.5" />
+          You have unsaved changes.
+        </Alert>
+      )}
+
+      {/* Letterhead images */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <LetterheadImageCard
+          kind="header"
+          hasImage={org.has_header_image}
+          onUpload={uploadHeaderMut.mutateAsync}
+          onDelete={deleteHeaderMut.mutateAsync}
+          fetchObjectUrl={fetchHeaderImageObjectUrl}
+          accentColor={accent}
+        />
+        <LetterheadImageCard
+          kind="footer"
+          hasImage={org.has_footer_image}
+          onUpload={uploadFooterMut.mutateAsync}
+          onDelete={deleteFooterMut.mutateAsync}
+          fetchObjectUrl={fetchFooterImageObjectUrl}
+          accentColor={accent}
+        />
+      </div>
+
+      {/* Accent color */}
+      <Card>
+        <CardContent className="p-5 space-y-3">
+          <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+            <Palette size={14} className="text-muted-foreground" />
+            Letterhead Accent Color
+          </h3>
+          <p className="text-xs text-muted-foreground">
+            Used for the title bar and section dividers on PDF exports. Leave blank to use the system default.
+          </p>
+          <div className="flex items-center gap-3">
+            <input
+              type="color"
+              value={accent || '#0066B3'}
+              onChange={e => setAccent(e.target.value.toUpperCase())}
+              className="h-10 w-16 rounded border border-border cursor-pointer bg-transparent"
+            />
+            <Input
+              value={accent}
+              onChange={e => setAccent(e.target.value.toUpperCase())}
+              placeholder="#0066B3"
+              className="font-mono text-sm w-40"
+              maxLength={9}
+            />
+            {accent && (
+              <Button size="sm" variant="ghost" onClick={() => setAccent('')}>
+                Clear
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Classification labels */}
+      <ClassificationLabelsEditor labels={labels} onChange={setLabels} />
+    </div>
+  )
+}

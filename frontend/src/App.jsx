@@ -19,6 +19,7 @@ import AdminFormDefinitions from './pages/admin/FormDefinitions'
 import AdminApprovalTemplates from './pages/admin/ApprovalTemplates'
 import AdminDelegations from './pages/admin/Delegations'
 import FormBuilder from './pages/admin/FormBuilder'
+import AdminSettings from './pages/admin/Settings'
 import Logs from './pages/Logs'
 
 // Auto-detect subpath: /flowdesk on the server, empty in local dev
@@ -72,6 +73,7 @@ function AppRoutes() {
         <Route path="admin/form-definitions" element={<RequireAdmin><AdminFormDefinitions /></RequireAdmin>} />
         <Route path="admin/approval-templates" element={<RequireAdmin><AdminApprovalTemplates /></RequireAdmin>} />
         <Route path="admin/delegations" element={<RequireAdmin><AdminDelegations /></RequireAdmin>} />
+        <Route path="admin/settings" element={<RequireAdmin><AdminSettings /></RequireAdmin>} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
