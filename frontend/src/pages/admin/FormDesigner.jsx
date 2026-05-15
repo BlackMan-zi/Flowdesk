@@ -2,6 +2,15 @@ import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import {
+  DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors,
+  DragOverlay,
+} from '@dnd-kit/core'
+import {
+  arrayMove, SortableContext, sortableKeyboardCoordinates,
+  verticalListSortingStrategy, useSortable,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { getFormDefinition, replaceFormFields } from '../../api/forms'
 import { getMyOrganization } from '../../api/settings'
 import { Card, CardContent } from '../../components/ui/Card'
@@ -59,22 +68,29 @@ function ensureUnique(name, existing) {
   return `${name}_${i}`
 }
 
-// ── Field card ────────────────────────────────────────────────────────────────
+// ── Sortable field card ───────────────────────────────────────────────────────
 
-function FieldCard({ field, isFirst, isLast, isSelected, onSelect, onMove, onDelete }) {
+function FieldCardBody({ field, isSelected, dragHandleProps, isDragOverlay }) {
   const meta = FT[field.field_type] || FT.text
   const Icon = meta.icon
   return (
     <div
       className={cn(
-        'group flex items-center gap-2 px-3 py-2 rounded-md border bg-card cursor-pointer transition-all',
+        'flex items-center gap-2 px-3 py-2 rounded-md border bg-card transition-all',
         isSelected
           ? 'border-primary ring-2 ring-primary/20 bg-primary/5'
-          : 'border-border hover:border-foreground/30 hover:bg-muted/30'
+          : 'border-border hover:border-foreground/30 hover:bg-muted/30',
+        isDragOverlay && 'shadow-lg ring-2 ring-primary/40 cursor-grabbing'
       )}
-      onClick={onSelect}
     >
-      <GripVertical size={12} className="text-muted-foreground/40 flex-shrink-0" />
+      <span
+        {...(dragHandleProps || {})}
+        className="text-muted-foreground/50 hover:text-foreground cursor-grab active:cursor-grabbing touch-none"
+        title="Drag to reorder"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <GripVertical size={14} />
+      </span>
       <Icon size={14} className="text-muted-foreground flex-shrink-0" />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
@@ -87,34 +103,40 @@ function FieldCard({ field, isFirst, isLast, isSelected, onSelect, onMove, onDel
           <span>{meta.label}</span>
         </div>
       </div>
-      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button
-          type="button"
-          disabled={isFirst}
-          onClick={(e) => { e.stopPropagation(); onMove(-1) }}
-          className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30"
-          title="Move up"
-        >
-          <ChevronUp size={13} />
-        </button>
-        <button
-          type="button"
-          disabled={isLast}
-          onClick={(e) => { e.stopPropagation(); onMove(1) }}
-          className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30"
-          title="Move down"
-        >
-          <ChevronDown size={13} />
-        </button>
-        <button
-          type="button"
-          onClick={(e) => { e.stopPropagation(); onDelete() }}
-          className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-          title="Delete"
-        >
-          <Trash2 size={13} />
-        </button>
-      </div>
+    </div>
+  )
+}
+
+function SortableFieldCard({ field, isSelected, onSelect, onDelete }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: field.id })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="group relative cursor-pointer"
+      onClick={onSelect}
+    >
+      <FieldCardBody
+        field={field}
+        isSelected={isSelected}
+        dragHandleProps={{ ...attributes, ...listeners }}
+      />
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); onDelete() }}
+        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity"
+        title="Delete"
+      >
+        <Trash2 size={13} />
+      </button>
     </div>
   )
 }
@@ -435,6 +457,40 @@ export default function FormDesigner() {
     [fields, activeSection]
   )
 
+  const [activeDragId, setActiveDragId] = useState(null)
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
+
+  const handleDragEnd = (event) => {
+    setActiveDragId(null)
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    setFields(prev => {
+      // Reorder only within the visible section, then splice the result back
+      // into the full list at the matching positions.
+      const inSection = prev.filter(f => (f.section_name || DEFAULT_SECTION) === activeSection)
+      const oldIdx = inSection.findIndex(f => f.id === active.id)
+      const newIdx = inSection.findIndex(f => f.id === over.id)
+      if (oldIdx === -1 || newIdx === -1) return prev
+      const reordered = arrayMove(inSection, oldIdx, newIdx)
+      // Build the new global list preserving non-section fields in place
+      const result = []
+      let cursor = 0
+      for (const f of prev) {
+        if ((f.section_name || DEFAULT_SECTION) === activeSection) {
+          result.push(reordered[cursor++])
+        } else {
+          result.push(f)
+        }
+      }
+      return result
+    })
+  }
+
+  const activeDragField = activeDragId ? fields.find(f => f.id === activeDragId) : null
+
   // Field operations
   const addField = (type) => {
     const baseLabel = FT[type]?.label || 'Field'
@@ -462,22 +518,6 @@ export default function FormDesigner() {
   const deleteField = (fieldId) => {
     setFields(prev => prev.filter(f => f.id !== fieldId))
     if (selectedId === fieldId) setSelectedId(null)
-  }
-
-  const moveField = (fieldId, delta) => {
-    setFields(prev => {
-      const inSection = prev.filter(f => (f.section_name || DEFAULT_SECTION) === activeSection)
-      const idx = inSection.findIndex(f => f.id === fieldId)
-      const target = idx + delta
-      if (target < 0 || target >= inSection.length) return prev
-      // Swap globally — find the indices in the full list
-      const swap = inSection[target]
-      const a = prev.indexOf(inSection[idx])
-      const b = prev.indexOf(swap)
-      const copy = [...prev]
-      ;[copy[a], copy[b]] = [copy[b], copy[a]]
-      return copy
-    })
   }
 
   // Section operations
@@ -511,27 +551,29 @@ export default function FormDesigner() {
     })
   }
 
-  // Save
+  // Save: PUT the field list, then refetch the form to be sure the local
+  // state matches the server (assigns real IDs to new fields, drops deleted ones).
   const saveMut = useMutation({
-    mutationFn: () => {
-      // Order globally: walk sections in order, then fields in their current local order within each.
+    mutationFn: async () => {
       const ordered = []
       sections.forEach(s => {
         fields.filter(f => (f.section_name || DEFAULT_SECTION) === s).forEach(f => ordered.push(f))
       })
-      // Strip our temporary IDs so the server treats those as creates.
       const payload = ordered.map(f => ({
         ...f,
         id: f.id && !String(f.id).startsWith('__new__') ? f.id : undefined,
       }))
-      return replaceFormFields(id, payload).then(r => r.data)
+      await replaceFormFields(id, payload)
+      // Authoritative refetch — the PUT response can vary; the GET is the source of truth.
+      const fresh = await getFormDefinition(id).then(r => r.data)
+      return fresh
     },
-    onSuccess: (data) => {
+    onSuccess: (fresh) => {
       toast.success('Form saved.')
-      // Re-seed local state from the server response so __new__ IDs get
-      // replaced with real ones and the selected field stays consistent.
-      if (data) seedFromForm(data)
-      qc.setQueryData(['form-definition', id], data)
+      qc.setQueryData(['form-definition', id], fresh)
+      seedFromForm(fresh)
+      // Keep the selected field if its ID still exists post-save
+      setSelectedId(prev => (fresh.fields || []).some(f => f.id === prev) ? prev : null)
       qc.invalidateQueries({ queryKey: ['form-definitions'] })
     },
     onError: (err) => toast.error(err?.response?.data?.detail || 'Save failed.'),
@@ -659,25 +701,40 @@ export default function FormDesigner() {
             </p>
           </div>
 
-          <div className="space-y-1.5">
-            {fieldsInSection.map((f, idx) => (
-              <FieldCard
-                key={f.id}
-                field={f}
-                isFirst={idx === 0}
-                isLast={idx === fieldsInSection.length - 1}
-                isSelected={selectedId === f.id}
-                onSelect={() => setSelectedId(f.id)}
-                onMove={(d) => moveField(f.id, d)}
-                onDelete={() => deleteField(f.id)}
-              />
-            ))}
-            {fieldsInSection.length === 0 && (
-              <div className="text-center py-8 text-xs text-muted-foreground border-2 border-dashed border-border rounded-md">
-                No fields yet. Add one from below.
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={(e) => setActiveDragId(e.active.id)}
+            onDragCancel={() => setActiveDragId(null)}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={fieldsInSection.map(f => f.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              <div className="space-y-1.5">
+                {fieldsInSection.map(f => (
+                  <SortableFieldCard
+                    key={f.id}
+                    field={f}
+                    isSelected={selectedId === f.id}
+                    onSelect={() => setSelectedId(f.id)}
+                    onDelete={() => deleteField(f.id)}
+                  />
+                ))}
+                {fieldsInSection.length === 0 && (
+                  <div className="text-center py-8 text-xs text-muted-foreground border-2 border-dashed border-border rounded-md">
+                    No fields yet. Add one from below.
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            </SortableContext>
+            <DragOverlay>
+              {activeDragField ? (
+                <FieldCardBody field={activeDragField} isSelected isDragOverlay />
+              ) : null}
+            </DragOverlay>
+          </DndContext>
 
           {/* Add field menu */}
           <Card className="mt-6">

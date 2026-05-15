@@ -320,7 +320,7 @@ def get_pdf_template_page(
     )
 
 
-@router.put("/definitions/{form_def_id}/fields")
+@router.put("/definitions/{form_def_id}/fields", response_model=FormDefinitionResponse)
 def update_form_fields_layout(
     form_def_id: str,
     payload: FieldsLayoutUpdate,
@@ -400,6 +400,8 @@ def update_form_fields_layout(
 
     db.commit()
     db.refresh(form_def)
+    # Touch the relationship so the response serializer can iterate it after refresh
+    _ = list(form_def.fields)
     return form_def
 
 
