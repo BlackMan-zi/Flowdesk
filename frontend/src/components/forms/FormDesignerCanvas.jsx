@@ -179,7 +179,7 @@ export function rowFormulaContext(row, columns, rowNumber = 2) {
 
 // ── Table preview with drag-to-resize columns + column-letter headers ────────
 
-function TablePreview({ field, accent, isSelected, onUpdate, selectedColumnIdx, onSelectColumn }) {
+function TablePreview({ field, accent, isSelected, onUpdate, selectedColumnIdx, onSelectColumn, onCellClick }) {
   const tableRef = useRef(null)
 
   const cols = field.table_columns?.length
@@ -321,20 +321,32 @@ function TablePreview({ field, accent, isSelected, onUpdate, selectedColumnIdx, 
           <tbody>
             {sampleRows.map((row, ri) => (
               <tr key={ri}>
-                {cols.map((c, ci) => (
-                  <td key={ci} className="px-2 py-1 text-slate-500 italic border-b border-slate-100 truncate">
-                    {typeof row[c.key] === 'string' && row[c.key].startsWith('#ERROR')
-                      ? <span className="text-destructive not-italic">{row[c.key]}</span>
-                      : String(row[c.key] ?? '—')}
-                  </td>
-                ))}
+                {cols.map((c, ci) => {
+                  const addr = `${columnLetter(ci)}${ri + 2}`  // Excel-style: row 2 = first data row
+                  const clickable = isSelected && !!onCellClick
+                  return (
+                    <td
+                      key={ci}
+                      title={clickable ? `${addr} — click to insert into formula` : addr}
+                      onClick={clickable ? (e) => { e.stopPropagation(); onCellClick(addr) } : undefined}
+                      className={cn(
+                        'px-2 py-1 text-slate-500 italic border-b border-slate-100 truncate',
+                        clickable && 'cursor-cell hover:bg-primary/10 hover:text-primary hover:not-italic'
+                      )}
+                    >
+                      {typeof row[c.key] === 'string' && row[c.key].startsWith('#ERROR')
+                        ? <span className="text-destructive not-italic">{row[c.key]}</span>
+                        : String(row[c.key] ?? '—')}
+                    </td>
+                  )
+                })}
               </tr>
             ))}
             {hasTotals && (
               <tr className="bg-slate-50 font-semibold">
                 {cols.map((c, ci) => (
                   <td key={ci} className="px-2 py-1 text-slate-700 border-t border-slate-300 truncate">
-                    {ci === 0 ? 'Total' : (c.show_total ? String(totals[c.key]) : '')}
+                    {ci === 0 ? 'Total' : ((c.show_total || c.total_formula) ? String(totals[c.key] ?? '') : '')}
                   </td>
                 ))}
               </tr>
@@ -351,7 +363,7 @@ function TablePreview({ field, accent, isSelected, onUpdate, selectedColumnIdx, 
   )
 }
 
-function FieldCellBody({ field, accent, formDef, classification, approvalSteps, users, roles, isSelected, isOverlay, onUpdate, selectedColumnIdx, onSelectColumn }) {
+function FieldCellBody({ field, accent, formDef, classification, approvalSteps, users, roles, isSelected, isOverlay, onUpdate, selectedColumnIdx, onSelectColumn, onCellClick }) {
   const meta = FIELD_TYPE_META[field.field_type] || FIELD_TYPE_META.text
   const preview = previewValue(field)
 
@@ -445,6 +457,7 @@ function FieldCellBody({ field, accent, formDef, classification, approvalSteps, 
           onUpdate={onUpdate}
           selectedColumnIdx={selectedColumnIdx}
           onSelectColumn={onSelectColumn}
+          onCellClick={onCellClick}
         />
       )}
       {field.field_type === 'signature' && (
@@ -494,7 +507,7 @@ function FieldCellBody({ field, accent, formDef, classification, approvalSteps, 
 
 // ── Sortable wrapper ──────────────────────────────────────────────────────────
 
-function SortableFieldCell({ field, accent, formDef, classification, approvalSteps, users, roles, isSelected, onSelect, onUpdate, onDelete, selectedColumnIdx, onSelectColumn }) {
+function SortableFieldCell({ field, accent, formDef, classification, approvalSteps, users, roles, isSelected, onSelect, onUpdate, onDelete, selectedColumnIdx, onSelectColumn, onCellClick }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: field.id })
 
@@ -526,6 +539,7 @@ function SortableFieldCell({ field, accent, formDef, classification, approvalSte
         onUpdate={onUpdate}
         selectedColumnIdx={selectedColumnIdx}
         onSelectColumn={onSelectColumn}
+        onCellClick={onCellClick}
       />
       <span
         {...attributes}
@@ -744,7 +758,7 @@ function SectionBlock({
   section, fields, accent, formDef, classification, approvalSteps, users, roles,
   sectionIdx, totalSections,
   selectedFieldId, onSelectField, onAddField, onUpdateField, onDeleteField,
-  selectedColumnIdx, onSelectColumn,
+  selectedColumnIdx, onSelectColumn, onCellClick,
   onRenameSection, onMoveSection, onDeleteSection,
   sensors, onDragEnd,
 }) {
@@ -841,6 +855,7 @@ function SectionBlock({
                 onDelete={() => onDeleteField(f.id)}
                 selectedColumnIdx={selectedFieldId === f.id ? selectedColumnIdx : null}
                 onSelectColumn={selectedFieldId === f.id ? onSelectColumn : null}
+                onCellClick={selectedFieldId === f.id ? onCellClick : null}
               />
             ))}
             {fields.length === 0 && (
@@ -862,6 +877,7 @@ export default function FormDesignerCanvas({
   sections, fields, approvalSteps, users, roles,
   selectedFieldId, onSelectField,
   selectedColumnIdx, onSelectColumn,
+  onCellClick,
   onAddSection, onRenameSection, onMoveSection, onDeleteSection,
   onAddField, onUpdateField, onDeleteField, onReorderFields,
 }) {
@@ -950,6 +966,7 @@ export default function FormDesignerCanvas({
               onSelectField={onSelectField}
               selectedColumnIdx={selectedColumnIdx}
               onSelectColumn={onSelectColumn}
+              onCellClick={onCellClick}
               onAddField={(t) => onAddField(s, t)}
               onUpdateField={onUpdateField}
               onDeleteField={onDeleteField}

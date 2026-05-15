@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useMemo, useRef, forwardRef, useImperativeHandle } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -587,7 +587,7 @@ function TabButton({ active, onClick, icon: Icon, label, count, hint }) {
 
 // ── Formula bar (top) ────────────────────────────────────────────────────────
 
-function FormulaBar({ selectedField, selectedColumnIdx, onUpdateField }) {
+const FormulaBar = forwardRef(function FormulaBar({ selectedField, selectedColumnIdx, onUpdateField }, ref) {
   // Decide what the formula bar is editing:
   //  - calculated field         → field.calculation_formula
   //  - selected table column    → field.table_columns[idx].formula
@@ -622,6 +622,35 @@ function FormulaBar({ selectedField, selectedColumnIdx, onUpdateField }) {
   const [draft, setDraft] = useState('')
   useEffect(() => { setDraft(target?.formula || '') }, [target?.scope, target?.label])
 
+  const inputRef = useRef(null)
+
+  // Exposed so the canvas can click a cell and have its address (e.g. "B2")
+  // injected at the formula bar's caret position.
+  useImperativeHandle(ref, () => ({
+    insertCellRef(addr) {
+      if (!target || !inputRef.current) return false
+      const input = inputRef.current
+      const start = input.selectionStart ?? draft.length
+      const end   = input.selectionEnd   ?? draft.length
+      // Auto-prepend "=" if the field is empty so it reads like a real formula.
+      const base = draft.length === 0 ? '=' : draft
+      const insertAt = draft.length === 0 ? 1 : start
+      const insertEnd = draft.length === 0 ? 1 : end
+      const next = base.slice(0, insertAt) + addr + base.slice(insertEnd)
+      setDraft(next)
+      target.commit(next)
+      requestAnimationFrame(() => {
+        const el = inputRef.current
+        if (!el) return
+        el.focus()
+        const caret = insertAt + addr.length
+        try { el.setSelectionRange(caret, caret) } catch {}
+      })
+      return true
+    },
+    hasTarget: () => !!target,
+  }), [target, draft])
+
   const disabled = !target
 
   return (
@@ -636,6 +665,7 @@ function FormulaBar({ selectedField, selectedColumnIdx, onUpdateField }) {
         {target ? target.label : 'Select a calculated field or a table column to edit its formula'}
       </span>
       <Input
+        ref={inputRef}
         value={disabled ? '' : draft}
         onChange={e => setDraft(e.target.value)}
         onBlur={() => target && draft !== target.formula && target.commit(draft)}
@@ -647,9 +677,14 @@ function FormulaBar({ selectedField, selectedColumnIdx, onUpdateField }) {
         placeholder={disabled ? '' : '=qty * unit_cost  or  =B2*C2  or  =SUM(items.total)'}
         className="flex-1 font-mono text-xs"
       />
+      {target && (
+        <span className="hidden xl:inline text-[9px] text-muted-foreground italic">
+          click a cell to insert its ref
+        </span>
+      )}
     </div>
   )
-}
+})
 
 // ── Table toolbar (bottom, contextual) ───────────────────────────────────────
 
@@ -754,9 +789,22 @@ export default function FormDesigner() {
   const [approvalSteps, setApprovalSteps] = useState([])
   const [initiatorRoleIds, setInitiatorRoleIds] = useState([])
   const initRef = useRef(false)
+  const formulaBarRef = useRef(null)
 
   // Reset column selection whenever the selected field changes.
   useEffect(() => { setSelectedColumnIdx(null) }, [selectedId])
+
+  // Click a table cell on the canvas → insert its address (e.g. "B2") at
+  // the formula bar's caret. If the formula bar isn't focused on anything
+  // editable, show a hint toast.
+  const handleCellClick = (addr) => {
+    const bar = formulaBarRef.current
+    if (!bar || !bar.hasTarget()) {
+      toast.message('Select a calculated field or table column first to edit its formula.')
+      return
+    }
+    bar.insertCellRef(addr)
+  }
 
   // Seed once we have form + roles + users (the step adapter needs them for
   // name resolution). Save-success re-seeds explicitly from the response.
@@ -1069,6 +1117,7 @@ export default function FormDesigner() {
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Formula bar (top) */}
           <FormulaBar
+            ref={formulaBarRef}
             selectedField={selectedField}
             selectedColumnIdx={selectedColumnIdx}
             onUpdateField={updateField}
@@ -1100,6 +1149,7 @@ export default function FormDesigner() {
                 onSelectField={setSelectedId}
                 selectedColumnIdx={selectedColumnIdx}
                 onSelectColumn={setSelectedColumnIdx}
+                onCellClick={handleCellClick}
                 onAddSection={addSection}
                 onRenameSection={renameSection}
                 onMoveSection={moveSection}
