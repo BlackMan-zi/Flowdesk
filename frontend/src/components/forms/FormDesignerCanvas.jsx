@@ -46,12 +46,16 @@ export const FIELD_TYPE_META = {
   approval_block:  { label: 'Approval Section', icon: Workflow,       group: 'System', defaultWidth: 'full',isSystem: true },
 }
 
+// Note: 'reference' is intentionally absent from the toolbox list because the
+// reference number is auto-rendered in the form header on every form. The
+// meta entry above is kept so legacy fields stored with auto_fill_source
+// = 'reference_number' continue to render at the placed location.
 export const FIELD_TYPES_LIST = [
   'text', 'textarea', 'number', 'currency', 'date',
   'dropdown', 'radio', 'checkbox',
   'table', 'calculated', 'file', 'signature',
   'text_static',
-  'reference', 'submission_date', 'classification', 'approval_block',
+  'submission_date', 'classification', 'approval_block',
 ]
 
 // Width fraction → percentage (for free-positioned fields)
@@ -1053,13 +1057,17 @@ export default function FormDesignerCanvas({
           />
         ))}
 
-        {/* Title only — Reference / Date / Classification / Approvals are
-            now placeable system blocks that you drop wherever you want. */}
+        {/* Title — and the auto-generated reference number below it. The
+            reference is system-generated on instance creation, so admins
+            don't need (and can no longer) place it manually. */}
         <div className="text-center mb-4">
           <h1 className="text-[16px] font-bold tracking-tight" style={{ color: accent }}>
             {formDef.printed_title || formDef.name}
           </h1>
           <div className="mx-auto mt-1 h-[2px] w-16 rounded-full" style={{ backgroundColor: accent }} />
+          <div className="text-[10px] font-mono text-slate-500 mt-1.5">
+            Ref: FD-{formDef.code_suffix || 'AUTO'}-{new Date().getFullYear()}-####
+          </div>
         </div>
 
         {/* Sections (flow only — free fields rendered above) */}

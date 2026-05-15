@@ -759,12 +759,15 @@ export default function FormFillerCanvas({
           />
         ))}
 
-        {/* Title */}
+        {/* Title + auto-generated reference number (system-controlled chrome) */}
         <div className="text-center mb-4">
           <h1 className="text-[16px] font-bold tracking-tight" style={{ color: accent }}>
             {formDef.printed_title || formDef.name}
           </h1>
           <div className="mx-auto mt-1 h-[2px] w-16 rounded-full" style={{ backgroundColor: accent }} />
+          <div className="text-[10px] font-mono text-slate-500 mt-1.5">
+            Ref: {referenceNumber || `FD-${formDef.code_suffix || 'AUTO'}-${new Date().getFullYear()}-####`}
+          </div>
         </div>
 
         {/* Sections */}
