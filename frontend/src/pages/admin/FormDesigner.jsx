@@ -11,7 +11,11 @@ import {
   verticalListSortingStrategy, useSortable,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { getFormDefinition, replaceFormFields } from '../../api/forms'
+import {
+  getFormDefinition, replaceFormFields, createApprovalTemplate, updateApprovalTemplate,
+  updateFormDefinition,
+} from '../../api/forms'
+import { listUsers, listRoles } from '../../api/users'
 import { getMyOrganization } from '../../api/settings'
 import { Card, CardContent } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
@@ -23,7 +27,10 @@ import {
   Type, AlignLeft, Hash, DollarSign, Calendar, ChevronDown as ChevronDownIcon,
   CheckSquare, Circle, Calculator, Paperclip, PenLine, Hash as HashIcon,
   Table as TableIcon, FolderOpen, Settings as SettingsIcon, Eye, Pencil,
+  Workflow, ShieldCheck,
 } from 'lucide-react'
+import ApprovalEditor, { stepsToApiPayload, stepsFromApi } from '../../components/forms/ApprovalEditor'
+import InitiatorRolesPanel from '../../components/forms/InitiatorRolesPanel'
 import LetterheadPage from '../../components/letterhead/LetterheadPage'
 import {
   fetchHeaderImageObjectUrl, fetchFooterImageObjectUrl,
@@ -389,6 +396,35 @@ function PropertiesPanel({ field, sections, onChange }) {
   )
 }
 
+// ── Tab button ────────────────────────────────────────────────────────────────
+
+function TabButton({ active, onClick, icon: Icon, label, count, hint }) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        'flex items-center gap-2 px-4 py-2.5 border-b-2 text-sm font-medium transition-colors -mb-px',
+        active
+          ? 'border-primary text-primary'
+          : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+      )}
+    >
+      <Icon size={14} />
+      <span>{label}</span>
+      {hint ? (
+        <span className="text-[10px] text-muted-foreground italic">{hint}</span>
+      ) : count != null && count > 0 ? (
+        <span className={cn(
+          'text-[10px] font-bold px-1.5 rounded-full',
+          active ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground'
+        )}>
+          {count}
+        </span>
+      ) : null}
+    </button>
+  )
+}
+
 // ── Main designer page ───────────────────────────────────────────────────────
 
 export default function FormDesigner() {
@@ -404,6 +440,14 @@ export default function FormDesigner() {
     queryKey: ['my-organization'],
     queryFn: () => getMyOrganization().then(r => r.data),
   })
+  const { data: users = [] } = useQuery({
+    queryKey: ['users'],
+    queryFn: () => listUsers().then(r => r.data),
+  })
+  const { data: roles = [] } = useQuery({
+    queryKey: ['roles'],
+    queryFn: () => listRoles().then(r => r.data),
+  })
 
   // Local working state — list of field drafts in render order.
   const [fields, setFields] = useState([])
@@ -414,15 +458,20 @@ export default function FormDesigner() {
   const [renameDraft, setRenameDraft] = useState('')
   const [previewOpen, setPreviewOpen] = useState(false)
   const [previewUrls, setPreviewUrls] = useState({ header: null, footer: null })
+  // Tab + approval + initiator state
+  const [tab, setTab] = useState('fields')          // 'fields' | 'approval' | 'initiator'
+  const [approvalSteps, setApprovalSteps] = useState([])
+  const [initiatorRoleIds, setInitiatorRoleIds] = useState([])
   const initRef = useRef(false)
 
-  // Seed local state once on first load. Save-success re-seeds explicitly
-  // from the response so we don't trample in-progress edits on every refetch.
+  // Seed once we have form + roles + users (the step adapter needs them for
+  // name resolution). Save-success re-seeds explicitly from the response.
   useEffect(() => {
     if (!formDef || initRef.current) return
+    if (!roles.length || !users.length) return  // wait for lookup data
     seedFromForm(formDef)
     initRef.current = true
-  }, [formDef])
+  }, [formDef, roles.length, users.length])
 
   const seedFromForm = (def) => {
     const loaded = (def.fields || []).map(f => ({
@@ -433,6 +482,8 @@ export default function FormDesigner() {
     const found = Array.from(new Set(loaded.map(f => f.section_name)))
     setSections(found.length ? found : [DEFAULT_SECTION])
     setActiveSection(prev => (found.includes(prev) ? prev : (found[0] || DEFAULT_SECTION)))
+    setApprovalSteps(stepsFromApi(def.approval_template?.steps || [], roles, users))
+    setInitiatorRoleIds(def.initiator_role_ids || [])
   }
 
   // Letterhead preview blob fetch
@@ -551,10 +602,11 @@ export default function FormDesigner() {
     })
   }
 
-  // Save: PUT the field list, then refetch the form to be sure the local
-  // state matches the server (assigns real IDs to new fields, drops deleted ones).
+  // Save: persist fields + approval template + initiator-role restriction,
+  // then refetch to ensure local state matches the server.
   const saveMut = useMutation({
     mutationFn: async () => {
+      // 1) Fields
       const ordered = []
       sections.forEach(s => {
         fields.filter(f => (f.section_name || DEFAULT_SECTION) === s).forEach(f => ordered.push(f))
@@ -564,7 +616,24 @@ export default function FormDesigner() {
         id: f.id && !String(f.id).startsWith('__new__') ? f.id : undefined,
       }))
       await replaceFormFields(id, payload)
-      // Authoritative refetch — the PUT response can vary; the GET is the source of truth.
+
+      // 2) Approval template (only touch if the user has interacted with it
+      // — i.e. there are steps OR there was already a template linked).
+      const stepsPayload = stepsToApiPayload(approvalSteps)
+      if (formDef?.approval_template_id) {
+        await updateApprovalTemplate(formDef.approval_template_id, { steps: stepsPayload })
+      } else if (stepsPayload.length > 0) {
+        const res = await createApprovalTemplate({
+          name: `${formDef?.name || 'Form'} Workflow`,
+          steps: stepsPayload,
+        })
+        await updateFormDefinition(id, { approval_template_id: res.data.id })
+      }
+
+      // 3) Initiator role restriction — always send (empty list = open to all).
+      await updateFormDefinition(id, { initiator_role_ids: initiatorRoleIds })
+
+      // 4) Refetch
       const fresh = await getFormDefinition(id).then(r => r.data)
       return fresh
     },
@@ -572,7 +641,6 @@ export default function FormDesigner() {
       toast.success('Form saved.')
       qc.setQueryData(['form-definition', id], fresh)
       seedFromForm(fresh)
-      // Keep the selected field if its ID still exists post-save
       setSelectedId(prev => (fresh.fields || []).some(f => f.id === prev) ? prev : null)
       qc.invalidateQueries({ queryKey: ['form-definitions'] })
     },
@@ -622,7 +690,36 @@ export default function FormDesigner() {
         </div>
       </div>
 
-      {/* Three-pane layout */}
+      {/* Tabs */}
+      <div className="flex items-center gap-1 px-4 border-b border-border bg-card">
+        <TabButton active={tab === 'fields'}    onClick={() => setTab('fields')}    icon={SettingsIcon} label="Fields"    count={fields.length} />
+        <TabButton active={tab === 'approval'}  onClick={() => setTab('approval')}  icon={Workflow}     label="Approval"  count={approvalSteps.length} />
+        <TabButton active={tab === 'initiator'} onClick={() => setTab('initiator')} icon={ShieldCheck}  label="Initiator" count={initiatorRoleIds.length || null} hint={initiatorRoleIds.length === 0 ? 'All users' : null} />
+      </div>
+
+      {/* Body — three-pane for Fields, centered single panel for the others */}
+      {tab === 'approval' && (
+        <div className="flex-1 overflow-y-auto p-6">
+          <ApprovalEditor
+            steps={approvalSteps}
+            onChange={setApprovalSteps}
+            users={users}
+            roles={roles}
+          />
+        </div>
+      )}
+
+      {tab === 'initiator' && (
+        <div className="flex-1 overflow-y-auto p-6">
+          <InitiatorRolesPanel
+            roles={roles}
+            selectedIds={initiatorRoleIds}
+            onChange={setInitiatorRoleIds}
+          />
+        </div>
+      )}
+
+      {tab === 'fields' && (
       <div className="flex-1 grid grid-cols-[220px_1fr_280px] gap-0 overflow-hidden">
         {/* ── Sections ─────────────────────── */}
         <aside className="border-r border-border bg-muted/20 overflow-y-auto p-3 space-y-1">
@@ -773,6 +870,7 @@ export default function FormDesigner() {
           />
         </aside>
       </div>
+      )}
 
       {/* Rename section modal */}
       <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
