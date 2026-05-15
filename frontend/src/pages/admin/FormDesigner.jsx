@@ -1149,13 +1149,22 @@ export default function FormDesigner() {
             onUpdateField={updateField}
           />
 
-          {/* Body: toolbox | canvas | properties */}
-          <div className="flex-1 grid grid-cols-[200px_1fr_320px] overflow-hidden">
+          {/* Body: toolbox | canvas | properties.
+              - grid-rows-[minmax(0,1fr)] forces the single row to the container
+                height instead of auto-sizing to content, so each pane's
+                overflow-y-auto actually produces a scrollbar (otherwise the
+                pane just grows to fit the tall canvas and there's nothing to
+                scroll within).
+              - min-w on the canvas track keeps the 3-pane layout usable on
+                narrow screens; below that, overflow-x-auto on the parent
+                exposes a horizontal scrollbar so admins can pan to the
+                Properties panel. */}
+          <div className="flex-1 grid grid-cols-[200px_minmax(640px,1fr)_320px] grid-rows-[minmax(0,1fr)] overflow-x-auto overflow-y-hidden">
             {/* Toolbox */}
             <Toolbox onAdd={addFromToolbox} />
 
             {/* Canvas */}
-            <div className="overflow-y-auto bg-muted/30 p-6">
+            <div className="overflow-y-auto bg-muted/30 p-6 min-h-0">
               <FormDesignerCanvas
                 formDef={formDef}
                 headerUrl={previewUrls.header}
@@ -1190,7 +1199,7 @@ export default function FormDesigner() {
             </div>
 
             {/* Properties drawer */}
-            <aside className="border-l border-border bg-card overflow-y-auto p-4">
+            <aside className="border-l border-border bg-card overflow-y-auto p-4 min-h-0">
               <PropertiesPanel
                 field={selectedField}
                 fields={fields}
