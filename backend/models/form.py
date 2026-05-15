@@ -63,7 +63,8 @@ class FormDefinition(Base):
 
     id = Column(String(36), primary_key=True, default=gen_uuid)
     organization_id = Column(String(36), ForeignKey("organizations.id"), nullable=False)
-    name = Column(String(255), nullable=False)
+    name = Column(String(255), nullable=False)                # internal admin label
+    printed_title = Column(String(255), nullable=True)        # title shown on the rendered form; falls back to name
     description = Column(Text, nullable=True)
     code_suffix = Column(String(20), nullable=False)          # used in reference number e.g. "LRQ"
     visibility = Column(SAEnum(FormVisibility), default=FormVisibility.all_users)

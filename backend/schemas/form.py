@@ -61,6 +61,7 @@ class FormFieldResponse(BaseModel):
 
 class FormDefinitionCreate(BaseModel):
     name: str
+    printed_title: Optional[str] = None
     description: Optional[str] = None
     code_suffix: str
     visibility: FormVisibility = FormVisibility.all_users
@@ -75,6 +76,7 @@ class FormDefinitionCreate(BaseModel):
 
 class FormDefinitionUpdate(BaseModel):
     name: Optional[str] = None
+    printed_title: Optional[str] = None
     description: Optional[str] = None
     code_suffix: Optional[str] = None
     visibility: Optional[FormVisibility] = None
@@ -113,6 +115,7 @@ class ApprovalTemplateBrief(BaseModel):
 class FormDefinitionResponse(BaseModel):
     id: str
     name: str
+    printed_title: Optional[str] = None
     description: Optional[str]
     code_suffix: str
     visibility: FormVisibility

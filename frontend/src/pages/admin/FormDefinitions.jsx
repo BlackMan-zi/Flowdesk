@@ -177,7 +177,7 @@ function SelectedDeptBadges({ selected, departments, onRemove }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 const EMPTY_FORM = {
-  name: '', description: '', code_suffix: '',
+  name: '', printed_title: '', description: '', code_suffix: '',
   visibility: 'all_users',
   visible_department_ids: [],
   allow_backdating: false,
@@ -235,6 +235,7 @@ export default function AdminFormDefinitions() {
     setEditing(d)
     setForm({
       name: d.name,
+      printed_title: d.printed_title || '',
       description: d.description || '',
       code_suffix: d.code_suffix,
       visibility: d.visibility,
@@ -268,6 +269,7 @@ export default function AdminFormDefinitions() {
     mutationFn: () => {
       const payload = {
         name: form.name.trim(),
+        printed_title: form.printed_title.trim() || null,
         description: form.description.trim() || null,
         code_suffix: form.code_suffix.trim().toUpperCase(),
         visibility: form.visibility,
@@ -497,6 +499,20 @@ export default function AdminFormDefinitions() {
                   className="w-full border border-border rounded-md px-3 py-2 text-sm bg-background text-foreground font-mono uppercase focus:outline-none focus:ring-2 focus:ring-ring"
                 />
               </div>
+            </div>
+
+            {/* Printed title (shown on the rendered form) */}
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground">
+                Printed Title
+                <span className="ml-1.5 text-xs text-muted-foreground font-normal">— shown at the top of the form when filled or exported. Leave blank to use the Form Name.</span>
+              </label>
+              <input
+                value={form.printed_title}
+                onChange={set('printed_title')}
+                placeholder={form.name.trim() || 'e.g. Annual Leave Request Form'}
+                className="w-full border border-border rounded-md px-3 py-2 text-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              />
             </div>
 
             {/* Description */}
