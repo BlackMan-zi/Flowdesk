@@ -31,6 +31,7 @@ import {
 } from 'lucide-react'
 import ApprovalEditor, { stepsToApiPayload, stepsFromApi } from '../../components/forms/ApprovalEditor'
 import InitiatorRolesPanel from '../../components/forms/InitiatorRolesPanel'
+import FormDesignerCanvas from '../../components/forms/FormDesignerCanvas'
 import LetterheadPage from '../../components/letterhead/LetterheadPage'
 import {
   fetchHeaderImageObjectUrl, fetchFooterImageObjectUrl,
@@ -73,79 +74,6 @@ function ensureUnique(name, existing) {
   let i = 2
   while (existing.includes(`${name}_${i}`)) i++
   return `${name}_${i}`
-}
-
-// ── Sortable field card ───────────────────────────────────────────────────────
-
-function FieldCardBody({ field, isSelected, dragHandleProps, isDragOverlay }) {
-  const meta = FT[field.field_type] || FT.text
-  const Icon = meta.icon
-  return (
-    <div
-      className={cn(
-        'flex items-center gap-2 px-3 py-2 rounded-md border bg-card transition-all',
-        isSelected
-          ? 'border-primary ring-2 ring-primary/20 bg-primary/5'
-          : 'border-border hover:border-foreground/30 hover:bg-muted/30',
-        isDragOverlay && 'shadow-lg ring-2 ring-primary/40 cursor-grabbing'
-      )}
-    >
-      <span
-        {...(dragHandleProps || {})}
-        className="text-muted-foreground/50 hover:text-foreground cursor-grab active:cursor-grabbing touch-none"
-        title="Drag to reorder"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <GripVertical size={14} />
-      </span>
-      <Icon size={14} className="text-muted-foreground flex-shrink-0" />
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5">
-          <span className="text-sm font-medium text-foreground truncate">{field.field_label || '(untitled)'}</span>
-          {field.required && <span className="text-[10px] text-destructive font-bold">*</span>}
-        </div>
-        <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-          <span className="font-mono">{field.field_name || 'no_name'}</span>
-          <span>·</span>
-          <span>{meta.label}</span>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function SortableFieldCard({ field, isSelected, onSelect, onDelete }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: field.id })
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.4 : 1,
-  }
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className="group relative cursor-pointer"
-      onClick={onSelect}
-    >
-      <FieldCardBody
-        field={field}
-        isSelected={isSelected}
-        dragHandleProps={{ ...attributes, ...listeners }}
-      />
-      <button
-        type="button"
-        onClick={(e) => { e.stopPropagation(); onDelete() }}
-        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity"
-        title="Delete"
-      >
-        <Trash2 size={13} />
-      </button>
-    </div>
-  )
 }
 
 // ── Properties panel ──────────────────────────────────────────────────────────
@@ -453,9 +381,6 @@ export default function FormDesigner() {
   const [fields, setFields] = useState([])
   const [selectedId, setSelectedId] = useState(null)
   const [sections, setSections] = useState([DEFAULT_SECTION])
-  const [activeSection, setActiveSection] = useState(DEFAULT_SECTION)
-  const [renameOpen, setRenameOpen] = useState(false)
-  const [renameDraft, setRenameDraft] = useState('')
   const [previewOpen, setPreviewOpen] = useState(false)
   const [previewUrls, setPreviewUrls] = useState({ header: null, footer: null })
   // Tab + approval + initiator state
@@ -481,14 +406,15 @@ export default function FormDesigner() {
     setFields(loaded)
     const found = Array.from(new Set(loaded.map(f => f.section_name)))
     setSections(found.length ? found : [DEFAULT_SECTION])
-    setActiveSection(prev => (found.includes(prev) ? prev : (found[0] || DEFAULT_SECTION)))
     setApprovalSteps(stepsFromApi(def.approval_template?.steps || [], roles, users))
     setInitiatorRoleIds(def.initiator_role_ids || [])
   }
 
-  // Letterhead preview blob fetch
+  // Fetch letterhead images once the org is available so both the canvas and
+  // the preview modal can display them. Re-runs when the org's image flags
+  // change (e.g. user replaces the header in Settings on another tab).
   useEffect(() => {
-    if (!previewOpen || !org) return
+    if (!org) return
     let revoked = false
     const urls = { header: null, footer: null }
     const promises = []
@@ -499,51 +425,11 @@ export default function FormDesigner() {
       revoked = true
       if (urls.header) URL.revokeObjectURL(urls.header)
       if (urls.footer) URL.revokeObjectURL(urls.footer)
-      setPreviewUrls({ header: null, footer: null })
     }
-  }, [previewOpen, org])
-
-  const fieldsInSection = useMemo(
-    () => fields.filter(f => (f.section_name || DEFAULT_SECTION) === activeSection),
-    [fields, activeSection]
-  )
-
-  const [activeDragId, setActiveDragId] = useState(null)
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  )
-
-  const handleDragEnd = (event) => {
-    setActiveDragId(null)
-    const { active, over } = event
-    if (!over || active.id === over.id) return
-    setFields(prev => {
-      // Reorder only within the visible section, then splice the result back
-      // into the full list at the matching positions.
-      const inSection = prev.filter(f => (f.section_name || DEFAULT_SECTION) === activeSection)
-      const oldIdx = inSection.findIndex(f => f.id === active.id)
-      const newIdx = inSection.findIndex(f => f.id === over.id)
-      if (oldIdx === -1 || newIdx === -1) return prev
-      const reordered = arrayMove(inSection, oldIdx, newIdx)
-      // Build the new global list preserving non-section fields in place
-      const result = []
-      let cursor = 0
-      for (const f of prev) {
-        if ((f.section_name || DEFAULT_SECTION) === activeSection) {
-          result.push(reordered[cursor++])
-        } else {
-          result.push(f)
-        }
-      }
-      return result
-    })
-  }
-
-  const activeDragField = activeDragId ? fields.find(f => f.id === activeDragId) : null
+  }, [org?.id, org?.has_header_image, org?.has_footer_image])
 
   // Field operations
-  const addField = (type) => {
+  const addField = (sectionName, type) => {
     const baseLabel = FT[type]?.label || 'Field'
     const existingNames = fields.map(f => f.field_name)
     const tempId = `__new__${Date.now()}__${Math.random().toString(36).slice(2, 7)}`
@@ -552,7 +438,7 @@ export default function FormDesigner() {
       field_name: ensureUnique(slugify(baseLabel), existingNames),
       field_label: baseLabel,
       field_type: type,
-      section_name: activeSection,
+      section_name: sectionName || DEFAULT_SECTION,
       required: false,
       placeholder: '',
       options: type === 'dropdown' || type === 'radio' || type === 'checkbox' ? ['Option A', 'Option B'] : null,
@@ -560,6 +446,27 @@ export default function FormDesigner() {
     }
     setFields(prev => [...prev, newField])
     setSelectedId(tempId)
+  }
+
+  // Reorder fields within a single section (used by the canvas DnD)
+  const reorderFields = (sectionName, activeId, overId) => {
+    setFields(prev => {
+      const inSection = prev.filter(f => (f.section_name || DEFAULT_SECTION) === sectionName)
+      const oldIdx = inSection.findIndex(f => f.id === activeId)
+      const newIdx = inSection.findIndex(f => f.id === overId)
+      if (oldIdx === -1 || newIdx === -1) return prev
+      const reordered = arrayMove(inSection, oldIdx, newIdx)
+      const result = []
+      let cursor = 0
+      for (const f of prev) {
+        if ((f.section_name || DEFAULT_SECTION) === sectionName) {
+          result.push(reordered[cursor++])
+        } else {
+          result.push(f)
+        }
+      }
+      return result
+    })
   }
 
   const updateField = (next) => {
@@ -577,20 +484,17 @@ export default function FormDesigner() {
     let i = 2
     while (sections.includes(name)) name = `New Section ${i++}`
     setSections([...sections, name])
-    setActiveSection(name)
   }
   const renameSection = (oldName, newName) => {
-    if (!newName.trim() || sections.includes(newName)) return
+    if (!newName.trim() || (sections.includes(newName) && newName !== oldName)) return
     setSections(prev => prev.map(s => (s === oldName ? newName : s)))
     setFields(prev => prev.map(f => ((f.section_name || DEFAULT_SECTION) === oldName ? { ...f, section_name: newName } : f)))
-    if (activeSection === oldName) setActiveSection(newName)
   }
   const deleteSection = (name) => {
     if (sections.length <= 1) return toast.error('At least one section is required.')
     const fallback = sections.find(s => s !== name)
     setSections(prev => prev.filter(s => s !== name))
     setFields(prev => prev.map(f => ((f.section_name || DEFAULT_SECTION) === name ? { ...f, section_name: fallback } : f)))
-    if (activeSection === name) setActiveSection(fallback)
   }
   const moveSection = (idx, delta) => {
     setSections(prev => {
@@ -720,186 +624,45 @@ export default function FormDesigner() {
       )}
 
       {tab === 'fields' && (
-      <div className="flex-1 grid grid-cols-[220px_1fr_280px] gap-0 overflow-hidden">
-        {/* ── Sections ─────────────────────── */}
-        <aside className="border-r border-border bg-muted/20 overflow-y-auto p-3 space-y-1">
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1.5 px-1">
-            Sections
-          </div>
-          {sections.map((s, idx) => {
-            const count = fields.filter(f => (f.section_name || DEFAULT_SECTION) === s).length
-            const isActive = s === activeSection
-            return (
-              <div
-                key={s}
-                onClick={() => setActiveSection(s)}
-                className={cn(
-                  'group flex items-center gap-1.5 px-2 py-1.5 rounded-md text-sm cursor-pointer',
-                  isActive
-                    ? 'bg-primary/10 text-primary border border-primary/30'
-                    : 'text-foreground hover:bg-muted border border-transparent'
-                )}
-              >
-                <FolderOpen size={12} className={isActive ? 'text-primary' : 'text-muted-foreground'} />
-                <span className="flex-1 truncate text-xs">{s}</span>
-                <span className="text-[10px] text-muted-foreground">{count}</span>
-                {isActive && (
-                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100">
-                    <button
-                      type="button"
-                      title="Rename"
-                      onClick={(e) => { e.stopPropagation(); setRenameDraft(s); setRenameOpen(true) }}
-                      className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
-                    >
-                      <Pencil size={11} />
-                    </button>
-                    <button
-                      type="button"
-                      title="Move up"
-                      disabled={idx === 0}
-                      onClick={(e) => { e.stopPropagation(); moveSection(idx, -1) }}
-                      className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-30"
-                    >
-                      <ChevronUp size={11} />
-                    </button>
-                    <button
-                      type="button"
-                      title="Move down"
-                      disabled={idx === sections.length - 1}
-                      onClick={(e) => { e.stopPropagation(); moveSection(idx, 1) }}
-                      className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-30"
-                    >
-                      <ChevronDown size={11} />
-                    </button>
-                    <button
-                      type="button"
-                      title="Delete section"
-                      onClick={(e) => { e.stopPropagation(); deleteSection(s) }}
-                      className="p-0.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
-                    >
-                      <Trash2 size={11} />
-                    </button>
-                  </div>
-                )}
-              </div>
-            )
-          })}
-          <Button variant="ghost" size="sm" className="w-full justify-start text-xs mt-1" onClick={addSection}>
-            <Plus size={12} className="mr-1" /> Add section
-          </Button>
-        </aside>
-
-        {/* ── Field list (active section) ──── */}
-        <main className="overflow-y-auto p-5 space-y-4">
-          <div>
-            <h2 className="text-sm font-bold text-foreground">{activeSection}</h2>
-            <p className="text-xs text-muted-foreground">
-              {fieldsInSection.length} field{fieldsInSection.length === 1 ? '' : 's'} in this section.
-            </p>
-          </div>
-
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragStart={(e) => setActiveDragId(e.active.id)}
-            onDragCancel={() => setActiveDragId(null)}
-            onDragEnd={handleDragEnd}
-          >
-            <SortableContext
-              items={fieldsInSection.map(f => f.id)}
-              strategy={verticalListSortingStrategy}
-            >
-              <div className="space-y-1.5">
-                {fieldsInSection.map(f => (
-                  <SortableFieldCard
-                    key={f.id}
-                    field={f}
-                    isSelected={selectedId === f.id}
-                    onSelect={() => setSelectedId(f.id)}
-                    onDelete={() => deleteField(f.id)}
-                  />
-                ))}
-                {fieldsInSection.length === 0 && (
-                  <div className="text-center py-8 text-xs text-muted-foreground border-2 border-dashed border-border rounded-md">
-                    No fields yet. Add one from below.
-                  </div>
-                )}
-              </div>
-            </SortableContext>
-            <DragOverlay>
-              {activeDragField ? (
-                <FieldCardBody field={activeDragField} isSelected isDragOverlay />
-              ) : null}
-            </DragOverlay>
-          </DndContext>
-
-          {/* Add field menu */}
-          <Card className="mt-6">
-            <CardContent className="p-4 space-y-3">
-              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Add a field</div>
-              {['Input', 'Selection', 'Advanced'].map(group => (
-                <div key={group}>
-                  <div className="text-[10px] text-muted-foreground/70 mb-1">{group}</div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {FIELD_TYPES.filter(t => t.group === group).map(t => {
-                      const Icon = t.icon
-                      return (
-                        <button
-                          key={t.value}
-                          onClick={() => addField(t.value)}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs border border-border rounded-md bg-card hover:border-primary hover:text-primary hover:bg-primary/5 transition-colors"
-                        >
-                          <Icon size={12} />
-                          {t.label}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        </main>
-
-        {/* ── Properties drawer ────────────── */}
-        <aside className="border-l border-border bg-card overflow-y-auto p-4">
-          <PropertiesPanel
-            field={selectedField}
-            sections={sections}
-            onChange={updateField}
-          />
-        </aside>
-      </div>
-      )}
-
-      {/* Rename section modal */}
-      <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Rename section</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 py-2">
-            <Input
-              value={renameDraft}
-              onChange={(e) => setRenameDraft(e.target.value)}
-              placeholder="Section name"
-              autoFocus
+        <div className="flex-1 grid grid-cols-[1fr_320px] overflow-hidden">
+          {/* ── Canvas: letterhead-styled WYSIWYG editor ────────────────── */}
+          <div className="overflow-y-auto bg-muted/30 p-6">
+            <FormDesignerCanvas
+              formDef={formDef}
+              headerUrl={previewUrls.header}
+              footerUrl={previewUrls.footer}
+              accent={org?.letterhead_accent}
+              classification={
+                formDef.confidentiality
+                  ? (org?.classification_labels || []).find(l => l.name === formDef.confidentiality) || null
+                  : null
+              }
+              sections={sections}
+              fields={fields}
+              approvalSteps={approvalSteps}
+              users={users}
+              roles={roles}
+              selectedFieldId={selectedId}
+              onSelectField={setSelectedId}
+              onAddSection={addSection}
+              onRenameSection={renameSection}
+              onMoveSection={moveSection}
+              onDeleteSection={deleteSection}
+              onAddField={addField}
+              onDeleteField={deleteField}
+              onReorderFields={reorderFields}
             />
           </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setRenameOpen(false)}>Cancel</Button>
-            <Button
-              onClick={() => {
-                renameSection(activeSection, renameDraft.trim())
-                setRenameOpen(false)
-              }}
-              disabled={!renameDraft.trim() || sections.includes(renameDraft.trim())}
-            >
-              Save
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+          {/* ── Properties drawer ────────────────────────────────────────── */}
+          <aside className="border-l border-border bg-card overflow-y-auto p-4">
+            <PropertiesPanel
+              field={selectedField}
+              sections={sections}
+              onChange={updateField}
+            />
+          </aside>
+        </div>
+      )}
 
       {/* Letterhead preview modal */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
