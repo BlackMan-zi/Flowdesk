@@ -39,6 +39,16 @@ def create_form_instance(
     if not form_def:
         raise ValueError("Form definition not found or inactive")
 
+    # Enforce initiator role restriction. Admins always bypass.
+    user_role_objs = [ur.role for ur in created_by_user.user_roles if ur.role]
+    user_role_names = {r.name for r in user_role_objs}
+    if "Admin" not in user_role_names:
+        allowed_role_ids = {r.id for r in form_def.initiator_roles}
+        if allowed_role_ids:
+            user_role_ids = {r.id for r in user_role_objs}
+            if not (allowed_role_ids & user_role_ids):
+                raise ValueError("You do not have permission to initiate this form.")
+
     reference = generate_reference_number(db, organization_id, form_def.code_suffix)
 
     instance = FormInstance(

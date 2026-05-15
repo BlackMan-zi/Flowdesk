@@ -3,7 +3,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from database import get_db
-from models.user import User, RoleName, UserRole
+from models.user import User, RoleName, UserRole, Role
 from models.form import (
     FormDefinition, FormField, FormInstance, FormVersion,
     FormFieldValue, FormStatus
@@ -53,6 +53,13 @@ def create_form_definition(
     db.add(form_def)
     db.flush()
 
+    if payload.initiator_role_ids:
+        roles = db.query(Role).filter(
+            Role.id.in_(payload.initiator_role_ids),
+            Role.organization_id == current_user.organization_id
+        ).all()
+        form_def.initiator_roles = roles
+
     for idx, field_data in enumerate(payload.fields):
         field = FormField(
             form_definition_id=form_def.id,
@@ -84,10 +91,26 @@ def list_form_definitions(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    return db.query(FormDefinition).filter(
+    role_names = [ur.role.name for ur in current_user.user_roles if ur.role]
+    is_admin = RoleName.admin in role_names
+
+    forms = db.query(FormDefinition).filter(
         FormDefinition.organization_id == current_user.organization_id,
         FormDefinition.is_active == True
     ).all()
+
+    if is_admin:
+        return forms
+
+    user_role_ids = {ur.role_id for ur in current_user.user_roles}
+    visible = []
+    for f in forms:
+        allowed_role_ids = {r.id for r in f.initiator_roles}
+        # If form has no initiator restriction, anyone can initiate
+        # Otherwise the user must hold at least one of the allowed roles
+        if not allowed_role_ids or (allowed_role_ids & user_role_ids):
+            visible.append(f)
+    return visible
 
 
 @router.get("/definitions/{form_def_id}", response_model=FormDefinitionResponse)
@@ -119,10 +142,22 @@ def update_form_definition(
     if not form_def:
         raise HTTPException(status_code=404, detail="Form definition not found")
     updates = payload.model_dump(exclude_unset=True)
+    initiator_role_ids = updates.pop('initiator_role_ids', None)
+
     if 'code_suffix' in updates and updates['code_suffix']:
         updates['code_suffix'] = updates['code_suffix'].upper()
     for field, value in updates.items():
         setattr(form_def, field, value)
+
+    if initiator_role_ids is not None:
+        if initiator_role_ids:
+            roles = db.query(Role).filter(
+                Role.id.in_(initiator_role_ids),
+                Role.organization_id == current_user.organization_id
+            ).all()
+            form_def.initiator_roles = roles
+        else:
+            form_def.initiator_roles = []
 
     db.commit()
     db.refresh(form_def)
