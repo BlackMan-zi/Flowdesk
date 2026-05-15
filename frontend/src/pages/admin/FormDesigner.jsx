@@ -465,8 +465,28 @@ function PropertiesPanel({ field, fields = [], sections, onChange }) {
                       update({ table_columns: cols })
                     }}
                   />
-                  <span className="text-[10px] text-foreground">Sum this column at the bottom</span>
+                  <span className="text-[10px] text-foreground">Show total at the bottom</span>
                 </label>
+                {col.show_total && (
+                  <div>
+                    <label className="text-[10px] text-muted-foreground">
+                      Total formula
+                      <span className="ml-1 text-muted-foreground/70">
+                        — defaults to <code>SUM({columnLetter(idx)})</code>. Use ranges like <code>{columnLetter(idx)}2:{columnLetter(idx)}5</code>, or any expression.
+                      </span>
+                    </label>
+                    <Input
+                      value={col.total_formula || ''}
+                      onChange={(e) => {
+                        const cols = [...(field.table_columns || [])]
+                        cols[idx] = { ...cols[idx], total_formula: e.target.value }
+                        update({ table_columns: cols })
+                      }}
+                      placeholder={`SUM(${columnLetter(idx)})`}
+                      className="font-mono text-xs"
+                    />
+                  </div>
+                )}
                 {(col.type === 'number' || col.type === 'currency') && (
                   <div>
                     <label className="text-[10px] text-muted-foreground">

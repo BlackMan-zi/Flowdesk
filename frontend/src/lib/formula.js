@@ -89,6 +89,7 @@ function tokenize(src) {
     if (c === ')') { tokens.push({ type: TOK_RP }); i++; continue }
     if (c === ',') { tokens.push({ type: TOK_COMMA }); i++; continue }
     if (c === '.') { tokens.push({ type: TOK_DOT }); i++; continue }
+    if (c === ':') { tokens.push({ type: TOK_OP, value: ':' }); i++; continue }
     if ('+-*/%<>!'.includes(c)) { tokens.push({ type: TOK_OP, value: c }); i++; continue }
 
     throw new Error(`Unexpected character '${c}' at ${i}`)
@@ -194,6 +195,14 @@ function makeParser(tokens) {
         if (!close || close.type !== TOK_RP) throw new Error("Missing ')' in function call")
         return { type: 'call', name: t.value, args }
       }
+      // Range: IDENT ':' IDENT  (e.g. B2:B5, D:D). Treat before member access
+      // because Excel ranges only use bare cell refs, not dotted paths.
+      if (peek() && peek().type === TOK_OP && peek().value === ':') {
+        pos++ // consume ':'
+        const right = next()
+        if (!right || right.type !== TOK_IDENT) throw new Error("Expected cell reference after ':'")
+        return { type: 'range', from: t.value, to: right.value }
+      }
       // Member access via dot
       const path = [t.value]
       while (peek() && peek().type === TOK_DOT) {
@@ -251,10 +260,82 @@ const FUNCTIONS = {
 
 // ── Evaluator ────────────────────────────────────────────────────────────────
 
+// Letter A → 0, B → 1, ..., AA → 26
+function letterToIdx(letters) {
+  let idx = 0
+  for (const ch of letters) {
+    idx = idx * 26 + (ch.charCodeAt(0) - 64) // A=1
+  }
+  return idx - 1  // make 0-based
+}
+
+// Idx 0 → A, 1 → B, ..., 26 → AA. Mirrors columnLetter() in FormDesignerCanvas.
+export function idxToLetter(idx) {
+  let n = idx
+  let s = ''
+  do {
+    s = String.fromCharCode(65 + (n % 26)) + s
+    n = Math.floor(n / 26) - 1
+  } while (n >= 0)
+  return s
+}
+
+// Parse "B2", "D", "AB10" into { letter, rowNum|null }
+function parseCellRef(s) {
+  const m = s && s.match(/^([A-Za-z]+)(\d*)$/)
+  if (!m) return null
+  return { letter: m[1].toUpperCase(), rowNum: m[2] ? parseInt(m[2], 10) : null }
+}
+
+function evalRange(fromRef, toRef, context) {
+  const from = parseCellRef(fromRef)
+  const to   = parseCellRef(toRef)
+  if (!from || !to) return []
+
+  const rows = context.__rows__
+  const columns = context.__columns__
+
+  // If __rows__/__columns__ are present, expand the range from the actual
+  // table data. Otherwise fall back to a lookup of each individual cell key
+  // (so partial ranges still work if the caller has prepared all the keys).
+  if (rows && columns) {
+    const fromCol = letterToIdx(from.letter)
+    const toCol   = letterToIdx(to.letter)
+    // Excel row 1 = header; row 2 = first data row → array index 0.
+    // No row number ⇒ whole column (all rows).
+    const fromRow = from.rowNum != null ? Math.max(0, from.rowNum - 2) : 0
+    const toRow   = to.rowNum   != null ? Math.max(0, to.rowNum   - 1) : rows.length
+
+    const result = []
+    for (let r = fromRow; r < toRow && r < rows.length; r++) {
+      const row = rows[r]
+      for (let c = Math.min(fromCol, toCol); c <= Math.max(fromCol, toCol); c++) {
+        const col = columns[c]
+        if (col) result.push(row[col.key])
+      }
+    }
+    return result
+  }
+
+  // Fallback: enumerate explicit cell keys (e.g. B2, B3, ..., B5)
+  if (from.rowNum != null && to.rowNum != null && from.letter === to.letter) {
+    const out = []
+    const start = Math.min(from.rowNum, to.rowNum)
+    const end   = Math.max(from.rowNum, to.rowNum)
+    for (let r = start; r <= end; r++) {
+      const key = `${from.letter}${r}`
+      if (key in context) out.push(context[key])
+    }
+    return out
+  }
+  return []
+}
+
 function evalNode(node, context) {
   switch (node.type) {
     case 'num': return node.value
     case 'str': return node.value
+    case 'range': return evalRange(node.from, node.to, context)
     case 'ident': {
       if (!(node.name in context)) return 0    // unknown identifier → 0 (Excel-like)
       return context[node.name]
@@ -350,3 +431,37 @@ export function extractReferences(formula) {
 }
 
 export const SUPPORTED_FUNCTIONS = Object.keys(FUNCTIONS)
+
+/**
+ * Build an evaluation context for a TABLE-LEVEL formula (e.g. a totals-row
+ * formula or an off-table calculated field that references the table).
+ *
+ * The returned context supports:
+ *   - column-name lookups:        items: [...]            → array via member access
+ *   - column letter aliases:      B, C, D, ...            → array of all values in the column
+ *   - explicit cell-ref lookups:  B2, B3, ...             → that specific row's value
+ *   - range expansion:            B2:B5, D:D              → array of values across rows
+ *
+ * Pass the same shape as your real table rows to make formulas evaluate
+ * realistically at design time.
+ */
+export function tableFormulaContext(rows = [], cols = []) {
+  const ctx = { __rows__: rows, __columns__: cols }
+
+  // Column-name → array of all values
+  cols.forEach(c => {
+    if (c?.key) ctx[c.key] = rows.map(r => r?.[c.key])
+  })
+
+  // Column letter → array of values; cell ref Xn → that specific value
+  cols.forEach((c, i) => {
+    const letter = idxToLetter(i)
+    ctx[letter] = rows.map(r => r?.[c.key])
+    rows.forEach((r, ri) => {
+      const rowNum = ri + 2 // data row 0 = Excel row 2
+      ctx[`${letter}${rowNum}`] = r?.[c.key]
+    })
+  })
+
+  return ctx
+}

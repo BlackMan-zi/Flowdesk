@@ -16,7 +16,7 @@ import {
   rectSortingStrategy, useSortable,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { evaluate as evalFormula } from '../../lib/formula'
+import { evaluate as evalFormula, tableFormulaContext } from '../../lib/formula'
 
 // ── Field type metadata ───────────────────────────────────────────────────────
 
@@ -201,12 +201,16 @@ function TablePreview({ field, accent, isSelected, onUpdate, selectedColumnIdx, 
     }
     return row
   })
+  // Custom totals — each column with show_total or a custom total_formula
+  // gets evaluated through the formula engine, so admins can write
+  // `=SUM(D2:D5)`, `=AVG(D)`, `=MAX(D)`, etc. Defaults to SUM(<letter>).
+  const tableCtx = tableFormulaContext(sampleRows, cols)
   const totals = {}
-  for (const c of cols) {
-    if (c.show_total) {
-      totals[c.key] = sampleRows.reduce((s, r) => s + (parseFloat(r[c.key]) || 0), 0)
-    }
-  }
+  cols.forEach((c, ci) => {
+    if (!c.show_total && !c.total_formula) return
+    const formula = c.total_formula || `SUM(${columnLetter(ci)})`
+    totals[c.key] = evalFormula(formula, tableCtx)
+  })
   const hasTotals = Object.keys(totals).length > 0
 
   const startResize = (e, colIdx) => {
