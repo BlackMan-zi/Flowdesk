@@ -16,7 +16,7 @@ import { Alert } from '../../components/ui/alert'
 import { cn } from '../../lib/utils'
 import {
   Plus, LayoutTemplate, Settings, Search, X, Trash2, AlertTriangle,
-  Building2, Eye, EyeOff, FolderOpen, Shield
+  Building2, Eye, EyeOff, FolderOpen, Shield, Wand2
 } from 'lucide-react'
 
 // Defaults to use when the org hasn't customised classification labels yet.
@@ -301,7 +301,7 @@ export default function AdminFormDefinitions() {
       setModalOpen(false)
       toast.success(editing
         ? `"${updated.name}" updated successfully`
-        : `"${updated.name}" created — open Design Layout to add fields`
+        : `"${updated.name}" created — open the Designer to add fields`
       )
     },
     onError: (err) => {
@@ -447,10 +447,18 @@ export default function AdminFormDefinitions() {
                       <div className="flex items-center justify-end gap-1.5">
                         <Button
                           size="sm"
+                          onClick={() => navigate(`/admin/form-definitions/${r.id}/design`)}
+                          title="New schema-based designer"
+                        >
+                          <Wand2 size={12} className="mr-1" /> Designer
+                        </Button>
+                        <Button
+                          size="sm"
                           variant="secondary"
                           onClick={() => navigate(`/admin/form-definitions/${r.id}/builder`)}
+                          title="Legacy PDF layout (positioned fields)"
                         >
-                          <LayoutTemplate size={12} className="mr-1" /> Design Layout
+                          <LayoutTemplate size={12} className="mr-1" /> PDF Layout
                         </Button>
                         <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openEdit(r)}>
                           <Settings size={13} />

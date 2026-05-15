@@ -100,6 +100,7 @@ class FormField(Base):
     field_name = Column(String(100), nullable=False)          # internal key
     field_label = Column(String(255), nullable=False)         # display label
     field_type = Column(SAEnum(FieldType), nullable=False)
+    section_name = Column(String(150), nullable=True)         # schema-designer grouping (e.g. "Employee Information")
     required = Column(Boolean, default=True)
     auto_filled = Column(Boolean, default=False)              # e.g. date, user name auto-filled
     auto_fill_source = Column(String(100), nullable=True)     # e.g. "current_user.name"

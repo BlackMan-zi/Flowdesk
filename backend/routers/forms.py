@@ -353,6 +353,7 @@ def update_form_fields_layout(
             f.field_name = fd.field_name
             f.field_label = fd.field_label
             f.field_type = fd.field_type
+            f.section_name = fd.section_name
             f.required = fd.required
             f.auto_filled = fd.auto_filled
             f.auto_fill_source = fd.auto_fill_source
@@ -377,6 +378,7 @@ def update_form_fields_layout(
                 field_name=fd.field_name,
                 field_label=fd.field_label,
                 field_type=fd.field_type,
+                section_name=fd.section_name,
                 required=fd.required,
                 auto_filled=fd.auto_filled,
                 options=fd.options,

@@ -19,6 +19,7 @@ import AdminFormDefinitions from './pages/admin/FormDefinitions'
 import AdminApprovalTemplates from './pages/admin/ApprovalTemplates'
 import AdminDelegations from './pages/admin/Delegations'
 import FormBuilder from './pages/admin/FormBuilder'
+import FormDesigner from './pages/admin/FormDesigner'
 import AdminSettings from './pages/admin/Settings'
 import Logs from './pages/Logs'
 
@@ -51,6 +52,10 @@ function AppRoutes() {
       <Route
         path="admin/form-definitions/:id/builder"
         element={<RequireAdmin><FormBuilder /></RequireAdmin>}
+      />
+      <Route
+        path="admin/form-definitions/:id/design"
+        element={<RequireAdmin><FormDesigner /></RequireAdmin>}
       />
 
       <Route element={<RequireAuth><AppLayout /></RequireAuth>}>

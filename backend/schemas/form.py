@@ -9,6 +9,7 @@ class FormFieldCreate(BaseModel):
     field_name: str
     field_label: str
     field_type: FieldType
+    section_name: Optional[str] = None
     required: bool = True
     auto_filled: bool = False
     auto_fill_source: Optional[str] = None
@@ -36,6 +37,7 @@ class FormFieldResponse(BaseModel):
     field_name: str
     field_label: str
     field_type: FieldType
+    section_name: Optional[str] = None
     required: bool
     auto_filled: bool
     auto_fill_source: Optional[str]
