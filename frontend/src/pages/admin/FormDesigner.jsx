@@ -27,10 +27,9 @@ import {
   Type, AlignLeft, Hash, DollarSign, Calendar, ChevronDown as ChevronDownIcon,
   CheckSquare, Circle, Calculator, Paperclip, PenLine, Hash as HashIcon,
   Table as TableIcon, FolderOpen, Settings as SettingsIcon, Eye, Pencil,
-  Workflow, ShieldCheck,
+  Workflow,
 } from 'lucide-react'
 import ApprovalEditor, { stepsToApiPayload, stepsFromApi } from '../../components/forms/ApprovalEditor'
-import InitiatorRolesPanel from '../../components/forms/InitiatorRolesPanel'
 import LetterheadPage from '../../components/letterhead/LetterheadPage'
 import {
   fetchHeaderImageObjectUrl, fetchFooterImageObjectUrl,
@@ -458,10 +457,9 @@ export default function FormDesigner() {
   const [renameDraft, setRenameDraft] = useState('')
   const [previewOpen, setPreviewOpen] = useState(false)
   const [previewUrls, setPreviewUrls] = useState({ header: null, footer: null })
-  // Tab + approval + initiator state
-  const [tab, setTab] = useState('fields')          // 'fields' | 'approval' | 'initiator'
+  // Tab + approval state
+  const [tab, setTab] = useState('fields')          // 'fields' | 'approval'
   const [approvalSteps, setApprovalSteps] = useState([])
-  const [initiatorRoleIds, setInitiatorRoleIds] = useState([])
   const initRef = useRef(false)
 
   // Seed once we have form + roles + users (the step adapter needs them for
@@ -483,7 +481,6 @@ export default function FormDesigner() {
     setSections(found.length ? found : [DEFAULT_SECTION])
     setActiveSection(prev => (found.includes(prev) ? prev : (found[0] || DEFAULT_SECTION)))
     setApprovalSteps(stepsFromApi(def.approval_template?.steps || [], roles, users))
-    setInitiatorRoleIds(def.initiator_role_ids || [])
   }
 
   // Letterhead preview blob fetch
@@ -630,10 +627,7 @@ export default function FormDesigner() {
         await updateFormDefinition(id, { approval_template_id: res.data.id })
       }
 
-      // 3) Initiator role restriction — always send (empty list = open to all).
-      await updateFormDefinition(id, { initiator_role_ids: initiatorRoleIds })
-
-      // 4) Refetch
+      // 3) Refetch
       const fresh = await getFormDefinition(id).then(r => r.data)
       return fresh
     },
@@ -694,10 +688,9 @@ export default function FormDesigner() {
       <div className="flex items-center gap-1 px-4 border-b border-border bg-card">
         <TabButton active={tab === 'fields'}    onClick={() => setTab('fields')}    icon={SettingsIcon} label="Fields"    count={fields.length} />
         <TabButton active={tab === 'approval'}  onClick={() => setTab('approval')}  icon={Workflow}     label="Approval"  count={approvalSteps.length} />
-        <TabButton active={tab === 'initiator'} onClick={() => setTab('initiator')} icon={ShieldCheck}  label="Initiator" count={initiatorRoleIds.length || null} hint={initiatorRoleIds.length === 0 ? 'All users' : null} />
       </div>
 
-      {/* Body — three-pane for Fields, centered single panel for the others */}
+      {/* Body — three-pane for Fields, centered single panel for Approval */}
       {tab === 'approval' && (
         <div className="flex-1 overflow-y-auto p-6">
           <ApprovalEditor
@@ -705,16 +698,6 @@ export default function FormDesigner() {
             onChange={setApprovalSteps}
             users={users}
             roles={roles}
-          />
-        </div>
-      )}
-
-      {tab === 'initiator' && (
-        <div className="flex-1 overflow-y-auto p-6">
-          <InitiatorRolesPanel
-            roles={roles}
-            selectedIds={initiatorRoleIds}
-            onChange={setInitiatorRoleIds}
           />
         </div>
       )}

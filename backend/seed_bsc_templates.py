@@ -51,20 +51,20 @@ REQUIRED_ROLES = [
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Forms — (name, code_suffix, description, initiator_role_names)
-# Empty initiator list = open to all users.
+# Forms — (name, code_suffix, description). Department-based visibility is set
+# per-form in the admin UI; role-based initiator gatekeeping was removed.
 # ─────────────────────────────────────────────────────────────────────────────
 FORMS = [
-    ("Stock Requisition Form",              "STK", "Request stock items from internal store",       []),
-    ("Purchase Requisition Form",           "PRQ", "Request procurement of goods or services",      []),
-    ("Petty Cash Voucher Form",             "PCV", "Request small cash disbursement",               []),
-    ("Refund Form",                         "REF", "Request reimbursement for out-of-pocket spend", []),
-    ("Salary Advance Form",                 "SAL", "Request salary advance payment",                []),
-    ("Training Request Form",               "TRN", "Request training authorisation",                []),
-    ("Mission Allowance Form",              "MAL", "Local mission / field visit allowance",         []),
-    ("Site Report",                         "SR",  "Field / site visit report",                     []),
-    ("Mission Allowance International",     "MAI", "International mission allowance",               ["HR & Admin"]),
-    ("Mission Authorization International", "MAU", "International mission authorisation",           ["HR & Admin"]),
+    ("Stock Requisition Form",              "STK", "Request stock items from internal store"),
+    ("Purchase Requisition Form",           "PRQ", "Request procurement of goods or services"),
+    ("Petty Cash Voucher Form",             "PCV", "Request small cash disbursement"),
+    ("Refund Form",                         "REF", "Request reimbursement for out-of-pocket spend"),
+    ("Salary Advance Form",                 "SAL", "Request salary advance payment"),
+    ("Training Request Form",               "TRN", "Request training authorisation"),
+    ("Mission Allowance Form",              "MAL", "Local mission / field visit allowance"),
+    ("Site Report",                         "SR",  "Field / site visit report"),
+    ("Mission Allowance International",     "MAI", "International mission allowance"),
+    ("Mission Authorization International", "MAU", "International mission authorisation"),
 ]
 
 
@@ -222,7 +222,7 @@ def main():
     # ── 2. Create form definitions ──────────────────────────────────────────
     print("\nStep 2: Creating form definitions...")
     form_by_suffix = {}
-    for fname, suffix, fdesc, init_roles in FORMS:
+    for fname, suffix, fdesc in FORMS:
         existing = db.query(FormDefinition).filter(
             FormDefinition.organization_id == org.id,
             FormDefinition.code_suffix == suffix,
@@ -244,12 +244,9 @@ def main():
             is_active=True,
             created_by=admin_user.id,
         )
-        # Initiator-role restriction (forms #9, #10)
-        if init_roles:
-            f.initiator_roles = [role_lookup[r] for r in init_roles if r in role_lookup]
         db.add(f)
         form_by_suffix[suffix] = f
-        print(f"  + {suffix}  {fname}" + (f"  [initiator: {','.join(init_roles)}]" if init_roles else ""))
+        print(f"  + {suffix}  {fname}")
     db.flush()
 
     # ── 3. Create approval templates + steps + CC recipients ────────────────
