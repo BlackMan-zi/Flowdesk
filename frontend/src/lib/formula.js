@@ -400,8 +400,13 @@ function evalNode(node, context) {
  */
 export function evaluate(formula, context = {}) {
   if (!formula || !String(formula).trim()) return null
+  // Accept Excel-style leading "=" (and tolerate whitespace around it).
+  // qty * unit_cost works; =qty * unit_cost works; =B2*C2 works.
+  let src = String(formula).trim()
+  if (src.startsWith('=')) src = src.slice(1)
+  if (!src.trim()) return null
   try {
-    const tokens = tokenize(String(formula))
+    const tokens = tokenize(src)
     const ast = makeParser(tokens)
     return evalNode(ast, context)
   } catch (e) {
@@ -412,8 +417,10 @@ export function evaluate(formula, context = {}) {
 /** List of identifiers referenced by a formula (top-level idents and member roots). */
 export function extractReferences(formula) {
   if (!formula) return []
+  let src = String(formula).trim()
+  if (src.startsWith('=')) src = src.slice(1)
   try {
-    const tokens = tokenize(String(formula))
+    const tokens = tokenize(src)
     const refs = new Set()
     let prevDot = false
     for (const t of tokens) {
