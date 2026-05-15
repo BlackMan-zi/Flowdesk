@@ -11,11 +11,14 @@ import { Card, CardContent } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { Alert } from '../../components/ui/alert'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/Modal'
 import { cn } from '../../lib/utils'
 import {
   Upload, Trash2, Image as ImageIcon, Building2, Palette, Shield,
-  Plus, X, Save, AlertCircle, Check, GripVertical,
+  Plus, X, Save, AlertCircle, Check, Eye,
 } from 'lucide-react'
+import LetterheadPage from '../../components/letterhead/LetterheadPage'
+import SampleFormBody from '../../components/letterhead/SampleFormBody'
 
 // ── Classification labels: defaults + suggested colors ────────────────────────
 
@@ -287,7 +290,33 @@ export default function Settings() {
 
   const [accent, setAccent] = useState('')
   const [labels, setLabels] = useState(DEFAULT_LABELS)
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const [previewUrls, setPreviewUrls] = useState({ header: null, footer: null })
   const initRef = useRef(false)
+
+  // Fetch the header/footer object URLs on demand for the preview modal,
+  // and revoke them when it closes.
+  useEffect(() => {
+    if (!previewOpen || !org) return
+    let revoked = false
+    const urls = { header: null, footer: null }
+    const promises = []
+    if (org.has_header_image) {
+      promises.push(fetchHeaderImageObjectUrl().then(u => { urls.header = u }).catch(() => {}))
+    }
+    if (org.has_footer_image) {
+      promises.push(fetchFooterImageObjectUrl().then(u => { urls.footer = u }).catch(() => {}))
+    }
+    Promise.all(promises).then(() => {
+      if (!revoked) setPreviewUrls(urls)
+    })
+    return () => {
+      revoked = true
+      if (urls.header) URL.revokeObjectURL(urls.header)
+      if (urls.footer) URL.revokeObjectURL(urls.footer)
+      setPreviewUrls({ header: null, footer: null })
+    }
+  }, [previewOpen, org])
 
   useEffect(() => {
     if (org && !initRef.current) {
@@ -372,17 +401,22 @@ export default function Settings() {
           </p>
         </div>
 
-        {/* Save state indicator — explicit feedback instead of a grayed button */}
-        {dirty ? (
-          <Button onClick={() => updateMut.mutate()} disabled={updateMut.isPending}>
-            <Save size={14} className="mr-1.5" />
-            {updateMut.isPending ? 'Saving…' : 'Save changes'}
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setPreviewOpen(true)}>
+            <Eye size={14} className="mr-1.5" />
+            Preview letterhead
           </Button>
-        ) : (
-          <span className="inline-flex items-center gap-1.5 text-xs text-emerald-600 font-medium bg-emerald-500/10 px-3 py-2 rounded-md border border-emerald-500/20">
-            <Check size={14} /> All changes saved
-          </span>
-        )}
+          {dirty ? (
+            <Button onClick={() => updateMut.mutate()} disabled={updateMut.isPending}>
+              <Save size={14} className="mr-1.5" />
+              {updateMut.isPending ? 'Saving…' : 'Save changes'}
+            </Button>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 text-xs text-emerald-600 font-medium bg-emerald-500/10 px-3 py-2 rounded-md border border-emerald-500/20">
+              <Check size={14} /> All changes saved
+            </span>
+          )}
+        </div>
       </div>
 
       {dirty && (
@@ -442,6 +476,39 @@ export default function Settings() {
       </Card>
 
       <ClassificationLabelsEditor labels={labels} onChange={setLabels} />
+
+      {/* Letterhead preview — shows what every generated form will look like
+          inside the org letterhead frame. Reused later by the fill page
+          and the PDF export. */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Eye size={16} /> Letterhead preview
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground -mt-1 mb-3">
+            This is how every generated form will be framed by your letterhead.
+            The body content is a placeholder — the real form schema will live here once Phase&nbsp;C ships.
+          </p>
+          <div className="bg-muted/30 rounded-lg p-4 max-h-[70vh] overflow-y-auto">
+            <div className="mx-auto" style={{ width: 'min(640px, 100%)' }}>
+              <LetterheadPage
+                headerImageUrl={previewUrls.header}
+                footerImageUrl={previewUrls.footer}
+                accentColor={accent}
+                classification={
+                  labels.find(l => l.name.toLowerCase() === 'internal') ||
+                  labels[0] ||
+                  null
+                }
+              >
+                <SampleFormBody accentColor={accent || '#0066B3'} />
+              </LetterheadPage>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
