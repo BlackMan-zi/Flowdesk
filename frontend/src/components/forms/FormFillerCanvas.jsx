@@ -1,9 +1,9 @@
-import React, { useRef, useEffect, useState, useMemo } from 'react'
+import React, { useRef, useEffect, useState, useMemo, useLayoutEffect } from 'react'
 import { cn } from '../../lib/utils'
 import { Paperclip, Plus, Trash2, X } from 'lucide-react'
 import SignaturePad from './SignaturePad'
 import { evaluate as evalFormula, tableFormulaContext } from '../../lib/formula'
-import { columnLetter, rowFormulaContext } from './FormDesignerCanvas'
+import { columnLetter, rowFormulaContext, PageBreakChrome } from './FormDesignerCanvas'
 
 // ── Width helpers (12-col grid + free-position) ──────────────────────────────
 
@@ -33,43 +33,6 @@ function uiType(field) {
     return SYSTEM_BLOCK_BY_SOURCE[field.auto_fill_source]
   }
   return field.field_type
-}
-
-// ── Multi-page chrome (header/footer at each A4 boundary) ────────────────────
-
-function PageBreaks({ pageCount, pageHeight, accent, headerUrl, footerUrl }) {
-  if (pageCount <= 1 || pageHeight <= 0) return null
-  const CHROME_HEIGHT = 120
-
-  return (
-    <>
-      {Array.from({ length: pageCount - 1 }).map((_, i) => (
-        <div
-          key={i}
-          className="absolute left-0 right-0 pointer-events-none"
-          style={{ top: `${(i + 1) * pageHeight - CHROME_HEIGHT / 2}px`, height: `${CHROME_HEIGHT}px`, zIndex: 5 }}
-        >
-          <div className="w-full h-full flex flex-col bg-white border-y-2 border-dashed border-slate-300 shadow-sm">
-            <div className="flex-1 flex items-center justify-center px-12 border-b border-slate-100 min-h-0">
-              {footerUrl ? <img src={footerUrl} alt="" className="max-h-full max-w-full object-contain opacity-90" /> : <span className="text-[9px] text-slate-400 italic">— end of page —</span>}
-            </div>
-            <div className="flex items-center justify-between px-3 py-1 bg-slate-50/80 border-y border-slate-200">
-              <span className="text-[9px] font-semibold uppercase tracking-wider text-slate-500">End of page {i + 1}</span>
-              <span
-                className="text-[9px] font-semibold uppercase tracking-wider rounded-full px-2 py-0.5"
-                style={{ color: accent, borderColor: `${accent}33`, backgroundColor: `${accent}10`, borderWidth: 1, borderStyle: 'solid' }}
-              >
-                Page {i + 2} of {pageCount}
-              </span>
-            </div>
-            <div className="flex-1 flex items-center justify-center px-12 border-t border-slate-100 min-h-0">
-              {headerUrl ? <img src={headerUrl} alt="" className="max-h-full max-w-full object-contain opacity-90" /> : <span className="text-[9px] text-slate-400 italic">— start of page —</span>}
-            </div>
-          </div>
-        </div>
-      ))}
-    </>
-  )
 }
 
 // ── Editable table cell ──────────────────────────────────────────────────────
@@ -687,26 +650,12 @@ export default function FormFillerCanvas({
     ? Math.max(...freeFields.map(f => (f.y_pct ?? 0) + FREE_FIELD_HEIGHT_PADDING))
     : 0
 
-  // Page metrics — body grows to a full multiple of pageHeight so the second
-  // page is always fully visible below the page-break chrome.
-  const [pageMetrics, setPageMetrics] = useState({ pageCount: 1, pageHeight: 0 })
-  useEffect(() => {
-    if (!bodyRef.current) return
-    const body = bodyRef.current
-    const calc = () => {
-      const w = body.clientWidth
-      const ph = Math.round(w * 1.13)
-      const naturalH = Math.max(body.scrollHeight, minBodyPx)
-      const count = Math.max(1, Math.ceil(naturalH / ph))
-      setPageMetrics(prev => (prev.pageCount === count && prev.pageHeight === ph) ? prev : { pageCount: count, pageHeight: ph })
-    }
-    calc()
-    const ro = new ResizeObserver(calc)
-    ro.observe(body)
-    return () => ro.disconnect()
-  }, [minBodyPx, activeFields.length])
-
-  const bodyMinHeightPx = Math.max(minBodyPx, pageMetrics.pageCount * pageMetrics.pageHeight)
+  // Page metrics — walk section bottoms and insert inline page-break chrome
+  // between sections that span a page boundary (mirrors FormDesignerCanvas).
+  const [pageHeight, setPageHeight] = useState(0)
+  const [breakAfterIdx, setBreakAfterIdx] = useState({})
+  const [pageCount, setPageCount] = useState(1)
+  const sectionRefs = useRef({})
 
   // Resolve section list while preserving display order.
   const sections = useMemo(() => {
@@ -718,6 +667,36 @@ export default function FormFillerCanvas({
     }
     return order.length ? order : [DEFAULT_SECTION]
   }, [flowFields])
+
+  useLayoutEffect(() => {
+    if (!bodyRef.current) return
+    const body = bodyRef.current
+    const calc = () => {
+      const w = body.clientWidth
+      if (!w) return
+      const ph = Math.round(w * 1.13)
+      const breaks = {}
+      let pageNum = 1
+      sections.forEach((s, i) => {
+        const el = sectionRefs.current[s]
+        if (!el) return
+        const bottom = el.offsetTop + el.offsetHeight
+        if (bottom > pageNum * ph && i < sections.length - 1) {
+          breaks[i] = pageNum
+          pageNum++
+        }
+      })
+      setPageHeight(ph)
+      setBreakAfterIdx(breaks)
+      setPageCount(pageNum)
+    }
+    calc()
+    const ro = new ResizeObserver(calc)
+    ro.observe(body)
+    return () => ro.disconnect()
+  }, [sections, activeFields, formDef?.section_layouts, minBodyPx])
+
+  const bodyMinHeightPx = Math.max(minBodyPx, pageCount * pageHeight)
 
   return (
     <div
@@ -737,14 +716,6 @@ export default function FormFillerCanvas({
         className="px-12 py-6 relative"
         style={bodyMinHeightPx > 0 ? { minHeight: `${bodyMinHeightPx}px` } : undefined}
       >
-        <PageBreaks
-          pageCount={pageMetrics.pageCount}
-          pageHeight={pageMetrics.pageHeight}
-          accent={accent}
-          headerUrl={headerUrl}
-          footerUrl={footerUrl}
-        />
-
         {/* Free-positioned fields render absolutely */}
         {freeFields.map(f => (
           <FreeField
@@ -778,28 +749,40 @@ export default function FormFillerCanvas({
         </div>
 
         {/* Sections */}
-        {sections.map(s => {
+        {sections.map((s, idx) => {
           const inSection = flowFields.filter(f => (f.section_name || DEFAULT_SECTION) === s)
           return (
-            <SectionBlock
-              key={s}
-              section={s}
-              fields={inSection}
-              accent={accent}
-              formDef={formDef}
-              classification={classification}
-              approvalSteps={approvalSteps}
-              users={users}
-              roles={roles}
-              user={user}
-              fieldValues={fieldValues}
-              onFieldChange={onFieldChange}
-              pendingFiles={pendingFiles}
-              onFilesChange={onFilesChange}
-              referenceNumber={referenceNumber}
-              disabled={disabled}
-              layout={sectionLayouts[s] || 'grid'}
-            />
+            <React.Fragment key={s}>
+              <div ref={(el) => { sectionRefs.current[s] = el }}>
+                <SectionBlock
+                  section={s}
+                  fields={inSection}
+                  accent={accent}
+                  formDef={formDef}
+                  classification={classification}
+                  approvalSteps={approvalSteps}
+                  users={users}
+                  roles={roles}
+                  user={user}
+                  fieldValues={fieldValues}
+                  onFieldChange={onFieldChange}
+                  pendingFiles={pendingFiles}
+                  onFilesChange={onFilesChange}
+                  referenceNumber={referenceNumber}
+                  disabled={disabled}
+                  layout={sectionLayouts[s] || 'grid'}
+                />
+              </div>
+              {breakAfterIdx[idx] && (
+                <PageBreakChrome
+                  fromPage={breakAfterIdx[idx]}
+                  totalPages={pageCount}
+                  accent={accent}
+                  headerUrl={headerUrl}
+                  footerUrl={footerUrl}
+                />
+              )}
+            </React.Fragment>
           )
         })}
       </div>

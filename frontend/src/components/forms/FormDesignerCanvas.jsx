@@ -713,66 +713,53 @@ function FreeField({
   )
 }
 
-// ── Page boundaries (multi-page rendering chrome) ────────────────────────────
+// ── Page-break chrome (inline flow element) ──────────────────────────────────
 //
-// At each A4 page boundary, render a strip showing:
-//   - the previous page's footer (compressed)
-//   - "End of page N · Page N+1 of M" labels
-//   - the next page's header (compressed)
-// This makes the canvas look like a multi-page document while the underlying
-// body remains a single tall scrollable element. Real content-aware page
-// splitting lands at fill / PDF-export time (Phase D / E).
+// Renders between sections at page boundaries. Block-level + has its own
+// margin so it pushes the next section onto a fresh page area instead of
+// overlapping content. The canvas decides where to insert one of these via
+// post-render measurement (see PAGE_CHROME_HEIGHT_PX below).
 
-function PageBreaks({ pageCount, pageHeight, accent, headerUrl, footerUrl }) {
-  if (pageCount <= 1 || pageHeight <= 0) return null
+export const PAGE_CHROME_HEIGHT_PX = 140  // visible space the chrome occupies
 
-  const CHROME_HEIGHT = 120
-
+export function PageBreakChrome({ fromPage, totalPages, accent, headerUrl, footerUrl }) {
   return (
-    <>
-      {Array.from({ length: pageCount - 1 }).map((_, i) => (
-        <div
-          key={i}
-          className="absolute left-0 right-0 pointer-events-none"
-          style={{
-            top: `${(i + 1) * pageHeight - CHROME_HEIGHT / 2}px`,
-            height: `${CHROME_HEIGHT}px`,
-            zIndex: 5,
-          }}
-        >
-          <div className="w-full h-full flex flex-col bg-white border-y-2 border-dashed border-slate-300 shadow-sm">
-            {/* Previous page's footer */}
-            <div className="flex-1 flex items-center justify-center px-12 border-b border-slate-100 min-h-0">
-              {footerUrl ? (
-                <img src={footerUrl} alt="" className="max-h-full max-w-full object-contain opacity-90" />
-              ) : (
-                <span className="text-[9px] text-slate-400 italic">— end of page —</span>
-              )}
-            </div>
-            {/* Page labels */}
-            <div className="flex items-center justify-between px-3 py-1 bg-slate-50/80 border-y border-slate-200">
-              <span className="text-[9px] font-semibold uppercase tracking-wider text-slate-500">
-                End of page {i + 1}
-              </span>
-              <span
-                className="text-[9px] font-semibold uppercase tracking-wider rounded-full px-2 py-0.5"
-                style={{ color: accent, borderColor: `${accent}33`, backgroundColor: `${accent}10`, borderWidth: 1, borderStyle: 'solid' }}
-              >
-                Page {i + 2} of {pageCount}
-              </span>
-            </div>
-            {/* Next page's header */}
-            <div className="flex-1 flex items-center justify-center px-12 border-t border-slate-100 min-h-0">
-              {headerUrl ? (
-                <img src={headerUrl} alt="" className="max-h-full max-w-full object-contain opacity-90" />
-              ) : (
-                <span className="text-[9px] text-slate-400 italic">— start of page —</span>
-              )}
-            </div>
-          </div>
+    <div
+      data-page-chrome
+      className="my-6 bg-white border-y-2 border-dashed border-slate-300 shadow-sm"
+      style={{ height: `${PAGE_CHROME_HEIGHT_PX - 48}px` /* minus my-6 = 48px */ }}
+    >
+      <div className="w-full h-full flex flex-col">
+        {/* Previous page's footer */}
+        <div className="flex-1 flex items-center justify-center px-12 border-b border-slate-100 min-h-0">
+          {footerUrl ? (
+            <img src={footerUrl} alt="" className="max-h-full max-w-full object-contain opacity-90" />
+          ) : (
+            <span className="text-[9px] text-slate-400 italic">— end of page —</span>
+          )}
         </div>
-      ))}
-    </>
+        {/* Page labels */}
+        <div className="flex items-center justify-between px-3 py-1 bg-slate-50/80 border-y border-slate-200">
+          <span className="text-[9px] font-semibold uppercase tracking-wider text-slate-500">
+            End of page {fromPage}
+          </span>
+          <span
+            className="text-[9px] font-semibold uppercase tracking-wider rounded-full px-2 py-0.5"
+            style={{ color: accent, borderColor: `${accent}33`, backgroundColor: `${accent}10`, borderWidth: 1, borderStyle: 'solid' }}
+          >
+            Page {fromPage + 1} of {totalPages}
+          </span>
+        </div>
+        {/* Next page's header */}
+        <div className="flex-1 flex items-center justify-center px-12 border-t border-slate-100 min-h-0">
+          {headerUrl ? (
+            <img src={headerUrl} alt="" className="max-h-full max-w-full object-contain opacity-90" />
+          ) : (
+            <span className="text-[9px] text-slate-400 italic">— start of page —</span>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -982,32 +969,52 @@ export default function FormDesignerCanvas({
     ? Math.max(...freeFields.map(f => (f.y_pct ?? 0) + FREE_FIELD_HEIGHT_PADDING))
     : 0
 
-  // Page metrics: track A4-equivalent page count + height. body grows to a
-  // full multiple of pageHeight so admins always see a fresh page below the
-  // last one (so they can add content / drag free fields onto page 2+).
-  const [pageMetrics, setPageMetrics] = useState({ pageCount: 1, pageHeight: 0 })
-  useEffect(() => {
+  // Page metrics: track A4-equivalent page height, then walk each section's
+  // measured bottom-position to decide where to insert PageBreakChrome
+  // *inline* between sections. Inline chrome pushes the next section onto a
+  // fresh area below (no overlap with content), giving the user a clean
+  // margin / "start of next page" cue.
+  const [pageHeight, setPageHeight] = useState(0)
+  const [breakAfterIdx, setBreakAfterIdx] = useState({})  // { sectionIdx: pageNum }
+  const [pageCount, setPageCount] = useState(1)
+  const sectionRefs = useRef({})
+
+  useLayoutEffect(() => {
     if (!bodyRef.current) return
     const body = bodyRef.current
     const calc = () => {
-      // Use the body's clientWidth → A4 portrait ratio ≈ 1.13 for the
-      // *body* area (after the header / footer bands are deducted).
       const w = body.clientWidth
+      if (!w) return
       const ph = Math.round(w * 1.13)
-      // scrollHeight = the height the body wants to be (natural content
-      // height, ignoring any minHeight we apply via state). Use the larger of
-      // natural-content and our free-field minimum.
-      const naturalH = Math.max(body.scrollHeight, minBodyPx)
-      const count = Math.max(1, Math.ceil(naturalH / ph))
-      setPageMetrics(prev => (prev.pageCount === count && prev.pageHeight === ph) ? prev : { pageCount: count, pageHeight: ph })
+      // Determine breaks: walk sections in order, mark a break after any
+      // section whose measured bottom exceeds the current page's cap.
+      const breaks = {}
+      let pageNum = 1
+      // Iterate by section name from the sections prop (parent owns order).
+      sections.forEach((s, i) => {
+        const el = sectionRefs.current[s]
+        if (!el) return
+        const bottom = el.offsetTop + el.offsetHeight
+        if (bottom > pageNum * ph && i < sections.length - 1) {
+          breaks[i] = pageNum
+          pageNum++
+        }
+      })
+      setPageHeight(ph)
+      setBreakAfterIdx(breaks)
+      setPageCount(pageNum)
     }
     calc()
     const ro = new ResizeObserver(calc)
     ro.observe(body)
     return () => ro.disconnect()
-  }, [minBodyPx, fields.length])
+    // Re-run when sections, fields, or layout selectors change.
+  }, [sections, fields, sectionLayouts, minBodyPx])
 
-  const bodyMinHeightPx = Math.max(minBodyPx, pageMetrics.pageCount * pageMetrics.pageHeight)
+  // Body grows to N full pages so admins always see a fresh page area below
+  // the last break — chrome already takes its own vertical space, so we just
+  // add pageHeight for any "empty" page below the last section.
+  const bodyMinHeightPx = Math.max(minBodyPx, pageCount * pageHeight)
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -1041,15 +1048,6 @@ export default function FormDesignerCanvas({
         data-canvas-body
         style={bodyMinHeightPx > 0 ? { minHeight: `${bodyMinHeightPx}px` } : undefined}
       >
-        {/* Multi-page rendering chrome (footer of page N + label strip + header of page N+1) */}
-        <PageBreaks
-          pageCount={pageMetrics.pageCount}
-          pageHeight={pageMetrics.pageHeight}
-          accent={accent}
-          headerUrl={headerUrl}
-          footerUrl={footerUrl}
-        />
-
         {/* Free-positioned fields render in an overlay above the section flow */}
         {freeFields.map(f => (
           <FreeField
@@ -1082,38 +1080,55 @@ export default function FormDesignerCanvas({
           </div>
         </div>
 
-        {/* Sections (flow only — free fields rendered above) */}
+        {/* Sections (flow only — free fields rendered above).
+            Each section is wrapped so we can measure its position and insert
+            an inline PageBreakChrome between sections that span an A4 page
+            boundary. Inline chrome takes its own vertical space, so content
+            never overlaps with it — it just pushes the next section onto a
+            fresh page area. */}
         {sections.map((s, idx) => {
           const inSection = flowFields.filter(f => (f.section_name || DEFAULT_SECTION) === s)
           return (
-            <SectionBlock
-              key={s}
-              section={s}
-              fields={inSection}
-              accent={accent}
-              formDef={formDef}
-              classification={classification}
-              approvalSteps={approvalSteps}
-              users={users}
-              roles={roles}
-              sectionIdx={idx}
-              totalSections={sections.length}
-              selectedFieldId={selectedFieldId}
-              onSelectField={onSelectField}
-              selectedColumnIdx={selectedColumnIdx}
-              onSelectColumn={onSelectColumn}
-              onCellClick={onCellClick}
-              onAddField={(t) => onAddField(s, t)}
-              onUpdateField={onUpdateField}
-              onDeleteField={onDeleteField}
-              onRenameSection={(n) => onRenameSection(s, n)}
-              onMoveSection={(d) => onMoveSection(idx, d)}
-              onDeleteSection={() => onDeleteSection(s)}
-              layout={sectionLayouts?.[s] || 'grid'}
-              onSetLayout={(l) => onSetSectionLayout && onSetSectionLayout(s, l)}
-              sensors={sensors}
-              onDragEnd={handleDragEnd}
-            />
+            <React.Fragment key={s}>
+              <div ref={(el) => { sectionRefs.current[s] = el }}>
+                <SectionBlock
+                  section={s}
+                  fields={inSection}
+                  accent={accent}
+                  formDef={formDef}
+                  classification={classification}
+                  approvalSteps={approvalSteps}
+                  users={users}
+                  roles={roles}
+                  sectionIdx={idx}
+                  totalSections={sections.length}
+                  selectedFieldId={selectedFieldId}
+                  onSelectField={onSelectField}
+                  selectedColumnIdx={selectedColumnIdx}
+                  onSelectColumn={onSelectColumn}
+                  onCellClick={onCellClick}
+                  onAddField={(t) => onAddField(s, t)}
+                  onUpdateField={onUpdateField}
+                  onDeleteField={onDeleteField}
+                  onRenameSection={(n) => onRenameSection(s, n)}
+                  onMoveSection={(d) => onMoveSection(idx, d)}
+                  onDeleteSection={() => onDeleteSection(s)}
+                  layout={sectionLayouts?.[s] || 'grid'}
+                  onSetLayout={(l) => onSetSectionLayout && onSetSectionLayout(s, l)}
+                  sensors={sensors}
+                  onDragEnd={handleDragEnd}
+                />
+              </div>
+              {breakAfterIdx[idx] && (
+                <PageBreakChrome
+                  fromPage={breakAfterIdx[idx]}
+                  totalPages={pageCount}
+                  accent={accent}
+                  headerUrl={headerUrl}
+                  footerUrl={footerUrl}
+                />
+              )}
+            </React.Fragment>
           )
         })}
 
