@@ -1,0 +1,766 @@
+import React, { useRef, useEffect, useState, useMemo } from 'react'
+import { cn } from '../../lib/utils'
+import { Paperclip, Plus, Trash2, X } from 'lucide-react'
+import SignaturePad from './SignaturePad'
+import { evaluate as evalFormula, tableFormulaContext } from '../../lib/formula'
+import { columnLetter, rowFormulaContext } from './FormDesignerCanvas'
+
+// ── Width helpers (12-col grid + free-position) ──────────────────────────────
+
+const WIDTH_TO_SPAN = {
+  '1/4': 3, '1/3': 4, '1/2': 6, '2/3': 8, '3/4': 9, 'full': 12,
+}
+const WIDTH_TO_PCT = {
+  '1/4': 25, '1/3': 33.33, '1/2': 50, '2/3': 66.67, '3/4': 75, 'full': 100,
+}
+
+const DEFAULT_SECTION = 'General'
+
+const HIERARCHY_LABELS = {
+  manager: 'Line Manager', sn_manager: 'Senior Manager', hod: 'Head of Department',
+}
+
+// API field → filler "UI type" (mirrors FormDesigner's API_TO_SYSTEM_BLOCK).
+const SYSTEM_BLOCK_BY_SOURCE = {
+  reference_number:   'reference',
+  submission_date:    'submission_date',
+  form_classification:'classification',
+  approval_block:     'approval_block',
+  static_text:        'text_static',
+}
+function uiType(field) {
+  if (field.auto_fill_source && SYSTEM_BLOCK_BY_SOURCE[field.auto_fill_source]) {
+    return SYSTEM_BLOCK_BY_SOURCE[field.auto_fill_source]
+  }
+  return field.field_type
+}
+
+// ── Multi-page chrome (header/footer at each A4 boundary) ────────────────────
+
+function PageBreaks({ bodyRef, accent, headerUrl, footerUrl }) {
+  const [pageCount, setPageCount] = useState(1)
+  const [pageHeight, setPageHeight] = useState(0)
+
+  useEffect(() => {
+    if (!bodyRef.current) return
+    const calc = () => {
+      const body = bodyRef.current
+      if (!body) return
+      const w = body.clientWidth
+      const ph = Math.round(w * 1.13)
+      const h = body.scrollHeight
+      setPageHeight(ph)
+      setPageCount(Math.max(1, Math.ceil(h / ph)))
+    }
+    calc()
+    const ro = new ResizeObserver(calc)
+    ro.observe(bodyRef.current)
+    return () => ro.disconnect()
+  }, [bodyRef])
+
+  if (pageCount <= 1 || pageHeight <= 0) return null
+  const CHROME_HEIGHT = 120
+
+  return (
+    <>
+      {Array.from({ length: pageCount - 1 }).map((_, i) => (
+        <div
+          key={i}
+          className="absolute left-0 right-0 pointer-events-none"
+          style={{ top: `${(i + 1) * pageHeight - CHROME_HEIGHT / 2}px`, height: `${CHROME_HEIGHT}px`, zIndex: 5 }}
+        >
+          <div className="w-full h-full flex flex-col bg-white border-y-2 border-dashed border-slate-300 shadow-sm">
+            <div className="flex-1 flex items-center justify-center px-12 border-b border-slate-100 min-h-0">
+              {footerUrl ? <img src={footerUrl} alt="" className="max-h-full max-w-full object-contain opacity-90" /> : <span className="text-[9px] text-slate-400 italic">— end of page —</span>}
+            </div>
+            <div className="flex items-center justify-between px-3 py-1 bg-slate-50/80 border-y border-slate-200">
+              <span className="text-[9px] font-semibold uppercase tracking-wider text-slate-500">End of page {i + 1}</span>
+              <span
+                className="text-[9px] font-semibold uppercase tracking-wider rounded-full px-2 py-0.5"
+                style={{ color: accent, borderColor: `${accent}33`, backgroundColor: `${accent}10`, borderWidth: 1, borderStyle: 'solid' }}
+              >
+                Page {i + 2} of {pageCount}
+              </span>
+            </div>
+            <div className="flex-1 flex items-center justify-center px-12 border-t border-slate-100 min-h-0">
+              {headerUrl ? <img src={headerUrl} alt="" className="max-h-full max-w-full object-contain opacity-90" /> : <span className="text-[9px] text-slate-400 italic">— start of page —</span>}
+            </div>
+          </div>
+        </div>
+      ))}
+    </>
+  )
+}
+
+// ── Editable table cell ──────────────────────────────────────────────────────
+
+function TableField({ field, value, onChange, accent }) {
+  const cols = field.table_columns?.length
+    ? field.table_columns
+    : [{ key: 'col1', label: 'Column 1', type: 'text' }]
+
+  // Parse stored JSON; on first edit we ensure at least one row.
+  const rows = useMemo(() => {
+    if (!value) return [Object.fromEntries(cols.map(c => [c.key, '']))]
+    try {
+      const parsed = JSON.parse(value)
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed
+      return [Object.fromEntries(cols.map(c => [c.key, '']))]
+    } catch {
+      return [Object.fromEntries(cols.map(c => [c.key, '']))]
+    }
+  }, [value, cols.length])
+
+  const commit = (next) => onChange(JSON.stringify(next))
+
+  const setCell = (rowIdx, colKey, v) => {
+    const next = rows.map((r, i) => i === rowIdx ? { ...r, [colKey]: v } : r)
+    commit(next)
+  }
+  const addRow = () => commit([...rows, Object.fromEntries(cols.map(c => [c.key, '']))])
+  const removeRow = (i) => {
+    if (rows.length <= 1) return commit([Object.fromEntries(cols.map(c => [c.key, '']))])
+    commit(rows.filter((_, idx) => idx !== i))
+  }
+
+  // Evaluate per-row formulas to populate computed cells.
+  const evaluatedRows = rows.map((row, i) => {
+    const out = { ...row }
+    for (const c of cols) {
+      if (c.formula) {
+        const ctx = rowFormulaContext(out, cols, i + 2)
+        out[c.key] = evalFormula(c.formula, ctx)
+      }
+    }
+    return out
+  })
+
+  // Totals row
+  const tableCtx = tableFormulaContext(evaluatedRows, cols)
+  const totals = {}
+  cols.forEach((c, ci) => {
+    if (!c.show_total && !c.total_formula) return
+    const formula = c.total_formula || `SUM(${columnLetter(ci)})`
+    totals[c.key] = evalFormula(formula, tableCtx)
+  })
+  const hasTotals = Object.keys(totals).length > 0
+
+  const inputTypeFor = (colType) => {
+    if (colType === 'number' || colType === 'currency') return 'number'
+    if (colType === 'date') return 'date'
+    return 'text'
+  }
+
+  return (
+    <div>
+      <p className="text-[10px] font-semibold uppercase tracking-wide mb-1" style={{ color: accent }}>
+        {field.field_label}
+        {field.required && <span className="text-destructive ml-0.5">*</span>}
+      </p>
+      <div className="border border-slate-300 rounded overflow-hidden">
+        <table className="w-full text-[11px]" style={{ tableLayout: 'fixed' }}>
+          <colgroup>
+            {cols.map((c, i) => (
+              <col key={i} style={c.width ? { width: c.width } : undefined} />
+            ))}
+            <col style={{ width: '28px' }} />
+          </colgroup>
+          <thead>
+            <tr className="bg-slate-100">
+              {cols.map((c, i) => (
+                <th key={i} className="text-left px-2 py-1 border-b border-slate-300 font-semibold text-slate-600 truncate">
+                  {c.label || `Col ${i + 1}`}
+                  {c.formula && <span title={`= ${c.formula}`} className="ml-1 text-primary/60 font-mono text-[10px]">ƒ</span>}
+                </th>
+              ))}
+              <th className="border-b border-slate-300" />
+            </tr>
+          </thead>
+          <tbody>
+            {evaluatedRows.map((row, ri) => (
+              <tr key={ri} className="group">
+                {cols.map((c, ci) => (
+                  <td key={ci} className="px-1 py-0.5 border-b border-slate-100 align-top">
+                    {c.formula ? (
+                      <div className="px-1 py-1 text-slate-500 italic text-[10px]">
+                        {typeof row[c.key] === 'string' && row[c.key].startsWith('#ERROR')
+                          ? <span className="text-destructive not-italic">{row[c.key]}</span>
+                          : String(row[c.key] ?? '—')}
+                      </div>
+                    ) : (
+                      <input
+                        type={inputTypeFor(c.type)}
+                        value={row[c.key] ?? ''}
+                        onChange={(e) => setCell(ri, c.key, e.target.value)}
+                        className="w-full bg-transparent px-1 py-1 text-[11px] focus:outline-none focus:bg-white focus:ring-1 focus:ring-primary rounded"
+                      />
+                    )}
+                  </td>
+                ))}
+                <td className="px-1 align-middle text-right">
+                  <button
+                    type="button"
+                    onClick={() => removeRow(ri)}
+                    title="Remove row"
+                    className="opacity-0 group-hover:opacity-100 p-0.5 text-slate-400 hover:text-destructive transition-opacity"
+                  >
+                    <X size={11} />
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {hasTotals && (
+              <tr className="bg-slate-50 font-semibold">
+                {cols.map((c, ci) => (
+                  <td key={ci} className="px-2 py-1 text-slate-700 border-t border-slate-300 truncate">
+                    {ci === 0 ? 'Total' : ((c.show_total || c.total_formula) ? String(totals[c.key] ?? '') : '')}
+                  </td>
+                ))}
+                <td className="border-t border-slate-300" />
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <button
+        type="button"
+        onClick={addRow}
+        className="mt-1 inline-flex items-center gap-1 text-[10px] text-primary hover:underline"
+      >
+        <Plus size={10} /> Add row
+      </button>
+    </div>
+  )
+}
+
+// ── Approval rows (resolves real approver names from user/roles/users) ───────
+
+function ApprovalRows({ steps, accent, user, users, roles }) {
+  const resolveName = (s) => {
+    if (s.role_type === 'Hierarchy' || s.source_type === 'hierarchy') {
+      const lvl = s.hierarchy_level
+      if (lvl === 'manager')    return user?.manager_name || HIERARCHY_LABELS.manager
+      if (lvl === 'sn_manager') return user?.sn_manager_name || HIERARCHY_LABELS.sn_manager
+      if (lvl === 'hod')        return user?.hod_name || HIERARCHY_LABELS.hod
+      return HIERARCHY_LABELS[lvl] || lvl
+    }
+    if (s.role_type === 'Role' || s.source_type === 'role') {
+      return s.role_name || roles?.find(r => r.id === s.role_id)?.name || 'Role-based'
+    }
+    if (s.role_type === 'Specific' || s.source_type === 'specific_user') {
+      return s.specific_user_name || users?.find(u => u.id === s.specific_user_id)?.name || 'Specific user'
+    }
+    return 'Approver'
+  }
+
+  return (
+    <table className="w-full text-[10px]">
+      <thead>
+        <tr className="text-slate-600">
+          <th className="text-left py-1 font-semibold w-1/3">Approver</th>
+          <th className="text-left py-1 font-semibold">Signature</th>
+          <th className="text-left py-1 font-semibold w-24">Date</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td className="py-2 pr-3">
+            <div className="font-medium text-slate-700">Requested by</div>
+            <div className="text-[9px] text-slate-500">{user?.name || 'You'}</div>
+          </td>
+          <td className="py-2 pr-3 align-bottom"><div className="border-b border-dashed border-slate-400 h-4" /></td>
+          <td className="py-2 align-bottom text-[10px] text-slate-500">{new Date().toLocaleDateString('en-GB')}</td>
+        </tr>
+        {(steps || []).map((s, idx) => (
+          <tr key={s.id || idx}>
+            <td className="py-2 pr-3">
+              <div className="font-medium text-slate-700 flex items-center gap-1.5">
+                {s.step_label || resolveName(s)}
+                {s.is_required === false && (
+                  <span className="text-[8px] uppercase tracking-wide text-slate-400 font-semibold border border-slate-200 rounded px-1">optional</span>
+                )}
+              </div>
+              <div className="text-[9px] text-slate-500">{resolveName(s)}</div>
+            </td>
+            <td className="py-2 pr-3 align-bottom"><div className="border-b border-dashed border-slate-400 h-4" /></td>
+            <td className="py-2 align-bottom"><div className="border-b border-dashed border-slate-400 h-4" /></td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
+// ── File chip list ───────────────────────────────────────────────────────────
+
+function FileChips({ files, onRemove, disabled }) {
+  if (!files?.length) return null
+  return (
+    <div className="flex flex-wrap gap-1 mt-1">
+      {files.map((f, i) => (
+        <span key={i} className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 text-[10px] px-2 py-0.5 rounded-full">
+          {f.name}
+          {!disabled && (
+            <button type="button" onClick={() => onRemove(i)} className="hover:text-destructive">
+              <X size={10} />
+            </button>
+          )}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+// ── Field cell — interactive input(s) per field type ─────────────────────────
+
+function FieldCell({
+  field, value, onChange,
+  files, onFilesChange,
+  user, classification, approvalSteps, users, roles,
+  referenceNumber, formDef, accent, disabled,
+}) {
+  const t = uiType(field)
+  const required = field.required && !disabled
+
+  // ── System blocks (display-only) ──
+  if (t === 'text_static') {
+    return (
+      <div className="text-[11px] text-slate-700 whitespace-pre-wrap leading-snug py-1 px-2">
+        {field.default_value || <span className="text-slate-400 italic">[static text]</span>}
+      </div>
+    )
+  }
+  if (t === 'reference') {
+    return (
+      <div className="flex items-baseline gap-2 px-2 py-1">
+        <span className="text-[11px] text-slate-600">{field.field_label || 'Reference'}:</span>
+        <span className="text-[11px] font-mono text-slate-700">
+          {referenceNumber || <span className="text-slate-400 italic">(auto on submit)</span>}
+        </span>
+      </div>
+    )
+  }
+  if (t === 'submission_date') {
+    const today = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+    return (
+      <div className="flex items-baseline gap-2 px-2 py-1">
+        <span className="text-[11px] text-slate-600">{field.field_label || 'Date'}:</span>
+        <span className="text-[11px] text-slate-700">{today}</span>
+      </div>
+    )
+  }
+  if (t === 'classification') {
+    return (
+      <div className="flex items-center justify-center py-1">
+        {classification ? (
+          <span
+            className="inline-block text-[9px] font-semibold uppercase tracking-[0.12em] px-2 py-0.5 rounded border"
+            style={{
+              color: classification.color || '#64748B',
+              borderColor: `${classification.color || '#64748B'}80`,
+              backgroundColor: `${classification.color || '#64748B'}15`,
+            }}
+          >
+            {classification.name}
+          </span>
+        ) : (
+          <span className="text-[10px] text-slate-400 italic">Unclassified</span>
+        )}
+      </div>
+    )
+  }
+  if (t === 'approval_block') {
+    return (
+      <div className="px-2 py-1">
+        <div className="flex items-center gap-2 mb-2">
+          <div className="h-[3px] w-3 rounded-full" style={{ backgroundColor: accent }} />
+          <h2 className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: accent }}>
+            {field.field_label || 'Approvals'}
+          </h2>
+          <div className="flex-1 h-px bg-slate-200" />
+        </div>
+        <ApprovalRows steps={approvalSteps} accent={accent} user={user} users={users} roles={roles} />
+      </div>
+    )
+  }
+
+  // ── Auto-filled (current_user.*) — read-only, prefilled ──
+  if (field.auto_filled && field.auto_fill_source && !SYSTEM_BLOCK_BY_SOURCE[field.auto_fill_source]) {
+    return (
+      <div className="px-2 py-1">
+        <label className="block text-[10px] text-slate-600 mb-0.5">{field.field_label}</label>
+        <div className="bg-slate-50 border border-slate-200 rounded px-2 py-1 text-[11px] text-slate-700">
+          {value || <span className="text-slate-400 italic">—</span>}
+        </div>
+      </div>
+    )
+  }
+
+  // ── Editable inputs ──
+  const labelEl = (
+    <label className="block text-[10px] text-slate-600 mb-0.5">
+      {field.field_label}{required && <span className="text-destructive ml-0.5">*</span>}
+    </label>
+  )
+
+  const baseInputCls = "w-full border border-slate-300 bg-white rounded px-2 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary disabled:bg-slate-50"
+
+  if (t === 'textarea') {
+    return (
+      <div className="px-2 py-1">
+        {labelEl}
+        <textarea
+          rows={3}
+          value={value || ''}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={field.placeholder || ''}
+          disabled={disabled}
+          required={required}
+          className={cn(baseInputCls, 'resize-y min-h-[48px]')}
+        />
+      </div>
+    )
+  }
+  if (t === 'number' || t === 'currency') {
+    return (
+      <div className="px-2 py-1">
+        {labelEl}
+        <input
+          type="number"
+          step={t === 'currency' ? '0.01' : '1'}
+          value={value || ''}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={field.placeholder || ''}
+          disabled={disabled}
+          required={required}
+          className={baseInputCls}
+        />
+      </div>
+    )
+  }
+  if (t === 'date') {
+    return (
+      <div className="px-2 py-1">
+        {labelEl}
+        <input
+          type="date"
+          value={value || ''}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={disabled}
+          required={required}
+          className={baseInputCls}
+        />
+      </div>
+    )
+  }
+  if (t === 'dropdown') {
+    return (
+      <div className="px-2 py-1">
+        {labelEl}
+        <select
+          value={value || ''}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={disabled}
+          required={required}
+          className={baseInputCls}
+        >
+          <option value="">Select…</option>
+          {(field.options || []).map(o => <option key={o} value={o}>{o}</option>)}
+        </select>
+      </div>
+    )
+  }
+  if (t === 'radio') {
+    return (
+      <div className="px-2 py-1">
+        {labelEl}
+        <div className="space-y-1">
+          {(field.options || []).map(o => (
+            <label key={o} className="flex items-center gap-2 text-[11px] text-slate-700 cursor-pointer">
+              <input
+                type="radio"
+                name={field.id}
+                value={o}
+                checked={value === o}
+                onChange={() => onChange(o)}
+                disabled={disabled}
+                className="border-slate-300 text-primary focus:ring-primary w-3 h-3"
+              />
+              {o}
+            </label>
+          ))}
+        </div>
+      </div>
+    )
+  }
+  if (t === 'checkbox') {
+    const selected = (value || '').split(',').filter(Boolean)
+    return (
+      <div className="px-2 py-1">
+        {labelEl}
+        <div className="space-y-1">
+          {(field.options || []).map(o => (
+            <label key={o} className="flex items-center gap-2 text-[11px] text-slate-700 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={selected.includes(o)}
+                onChange={(e) => {
+                  const next = new Set(selected)
+                  if (e.target.checked) next.add(o)
+                  else next.delete(o)
+                  onChange(Array.from(next).join(','))
+                }}
+                disabled={disabled}
+                className="rounded border-slate-300 text-primary focus:ring-primary w-3 h-3"
+              />
+              {o}
+            </label>
+          ))}
+        </div>
+      </div>
+    )
+  }
+  if (t === 'calculated') {
+    return (
+      <div className="px-2 py-1">
+        <label className="block text-[10px] text-slate-600 mb-0.5">{field.field_label}</label>
+        <div className="bg-slate-50 border border-slate-200 rounded px-2 py-1 text-[11px] text-slate-700 font-mono">
+          {value !== '' && value != null ? value : <span className="text-slate-400 italic">—</span>}
+        </div>
+      </div>
+    )
+  }
+  if (t === 'signature') {
+    return (
+      <div className="px-2 py-1">
+        <SignaturePad
+          value={value}
+          onChange={onChange}
+          label={field.field_label}
+          required={required}
+          disabled={disabled}
+        />
+      </div>
+    )
+  }
+  if (t === 'file') {
+    const list = files?.[field.id] || []
+    return (
+      <div className="px-2 py-1">
+        {labelEl}
+        <label className="inline-flex items-center gap-2 text-[11px] text-primary border border-dashed border-primary/40 rounded px-2 py-1 cursor-pointer hover:bg-primary/5">
+          <Paperclip size={12} />
+          <span>Attach file{list.length > 0 ? 's' : ''}…</span>
+          <input
+            type="file"
+            multiple
+            disabled={disabled}
+            className="hidden"
+            onChange={(e) => {
+              const picked = Array.from(e.target.files || [])
+              if (!picked.length) return
+              onFilesChange(field.id, [...list, ...picked])
+              e.target.value = ''
+            }}
+          />
+        </label>
+        <FileChips
+          files={list}
+          disabled={disabled}
+          onRemove={(i) => onFilesChange(field.id, list.filter((_, idx) => idx !== i))}
+        />
+      </div>
+    )
+  }
+  if (t === 'table') {
+    return <div className="px-2 py-1"><TableField field={field} value={value} onChange={onChange} accent={accent} /></div>
+  }
+
+  // text fallback
+  return (
+    <div className="px-2 py-1">
+      {labelEl}
+      <input
+        type="text"
+        value={value || ''}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={field.placeholder || ''}
+        disabled={disabled}
+        required={required}
+        className={baseInputCls}
+      />
+    </div>
+  )
+}
+
+// ── Section block (grid layout) ──────────────────────────────────────────────
+
+function SectionBlock({
+  section, fields, accent, formDef, classification, approvalSteps, users, roles, user,
+  fieldValues, onFieldChange, pendingFiles, onFilesChange, referenceNumber, disabled,
+}) {
+  if (!fields.length) return null
+  return (
+    <div className="mb-5">
+      <div className="flex items-center gap-2 mb-2">
+        <div className="h-[3px] w-3 rounded-full" style={{ backgroundColor: accent }} />
+        <h2 className="text-[12px] font-semibold uppercase tracking-wide" style={{ color: accent }}>
+          {section}
+        </h2>
+        <div className="flex-1 h-px bg-slate-200" />
+      </div>
+      <div className="grid grid-cols-12 gap-x-3 gap-y-1.5">
+        {fields.map(f => {
+          const span = WIDTH_TO_SPAN[f.grid_width || 'full']
+          return (
+            <div key={f.id} style={{ gridColumn: `span ${span} / span ${span}` }}>
+              <FieldCell
+                field={f}
+                value={fieldValues[f.id]}
+                onChange={(v) => onFieldChange(f.id, v)}
+                files={pendingFiles}
+                onFilesChange={onFilesChange}
+                user={user}
+                classification={classification}
+                approvalSteps={approvalSteps}
+                users={users}
+                roles={roles}
+                referenceNumber={referenceNumber}
+                formDef={formDef}
+                accent={accent}
+                disabled={disabled}
+              />
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ── Free-positioned field ────────────────────────────────────────────────────
+
+function FreeField(props) {
+  const widthPct = WIDTH_TO_PCT[props.field.grid_width || 'full']
+  return (
+    <div
+      className="absolute"
+      style={{
+        left: `${props.field.x_pct ?? 0}%`,
+        top: `${props.field.y_pct ?? 0}%`,
+        width: `${widthPct}%`,
+        zIndex: 10,
+      }}
+    >
+      <FieldCell {...props} />
+    </div>
+  )
+}
+
+// ── Main canvas ──────────────────────────────────────────────────────────────
+
+export default function FormFillerCanvas({
+  formDef, headerUrl, footerUrl, accent: accentProp, classification,
+  user, users, roles, approvalSteps, referenceNumber,
+  fieldValues, onFieldChange,
+  pendingFiles, onFilesChange,
+  disabled,
+}) {
+  const accent = accentProp || '#0066B3'
+  const bodyRef = useRef(null)
+
+  const activeFields = (formDef.fields || []).filter(f => f.is_active !== false)
+  const flowFields = activeFields.filter(f => !f.free_position)
+  const freeFields = activeFields.filter(f => f.free_position)
+
+  // Resolve section list while preserving display order.
+  const sections = useMemo(() => {
+    const seen = new Set()
+    const order = []
+    for (const f of flowFields) {
+      const s = f.section_name || DEFAULT_SECTION
+      if (!seen.has(s)) { seen.add(s); order.push(s) }
+    }
+    return order.length ? order : [DEFAULT_SECTION]
+  }, [flowFields])
+
+  return (
+    <div
+      className="bg-white shadow-lg ring-1 ring-black/5 mx-auto overflow-hidden"
+      style={{ width: 'min(720px, 100%)', minHeight: '85vh' }}
+    >
+      {/* Header band */}
+      <div className="flex items-center justify-center px-12 py-4 h-24 border-b border-slate-100">
+        {headerUrl
+          ? <img src={headerUrl} alt="Header" className="max-h-full max-w-full object-contain" />
+          : <div className="text-xs text-slate-400 italic">No header — admin can upload one in Settings.</div>}
+      </div>
+
+      {/* Body */}
+      <div ref={bodyRef} className="px-12 py-6 relative">
+        <PageBreaks bodyRef={bodyRef} accent={accent} headerUrl={headerUrl} footerUrl={footerUrl} />
+
+        {/* Free-positioned fields render absolutely */}
+        {freeFields.map(f => (
+          <FreeField
+            key={f.id}
+            field={f}
+            value={fieldValues[f.id]}
+            onChange={(v) => onFieldChange(f.id, v)}
+            files={pendingFiles}
+            onFilesChange={onFilesChange}
+            user={user}
+            classification={classification}
+            approvalSteps={approvalSteps}
+            users={users}
+            roles={roles}
+            referenceNumber={referenceNumber}
+            formDef={formDef}
+            accent={accent}
+            disabled={disabled}
+          />
+        ))}
+
+        {/* Title */}
+        <div className="text-center mb-4">
+          <h1 className="text-[16px] font-bold tracking-tight" style={{ color: accent }}>
+            {formDef.printed_title || formDef.name}
+          </h1>
+          <div className="mx-auto mt-1 h-[2px] w-16 rounded-full" style={{ backgroundColor: accent }} />
+        </div>
+
+        {/* Sections */}
+        {sections.map(s => {
+          const inSection = flowFields.filter(f => (f.section_name || DEFAULT_SECTION) === s)
+          return (
+            <SectionBlock
+              key={s}
+              section={s}
+              fields={inSection}
+              accent={accent}
+              formDef={formDef}
+              classification={classification}
+              approvalSteps={approvalSteps}
+              users={users}
+              roles={roles}
+              user={user}
+              fieldValues={fieldValues}
+              onFieldChange={onFieldChange}
+              pendingFiles={pendingFiles}
+              onFilesChange={onFilesChange}
+              referenceNumber={referenceNumber}
+              disabled={disabled}
+            />
+          )
+        })}
+      </div>
+
+      {/* Footer band */}
+      <div className="flex items-end justify-center px-12 py-2 h-20 border-t border-slate-100">
+        {footerUrl
+          ? <img src={footerUrl} alt="Footer" className="max-h-full max-w-full object-contain" />
+          : <div className="text-xs text-slate-400 italic mb-1">No footer — admin can upload one in Settings.</div>}
+      </div>
+    </div>
+  )
+}
