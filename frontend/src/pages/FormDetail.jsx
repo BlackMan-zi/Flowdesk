@@ -1,10 +1,11 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { getFormInstance } from '../api/forms'
+import { getFormInstance, getFormDefinition } from '../api/forms'
 import { adminCancelForm, adminSendBackForm, reassignStep } from '../api/approvals'
 import { listUsers } from '../api/users'
+import { getMyOrganization, fetchHeaderImageObjectUrl, fetchFooterImageObjectUrl } from '../api/settings'
 import { useAuth } from '../context/AuthContext'
 import Card, { CardHeader } from '../components/ui/Card'
 import Badge from '../components/ui/Badge'
@@ -12,6 +13,7 @@ import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
 import { SkeletonFormDetail } from '../components/ui/Skeleton'
 import { Select, Textarea } from '../components/ui/Input'
+import FormFillerCanvas from '../components/forms/FormFillerCanvas'
 import {
   ChevronLeft, CheckCircle2, XCircle, Clock, RotateCcw,
   SkipForward, ShieldAlert, UserCog, Hash, User, Calendar,
@@ -104,9 +106,37 @@ export default function FormDetail() {
   const { data: users = [] } = useQuery({
     queryKey: ['users'],
     queryFn: () => listUsers().then(r => r.data),
-    enabled: isAdmin,
     staleTime: 60_000
   })
+
+  // Org for classification labels + accent + letterhead images
+  const { data: org } = useQuery({
+    queryKey: ['my-organization'],
+    queryFn: () => getMyOrganization().then(r => r.data),
+  })
+
+  // Authoritative form schema (so canvas gets section_name, grid_width, etc.)
+  const { data: formDef } = useQuery({
+    queryKey: ['form-definition', instance?.form_definition_id],
+    queryFn: () => getFormDefinition(instance.form_definition_id).then(r => r.data),
+    enabled: !!instance?.form_definition_id,
+  })
+
+  const [letterheadUrls, setLetterheadUrls] = useState({ header: null, footer: null })
+  useEffect(() => {
+    if (!org) return
+    let cancelled = false
+    const urls = { header: null, footer: null }
+    const ps = []
+    if (org.has_header_image) ps.push(fetchHeaderImageObjectUrl().then(u => { urls.header = u }).catch(() => {}))
+    if (org.has_footer_image) ps.push(fetchFooterImageObjectUrl().then(u => { urls.footer = u }).catch(() => {}))
+    Promise.all(ps).then(() => { if (!cancelled) setLetterheadUrls(urls) })
+    return () => {
+      cancelled = true
+      if (urls.header) URL.revokeObjectURL(urls.header)
+      if (urls.footer) URL.revokeObjectURL(urls.footer)
+    }
+  }, [org?.id, org?.has_header_image, org?.has_footer_image])
 
   const cancelMutation = useMutation({
     mutationFn: () => adminCancelForm(id, { notes: adminNotes || null }),
@@ -166,6 +196,30 @@ export default function FormDetail() {
 
   const fieldValues = instance.versions?.[instance.current_version - 1]?.field_values || []
 
+  // Build {[form_field_id]: value} map for the canvas.
+  const fieldValuesMap = {}
+  for (const fv of fieldValues) {
+    fieldValuesMap[fv.form_field_id || fv.form_field?.id] = fv.value
+  }
+
+  // Resolve classification + approver name lookups for the canvas.
+  const classification = formDef?.confidentiality && org?.classification_labels
+    ? org.classification_labels.find(l => l.name === formDef.confidentiality) || null
+    : null
+
+  // Use the live approval_instances (with status/notes) as the rendered approval
+  // block when available; fallback to the template steps for pre-submit drafts.
+  const renderedApprovalSteps = approvalSteps.length > 0
+    ? approvalSteps.map(s => ({
+        ...s,
+        source_type: s.role_type === 'Hierarchy' ? 'hierarchy'
+                  : s.role_type === 'Role'      ? 'role'
+                  : s.role_type === 'Specific'  ? 'specific_user'
+                  : s.source_type,
+        specific_user_name: s.approver?.name,
+      }))
+    : (formDef?.approval_template?.steps || [])
+
   return (
     <div className="max-w-2xl space-y-4">
 
@@ -221,27 +275,36 @@ export default function FormDetail() {
         <ApprovalProgressBar steps={approvalSteps} />
       )}
 
-      {/* Field values */}
-      <Card>
-        <CardHeader
-          title="Form Data"
-          subtitle={`Version ${instance.current_version}${instance.current_version > 1 ? ' (revised)' : ''}`}
-        />
-        <div className="divide-y divide-slate-50">
-          {fieldValues.length === 0 ? (
-            <p className="px-6 py-8 text-sm text-slate-400 text-center">No field data available.</p>
-          ) : fieldValues.map(fv => (
-            <div key={fv.id} className="grid grid-cols-5 gap-4 px-6 py-3.5 text-sm hover:bg-slate-50/50">
-              <span className="col-span-2 text-slate-500 font-medium text-xs uppercase tracking-wide">
-                {fv.form_field?.field_label}
-              </span>
-              <span className="col-span-3 text-slate-800 font-medium break-words">
-                {fv.value || <span className="text-slate-300 font-normal">—</span>}
-              </span>
-            </div>
-          ))}
+      {/* Form data (WYSIWYG, read-only) */}
+      {formDef ? (
+        <div className="bg-muted/30 rounded-lg p-4">
+          <FormFillerCanvas
+            formDef={formDef}
+            headerUrl={letterheadUrls.header}
+            footerUrl={letterheadUrls.footer}
+            accent={org?.letterhead_accent}
+            classification={classification}
+            user={instance.creator}
+            users={users}
+            roles={[]}
+            approvalSteps={renderedApprovalSteps}
+            referenceNumber={instance.reference_number}
+            fieldValues={fieldValuesMap}
+            onFieldChange={() => {}}
+            pendingFiles={{}}
+            onFilesChange={() => {}}
+            disabled
+          />
+          <p className="text-center text-[10px] text-muted-foreground mt-2">
+            Version {instance.current_version}{instance.current_version > 1 ? ' (revised)' : ''}
+          </p>
         </div>
-      </Card>
+      ) : (
+        <Card>
+          <CardHeader title="Form Data" />
+          <p className="px-6 py-8 text-sm text-slate-400 text-center">Loading form layout…</p>
+        </Card>
+      )}
 
       {/* Approval step timeline */}
       {approvalSteps.length > 0 && (

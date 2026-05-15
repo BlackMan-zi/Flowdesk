@@ -191,7 +191,7 @@ export default function SubmitForm() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['form-instances'] })
       setDraftSaved(true)
-      setTimeout(() => setDraftSaved(false), 2500)
+      setTimeout(() => setDraftSaved(false), 1500)
       toast.success('Draft saved')
     },
     onError: (err) => {

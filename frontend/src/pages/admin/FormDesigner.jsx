@@ -32,6 +32,7 @@ import {
 import ApprovalEditor, { stepsToApiPayload, stepsFromApi } from '../../components/forms/ApprovalEditor'
 import InitiatorRolesPanel from '../../components/forms/InitiatorRolesPanel'
 import FormDesignerCanvas, { FIELD_TYPE_META, FIELD_TYPES_LIST, columnLetter } from '../../components/forms/FormDesignerCanvas'
+import FormFillerCanvas from '../../components/forms/FormFillerCanvas'
 import Toolbox from '../../components/forms/Toolbox'
 import { evaluate as evalFormula, SUPPORTED_FUNCTIONS } from '../../lib/formula'
 import LetterheadPage from '../../components/letterhead/LetterheadPage'
@@ -1186,54 +1187,34 @@ export default function FormDesigner() {
         </div>
       )}
 
-      {/* Letterhead preview modal */}
+      {/* WYSIWYG preview modal — uses the same filler canvas employees see */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
-            <DialogTitle>Letterhead preview</DialogTitle>
+            <DialogTitle>Preview</DialogTitle>
           </DialogHeader>
-          <div className="bg-muted/30 rounded-lg p-4 max-h-[70vh] overflow-y-auto">
-            <div className="mx-auto" style={{ width: 'min(560px, 100%)' }}>
-              <LetterheadPage
-                headerImageUrl={previewUrls.header}
-                footerImageUrl={previewUrls.footer}
-                accentColor={org?.letterhead_accent}
-                classification={
-                  formDef.confidentiality && (org?.classification_labels || []).find(l => l.name === formDef.confidentiality)
-                    ? (org.classification_labels || []).find(l => l.name === formDef.confidentiality)
-                    : null
-                }
-              >
-                <div className="h-full overflow-hidden text-[10px] text-slate-800">
-                  <div className="text-center">
-                    <h1 className="text-[14px] font-bold" style={{ color: org?.letterhead_accent || '#0066B3' }}>
-                      {formDef.printed_title || formDef.name}
-                    </h1>
-                  </div>
-                  <div className="mt-3 space-y-3">
-                    {sections.map(s => {
-                      const inSec = fields.filter(f => (f.section_name || DEFAULT_SECTION) === s)
-                      if (!inSec.length) return null
-                      return (
-                        <div key={s}>
-                          <div className="font-semibold text-[10px] uppercase tracking-wide" style={{ color: org?.letterhead_accent || '#0066B3' }}>
-                            {s}
-                          </div>
-                          <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 mt-0.5">
-                            {inSec.map(f => (
-                              <div key={f.id} className="flex items-baseline gap-1.5">
-                                <span className="text-slate-500">{f.field_label}:</span>
-                                <span className="font-medium text-slate-400 italic">[{FT[f.field_type]?.label}]</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              </LetterheadPage>
-            </div>
+          <div className="bg-muted/30 rounded-lg p-4 max-h-[75vh] overflow-y-auto">
+            <FormFillerCanvas
+              formDef={{ ...formDef, fields }}
+              headerUrl={previewUrls.header}
+              footerUrl={previewUrls.footer}
+              accent={org?.letterhead_accent}
+              classification={
+                formDef.confidentiality
+                  ? (org?.classification_labels || []).find(l => l.name === formDef.confidentiality) || null
+                  : null
+              }
+              user={null}
+              users={users}
+              roles={roles}
+              approvalSteps={approvalSteps}
+              referenceNumber={null}
+              fieldValues={{}}
+              onFieldChange={() => {}}
+              pendingFiles={{}}
+              onFilesChange={() => {}}
+              disabled
+            />
           </div>
         </DialogContent>
       </Dialog>

@@ -19,6 +19,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       <Toaster
         position="top-right"
         richColors
+        duration={2000}
         toastOptions={{
           style: { fontFamily: 'Inter, system-ui, sans-serif' },
         }}

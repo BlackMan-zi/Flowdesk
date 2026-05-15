@@ -94,7 +94,7 @@ function PageBreaks({ bodyRef, accent, headerUrl, footerUrl }) {
 
 // ── Editable table cell ──────────────────────────────────────────────────────
 
-function TableField({ field, value, onChange, accent }) {
+function TableField({ field, value, onChange, accent, disabled }) {
   const cols = field.table_columns?.length
     ? field.table_columns
     : [{ key: 'col1', label: 'Column 1', type: 'text' }]
@@ -187,6 +187,10 @@ function TableField({ field, value, onChange, accent }) {
                           ? <span className="text-destructive not-italic">{row[c.key]}</span>
                           : String(row[c.key] ?? '—')}
                       </div>
+                    ) : disabled ? (
+                      <div className="px-1 py-1 text-[11px] text-slate-700 truncate">
+                        {row[c.key] || <span className="text-slate-300">—</span>}
+                      </div>
                     ) : (
                       <input
                         type={inputTypeFor(c.type)}
@@ -198,6 +202,7 @@ function TableField({ field, value, onChange, accent }) {
                   </td>
                 ))}
                 <td className="px-1 align-middle text-right">
+                  {!disabled && (
                   <button
                     type="button"
                     onClick={() => removeRow(ri)}
@@ -206,6 +211,7 @@ function TableField({ field, value, onChange, accent }) {
                   >
                     <X size={11} />
                   </button>
+                  )}
                 </td>
               </tr>
             ))}
@@ -222,13 +228,15 @@ function TableField({ field, value, onChange, accent }) {
           </tbody>
         </table>
       </div>
-      <button
-        type="button"
-        onClick={addRow}
-        className="mt-1 inline-flex items-center gap-1 text-[10px] text-primary hover:underline"
-      >
-        <Plus size={10} /> Add row
-      </button>
+      {!disabled && (
+        <button
+          type="button"
+          onClick={addRow}
+          className="mt-1 inline-flex items-center gap-1 text-[10px] text-primary hover:underline"
+        >
+          <Plus size={10} /> Add row
+        </button>
+      )}
     </div>
   )
 }
@@ -548,22 +556,27 @@ function FieldCell({
     return (
       <div className="px-2 py-1">
         {labelEl}
-        <label className="inline-flex items-center gap-2 text-[11px] text-primary border border-dashed border-primary/40 rounded px-2 py-1 cursor-pointer hover:bg-primary/5">
-          <Paperclip size={12} />
-          <span>Attach file{list.length > 0 ? 's' : ''}…</span>
-          <input
-            type="file"
-            multiple
-            disabled={disabled}
-            className="hidden"
-            onChange={(e) => {
-              const picked = Array.from(e.target.files || [])
-              if (!picked.length) return
-              onFilesChange(field.id, [...list, ...picked])
-              e.target.value = ''
-            }}
-          />
-        </label>
+        {disabled ? (
+          list.length > 0 ? null : (
+            <span className="text-[10px] text-slate-400 italic">See attachments below</span>
+          )
+        ) : (
+          <label className="inline-flex items-center gap-2 text-[11px] text-primary border border-dashed border-primary/40 rounded px-2 py-1 cursor-pointer hover:bg-primary/5">
+            <Paperclip size={12} />
+            <span>Attach file{list.length > 0 ? 's' : ''}…</span>
+            <input
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                const picked = Array.from(e.target.files || [])
+                if (!picked.length) return
+                onFilesChange(field.id, [...list, ...picked])
+                e.target.value = ''
+              }}
+            />
+          </label>
+        )}
         <FileChips
           files={list}
           disabled={disabled}
@@ -573,7 +586,7 @@ function FieldCell({
     )
   }
   if (t === 'table') {
-    return <div className="px-2 py-1"><TableField field={field} value={value} onChange={onChange} accent={accent} /></div>
+    return <div className="px-2 py-1"><TableField field={field} value={value} onChange={onChange} accent={accent} disabled={disabled} /></div>
   }
 
   // text fallback
