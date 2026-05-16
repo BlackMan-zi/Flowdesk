@@ -530,7 +530,7 @@ function FieldCell({
         {labelEl}
         {disabled ? (
           list.length > 0 ? null : (
-            <span className="text-[10px] text-slate-400 italic">See attachments below</span>
+            <span className="text-[10px] text-slate-400 italic">— attached files listed below the form —</span>
           )
         ) : (
           <label className="inline-flex items-center gap-2 text-[11px] text-primary border border-dashed border-primary/40 rounded px-2 py-1 cursor-pointer hover:bg-primary/5">

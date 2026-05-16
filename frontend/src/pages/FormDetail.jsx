@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { getFormInstance, getFormDefinition } from '../api/forms'
+import { getFormInstance, getFormDefinition, downloadAttachment } from '../api/forms'
 import { adminCancelForm, adminSendBackForm, reassignStep } from '../api/approvals'
 import { listUsers } from '../api/users'
 import { getMyOrganization, fetchHeaderImageObjectUrl, fetchFooterImageObjectUrl } from '../api/settings'
@@ -17,7 +17,7 @@ import FormFillerCanvas from '../components/forms/FormFillerCanvas'
 import {
   ChevronLeft, CheckCircle2, XCircle, Clock, RotateCcw,
   SkipForward, ShieldAlert, UserCog, Hash, User, Calendar,
-  FileText, AlertCircle
+  FileText, AlertCircle, Paperclip, Download
 } from 'lucide-react'
 
 // ── Step icon ─────────────────────────────────────────────────────────────────
@@ -190,9 +190,24 @@ export default function FormDetail() {
   const openAdminModal = (type) => { setAdminModal(type); setAdminNotes('') }
   const openReassign   = () => { setReassignOpen(true); setReassignUserId(''); setReassignNotes('') }
 
-  const approvalSteps = (instance.versions?.[instance.current_version - 1]?.approval_instances || [])
+  const rawApprovalSteps = (instance.versions?.[instance.current_version - 1]?.approval_instances || [])
     .slice().sort((a, b) => a.step_order - b.step_order)
-  const activeStep = approvalSteps.find(s => s.status === 'Active')
+  const activeStep = rawApprovalSteps.find(s => s.status === 'Active')
+
+  // Prepend a synthetic "Submitted by" step so the chain shows the
+  // initiator's contribution before any approvers act. Pre-submit drafts
+  // don't get it (instance.submitted_at is null).
+  const initiatorStep = instance.submitted_at ? {
+    id: '__initiator__',
+    step_order: 0,
+    step_label: 'Submitted by Initiator',
+    status: 'Approved',
+    approver: instance.creator,
+    signed_at: instance.submitted_at,
+  } : null
+  const approvalSteps = initiatorStep
+    ? [initiatorStep, ...rawApprovalSteps]
+    : rawApprovalSteps
 
   const fieldValues = instance.versions?.[instance.current_version - 1]?.field_values || []
 
@@ -303,6 +318,37 @@ export default function FormDetail() {
         <Card>
           <CardHeader title="Form Data" />
           <p className="px-6 py-8 text-sm text-slate-400 text-center">Loading form layout…</p>
+        </Card>
+      )}
+
+      {/* Attachments uploaded with this submission */}
+      {(instance.attachments?.length || 0) > 0 && (
+        <Card>
+          <CardHeader
+            title="Attachments"
+            subtitle={`${instance.attachments.length} file${instance.attachments.length === 1 ? '' : 's'}`}
+          />
+          <div className="divide-y divide-slate-100">
+            {instance.attachments.map(att => (
+              <div key={att.id} className="flex items-center gap-3 px-5 py-3 text-sm">
+                <Paperclip size={14} className="text-slate-400 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-slate-800 font-medium truncate">{att.original_filename}</p>
+                  <p className="text-xs text-slate-400">
+                    {att.file_size != null ? `${(att.file_size / 1024).toFixed(1)} KB · ` : ''}
+                    {att.uploaded_at ? fmt(att.uploaded_at) : ''}
+                    {att.uploaded_after_submission ? ' · added after submission' : ''}
+                  </p>
+                </div>
+                <button
+                  onClick={() => downloadAttachment(att.id, att.original_filename)}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                >
+                  <Download size={12} /> Download
+                </button>
+              </div>
+            ))}
+          </div>
         </Card>
       )}
 

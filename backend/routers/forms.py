@@ -535,6 +535,8 @@ def get_form_instance(
     # Pydantic's from_attributes conversion finds them populated. Without
     # these touches the relationship attribute is a fresh AppenderQuery /
     # InstrumentedList that gets serialised as empty.
+    _ = instance.creator
+    _ = list(instance.attachments)
     _ = list(instance.versions)
     for v in instance.versions:
         _ = list(v.field_values)
@@ -547,6 +549,32 @@ def get_form_instance(
     if instance.form_definition:
         _ = list(instance.form_definition.fields)
     return instance
+
+
+@router.get("/attachments/{attachment_id}")
+def download_attachment(
+    attachment_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    from models.form import FormAttachment
+    attachment = db.query(FormAttachment).filter(
+        FormAttachment.id == attachment_id,
+        FormAttachment.organization_id == current_user.organization_id
+    ).first()
+    if not attachment:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+    file_path = os.path.join(
+        settings.MEDIA_DIR, "attachments",
+        attachment.organization_id, attachment.stored_filename
+    )
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File missing on disk")
+    return FileResponse(
+        file_path,
+        filename=attachment.original_filename,
+        media_type=attachment.content_type or "application/octet-stream"
+    )
 
 
 @router.post("/instances/{instance_id}/submit")

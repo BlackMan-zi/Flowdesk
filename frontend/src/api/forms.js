@@ -19,6 +19,19 @@ export const uploadAttachment = (id, file) => {
   return client.post(`/forms/instances/${id}/attachments`, fd)
 }
 
+// Auth-gated download — fetch as blob, open in a new tab via object URL.
+export const downloadAttachment = async (attachmentId, originalFilename) => {
+  const res = await client.get(`/forms/attachments/${attachmentId}`, { responseType: 'blob' })
+  const url = URL.createObjectURL(res.data)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = originalFilename || 'attachment'
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
 // PDF template endpoints
 export const uploadPdfTemplate = (formDefId, file) => {
   const fd = new FormData()

@@ -220,12 +220,25 @@ class FormVersionResponse(BaseModel):
         from_attributes = True
 
 
+class AttachmentBrief(BaseModel):
+    id: str
+    original_filename: str
+    file_size: Optional[int] = None
+    content_type: Optional[str] = None
+    uploaded_at: datetime
+    uploaded_after_submission: bool
+
+    class Config:
+        from_attributes = True
+
+
 class FormInstanceResponse(BaseModel):
     id: str
     organization_id: str
     form_definition_id: str
     reference_number: str
     created_by: str
+    creator: Optional[UserBrief] = None
     current_status: FormStatus
     current_version: int
     backdated_date: Optional[datetime]
@@ -243,6 +256,7 @@ class FormInstanceResponse(BaseModel):
 class FormInstanceDetail(FormInstanceResponse):
     form_definition: Optional[FormDefinitionResponse] = None
     versions: List[FormVersionResponse] = []
+    attachments: List[AttachmentBrief] = []
 
 
 class DraftUpdateInput(BaseModel):
