@@ -215,6 +215,11 @@ class FormVersionResponse(BaseModel):
     created_at: datetime
     field_values: List[FormFieldValueResponse] = []
     approval_instances: List[ApprovalInstanceBrief] = []
+    # Frozen-in-time schema for this version (fields + section_layouts +
+    # metadata). When present, the frontend / PDF renderer uses this instead
+    # of the live form_definition, so pending forms aren't disturbed by
+    # subsequent admin schema edits.
+    schema_snapshot: Optional[Dict[str, Any]] = None
 
     class Config:
         from_attributes = True

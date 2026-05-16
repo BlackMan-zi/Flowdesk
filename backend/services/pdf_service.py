@@ -166,12 +166,48 @@ def _render_value(field, value: Optional[str]) -> str:
 
 # ── Main entry point ─────────────────────────────────────────────────────────
 
+class _SnapshotField:
+    """Lightweight stand-in for an SA FormField, built from a JSON snapshot
+    dict. Read-only — used only for PDF rendering."""
+    def __init__(self, d: dict):
+        self.__dict__.update(d)
+        # field_type is a string in the snapshot; preserve that. The renderer
+        # only compares with string literals so an Enum is unnecessary.
+
+    @property
+    def is_active(self):  # always true in snapshot
+        return True
+
+
+class _SnapshotFormDef:
+    """Read-only adapter that lets the PDF renderer treat a JSON schema
+    snapshot the same way it treats a live SA FormDefinition."""
+    def __init__(self, d: dict):
+        self._d = d
+        self.id = d.get('id')
+        self.name = d.get('name')
+        self.printed_title = d.get('printed_title')
+        self.description = d.get('description')
+        self.code_suffix = d.get('code_suffix')
+        self.confidentiality = d.get('confidentiality')
+        self.section_layouts = d.get('section_layouts') or {}
+        self.fields = [_SnapshotField(f) for f in (d.get('fields') or [])]
+
+
 def generate_form_pdf(db: Session, instance: FormInstance) -> bytes:
     """Build the PDF bytes for a FormInstance. Caller must have eager-loaded
     versions/field_values/attachments/form_definition.fields."""
     org = db.query(Organization).filter(Organization.id == instance.organization_id).first()
-    form_def = instance.form_definition
     accent = getattr(org, 'letterhead_accent', None) or '#0066B3'
+
+    # Prefer the schema snapshot frozen at submit time over the live form
+    # definition, so admin edits to the form don't disturb this submission.
+    current_ver_for_snapshot = next(
+        (v for v in instance.versions if v.version_number == instance.current_version),
+        None,
+    )
+    snapshot = getattr(current_ver_for_snapshot, 'schema_snapshot', None) if current_ver_for_snapshot else None
+    form_def = _SnapshotFormDef(snapshot) if snapshot else instance.form_definition
 
     header_uri = _data_uri(getattr(org, 'header_image_path', None))
     footer_uri = _data_uri(getattr(org, 'footer_image_path', None))

@@ -167,6 +167,10 @@ class FormVersion(Base):
     created_by = Column(String(36), ForeignKey("users.id"), nullable=False)
     change_notes = Column(Text, nullable=True)
     status = Column(SAEnum(VersionStatus), default=VersionStatus.draft)
+    # Snapshot of the form schema (fields + section_layouts + metadata) at
+    # submission time. NULL on drafts / legacy rows; the renderer falls back
+    # to the live form_definition in that case.
+    schema_snapshot = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships

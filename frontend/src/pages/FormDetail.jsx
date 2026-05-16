@@ -236,7 +236,20 @@ export default function FormDetail() {
     ? [initiatorStep, ...rawApprovalSteps]
     : rawApprovalSteps
 
-  const fieldValues = instance.versions?.[instance.current_version - 1]?.field_values || []
+  const currentVersion = instance.versions?.[instance.current_version - 1]
+  const fieldValues = currentVersion?.field_values || []
+
+  // Prefer the frozen schema snapshot from the submitted version so admin
+  // edits to the form definition (rename / delete a field, change layout)
+  // don't disturb already-submitted forms. Falls back to the live formDef
+  // for pre-snapshot legacy rows.
+  const effectiveFormDef = currentVersion?.schema_snapshot
+    ? {
+        id: instance.form_definition_id,
+        approval_template: formDef?.approval_template,
+        ...currentVersion.schema_snapshot,
+      }
+    : formDef
 
   // Build {[form_field_id]: value} map for the canvas.
   const fieldValuesMap = {}
@@ -244,9 +257,11 @@ export default function FormDetail() {
     fieldValuesMap[fv.form_field_id || fv.form_field?.id] = fv.value
   }
 
-  // Resolve classification + approver name lookups for the canvas.
-  const classification = formDef?.confidentiality && org?.classification_labels
-    ? org.classification_labels.find(l => l.name === formDef.confidentiality) || null
+  // Resolve classification + approver name lookups for the canvas. Uses
+  // effectiveFormDef so the snapshot's confidentiality wins over the live
+  // form's current setting.
+  const classification = effectiveFormDef?.confidentiality && org?.classification_labels
+    ? org.classification_labels.find(l => l.name === effectiveFormDef.confidentiality) || null
     : null
 
   // Use the live approval_instances (with status/notes) as the rendered approval
@@ -268,7 +283,7 @@ export default function FormDetail() {
   // export for now; proper server-side PDF + attachment merging is the
   // next deliverable. The `print:hidden` utility classes hide the toolbar
   // and timeline section from the actual print output.
-  if (previewMode && formDef) {
+  if (previewMode && effectiveFormDef) {
     return (
       <div className="bg-slate-100 min-h-screen py-6 print:py-0 print:bg-white">
         <div className="max-w-3xl mx-auto space-y-4 px-4">
@@ -298,7 +313,7 @@ export default function FormDetail() {
 
           {/* The form, full-width, no surrounding muted card */}
           <FormFillerCanvas
-            formDef={formDef}
+            formDef={effectiveFormDef}
             headerUrl={letterheadUrls.header}
             footerUrl={letterheadUrls.footer}
             accent={org?.letterhead_accent}
@@ -396,10 +411,10 @@ export default function FormDetail() {
       )}
 
       {/* Form data (WYSIWYG, read-only) */}
-      {formDef ? (
+      {effectiveFormDef ? (
         <div className="bg-muted/30 rounded-lg p-4">
           <FormFillerCanvas
-            formDef={formDef}
+            formDef={effectiveFormDef}
             headerUrl={letterheadUrls.header}
             footerUrl={letterheadUrls.footer}
             accent={org?.letterhead_accent}

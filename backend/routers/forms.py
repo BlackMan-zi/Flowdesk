@@ -539,6 +539,7 @@ def get_form_instance(
     _ = list(instance.attachments)
     _ = list(instance.versions)
     for v in instance.versions:
+        _ = v.schema_snapshot   # snapshot is a JSON column, no relationship to touch but explicit access keeps it loaded
         _ = list(v.field_values)
         for fv in v.field_values:
             _ = fv.form_field

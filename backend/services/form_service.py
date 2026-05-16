@@ -140,6 +140,56 @@ def _save_field_values(db: Session, version_id: str, field_values: List[dict],
         db.add(val)
 
 
+def build_schema_snapshot(form_def) -> dict:
+    """Serialise a form definition's fields + layout to a JSON-safe dict.
+    Stored on FormVersion.schema_snapshot at submit time so subsequent admin
+    edits to the form don't disturb already-submitted forms."""
+    return {
+        'id': form_def.id,
+        'name': form_def.name,
+        'printed_title': form_def.printed_title,
+        'description': form_def.description,
+        'code_suffix': form_def.code_suffix,
+        'confidentiality': form_def.confidentiality,
+        'section_layouts': form_def.section_layouts or {},
+        'allow_attachments': form_def.allow_attachments,
+        'fields': [
+            {
+                'id': f.id,
+                'field_name': f.field_name,
+                'field_label': f.field_label,
+                'field_type': (
+                    f.field_type.value if hasattr(f.field_type, 'value') else str(f.field_type)
+                ),
+                'section_name': f.section_name,
+                'grid_width': f.grid_width,
+                'free_position': bool(f.free_position),
+                'required': bool(f.required),
+                'auto_filled': bool(f.auto_filled),
+                'auto_fill_source': f.auto_fill_source,
+                'calculation_enabled': bool(f.calculation_enabled),
+                'calculation_formula': f.calculation_formula,
+                'options': f.options,
+                'placeholder': f.placeholder,
+                'default_value': f.default_value,
+                'read_only': bool(f.read_only),
+                'validation_rules': f.validation_rules,
+                'table_columns': f.table_columns,
+                'page_number': f.page_number,
+                'x_pct': f.x_pct,
+                'y_pct': f.y_pct,
+                'width_pct': f.width_pct,
+                'height_pct': f.height_pct,
+                'display_order': f.display_order,
+                'filled_by': f.filled_by,
+                'is_active': True,
+            }
+            for f in (form_def.fields or [])
+            if getattr(f, 'is_active', True) is not False
+        ],
+    }
+
+
 def submit_form(
     db: Session,
     instance: FormInstance,
@@ -162,6 +212,10 @@ def submit_form(
         current_ver.status = VersionStatus.active
         if change_notes:
             current_ver.change_notes = change_notes
+        # Freeze the schema for this version so later admin edits to the
+        # form definition won't change how this submission renders.
+        if instance.form_definition:
+            current_ver.schema_snapshot = build_schema_snapshot(instance.form_definition)
 
     instance.current_status = FormStatus.submitted
     instance.submitted_at = datetime.utcnow()
