@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { getFormInstance, getFormDefinition, downloadAttachment, fetchAttachmentBlobUrl } from '../api/forms'
+import { getFormInstance, getFormDefinition, downloadAttachment, fetchAttachmentBlobUrl, downloadFormPdf } from '../api/forms'
 import { adminCancelForm, adminSendBackForm, reassignStep } from '../api/approvals'
 import { listUsers } from '../api/users'
 import { getMyOrganization, fetchHeaderImageObjectUrl, fetchFooterImageObjectUrl } from '../api/settings'
@@ -210,6 +210,7 @@ export default function FormDetail() {
 
   const canResubmit   = instance.current_status === 'Returned for Correction'
   const isCompleted   = instance.current_status === 'Completed' || instance.current_status === 'Approved'
+  const canExportPdf  = isCompleted
   const isTerminal    = ['Completed', 'Approved', 'Rejected'].includes(instance.current_status)
   const isUnderReview = ['Pending', 'Submitted'].includes(instance.current_status)
 
@@ -271,16 +272,28 @@ export default function FormDetail() {
     return (
       <div className="bg-slate-100 min-h-screen py-6 print:py-0 print:bg-white">
         <div className="max-w-3xl mx-auto space-y-4 px-4">
-          <div className="flex items-center justify-between print:hidden">
+          <div className="flex items-center justify-between print:hidden gap-2">
             <Button variant="secondary" size="sm" onClick={() => setPreviewMode(false)}>
               <X size={14} /> Exit Preview
             </Button>
-            <div className="text-xs text-slate-500">
+            <div className="text-xs text-slate-500 flex-1 text-center">
               {instance.form_definition?.name} · <span className="font-mono">{instance.reference_number}</span>
             </div>
-            <Button size="sm" onClick={() => window.print()}>
-              <Printer size={14} /> Print / Save as PDF
-            </Button>
+            <div className="flex items-center gap-2">
+              {canExportPdf && (
+                <Button
+                  size="sm"
+                  onClick={() => downloadFormPdf(id, instance.reference_number).catch(err =>
+                    toast.error(err?.response?.data?.detail || 'PDF export failed.')
+                  )}
+                >
+                  <Download size={14} /> Download Final PDF
+                </Button>
+              )}
+              <Button variant="secondary" size="sm" onClick={() => window.print()}>
+                <Printer size={14} /> Print
+              </Button>
+            </div>
           </div>
 
           {/* The form, full-width, no surrounding muted card */}
@@ -346,9 +359,21 @@ export default function FormDetail() {
             )}
           </div>
         </div>
-        <Button variant="secondary" size="sm" onClick={() => setPreviewMode(true)}>
-          <Eye size={14} /> Preview
-        </Button>
+        <div className="flex items-center gap-2">
+          {canExportPdf && (
+            <Button
+              size="sm"
+              onClick={() => downloadFormPdf(id, instance.reference_number).catch(err =>
+                toast.error(err?.response?.data?.detail || 'PDF export failed.')
+              )}
+            >
+              <Download size={14} /> Download PDF
+            </Button>
+          )}
+          <Button variant="secondary" size="sm" onClick={() => setPreviewMode(true)}>
+            <Eye size={14} /> Preview
+          </Button>
+        </div>
       </div>
 
       {/* Returned alert */}

@@ -39,6 +39,20 @@ export const fetchAttachmentBlobUrl = async (attachmentId) => {
   return URL.createObjectURL(res.data)
 }
 
+// Download the merged PDF (form + approval history + inlined attachments).
+// Gated server-side to Approved/Completed status.
+export const downloadFormPdf = async (instanceId, referenceNumber) => {
+  const res = await client.get(`/forms/instances/${instanceId}/pdf`, { responseType: 'blob' })
+  const url = URL.createObjectURL(res.data)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${referenceNumber || instanceId}.pdf`
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
 // PDF template endpoints
 export const uploadPdfTemplate = (formDefId, file) => {
   const fd = new FormData()

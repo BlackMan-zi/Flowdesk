@@ -551,6 +551,67 @@ def get_form_instance(
     return instance
 
 
+@router.get("/instances/{instance_id}/pdf")
+def export_form_pdf(
+    instance_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Render a fully-merged PDF for an approved/completed form instance.
+    Includes the org letterhead, all field values, the approval history,
+    image attachments as full pages, and PDF attachments appended at the
+    end. Office docs are listed but not yet inlined (Phase E.2.b)."""
+    instance = db.query(FormInstance).filter(
+        FormInstance.id == instance_id,
+        FormInstance.organization_id == current_user.organization_id
+    ).first()
+    if not instance:
+        raise HTTPException(status_code=404, detail="Form instance not found")
+
+    if instance.current_status not in (FormStatus.approved, FormStatus.completed):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"PDF export is only available once the form is approved. "
+                f"Current status: {instance.current_status.value}"
+            )
+        )
+
+    # Touch every relationship the generator reads so SA loads them while the
+    # session is still open.
+    _ = instance.creator
+    _ = list(instance.attachments)
+    _ = list(instance.versions)
+    for v in instance.versions:
+        _ = list(v.field_values)
+        for fv in v.field_values:
+            _ = fv.form_field
+        _ = list(v.approval_instances)
+        for ai in v.approval_instances:
+            _ = ai.approver
+    if instance.form_definition:
+        _ = list(instance.form_definition.fields)
+
+    from services.pdf_service import generate_form_pdf
+    from fastapi.responses import Response
+    pdf_bytes = generate_form_pdf(db, instance)
+
+    audit_service.log_event(
+        db, current_user.organization_id, "FORM_PDF_EXPORTED",
+        user_id=current_user.id, entity_type="FormInstance", entity_id=instance.id
+    )
+
+    safe_ref = (instance.reference_number or instance_id).replace('/', '_')
+    return Response(
+        content=pdf_bytes,
+        media_type='application/pdf',
+        headers={
+            'Content-Disposition': f'attachment; filename="{safe_ref}.pdf"',
+            'Cache-Control': 'no-store',
+        }
+    )
+
+
 @router.get("/attachments/{attachment_id}")
 def download_attachment(
     attachment_id: str,

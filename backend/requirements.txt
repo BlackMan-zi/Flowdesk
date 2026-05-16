@@ -18,3 +18,4 @@ qrcode[pil]>=7.4.2
 alembic>=1.14.0
 pypdf>=4.2.0
 slowapi>=0.1.9
+weasyprint>=63.0
