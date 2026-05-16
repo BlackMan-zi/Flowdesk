@@ -817,22 +817,58 @@ def update_template(
         setattr(template, field, value)
 
     if payload.steps is not None:
-        db.query(ApprovalTemplateStep).filter(
-            ApprovalTemplateStep.template_id == template_id
-        ).delete()
+        # MERGE instead of delete-and-recreate, otherwise approval_instances
+        # (real audit-trail rows for in-flight / completed approvals) lose
+        # their template_step_id FK and Postgres raises ForeignKeyViolation.
+        #
+        # Strategy: match incoming steps to existing rows by step_order.
+        #   - existing + in payload → UPDATE in place (keep same id)
+        #   - new in payload (no matching order) → INSERT
+        #   - existing not in payload → DELETE if no approval_instance
+        #       references it; otherwise leave the row alone so the audit
+        #       trail keeps working (the orphaned step is harmless — it's no
+        #       longer in the template's active step set for new instances).
+        existing_by_order = {
+            row.step_order: row for row in db.query(ApprovalTemplateStep).filter(
+                ApprovalTemplateStep.template_id == template_id
+            ).all()
+        }
+        payload_orders = {s.step_order for s in payload.steps}
+
         for step_data in payload.steps:
-            db.add(ApprovalTemplateStep(
-                template_id=template.id,
-                step_order=step_data.step_order,
-                step_label=step_data.step_label,
-                role_type=step_data.role_type,
-                role_id=step_data.role_id,
-                specific_user_id=step_data.specific_user_id,
-                hierarchy_level=step_data.hierarchy_level,
-                skip_if_missing=step_data.skip_if_missing,
-                delegation_allowed=step_data.delegation_allowed,
-                is_required=step_data.is_required,
-            ))
+            row = existing_by_order.get(step_data.step_order)
+            if row is not None:
+                row.step_label = step_data.step_label
+                row.role_type = step_data.role_type
+                row.role_id = step_data.role_id
+                row.specific_user_id = step_data.specific_user_id
+                row.hierarchy_level = step_data.hierarchy_level
+                row.skip_if_missing = step_data.skip_if_missing
+                row.delegation_allowed = step_data.delegation_allowed
+                row.is_required = step_data.is_required
+            else:
+                db.add(ApprovalTemplateStep(
+                    template_id=template.id,
+                    step_order=step_data.step_order,
+                    step_label=step_data.step_label,
+                    role_type=step_data.role_type,
+                    role_id=step_data.role_id,
+                    specific_user_id=step_data.specific_user_id,
+                    hierarchy_level=step_data.hierarchy_level,
+                    skip_if_missing=step_data.skip_if_missing,
+                    delegation_allowed=step_data.delegation_allowed,
+                    is_required=step_data.is_required,
+                ))
+
+        for order, row in existing_by_order.items():
+            if order in payload_orders:
+                continue
+            referenced = db.query(ApprovalInstance.id).filter(
+                ApprovalInstance.template_step_id == row.id
+            ).first()
+            if referenced is None:
+                db.delete(row)
+            # else: leave it for the audit trail; it's harmless.
 
     if payload.cc_recipients is not None:
         db.query(ApprovalTemplateCCRecipient).filter(
