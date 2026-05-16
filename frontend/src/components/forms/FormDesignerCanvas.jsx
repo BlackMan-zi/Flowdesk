@@ -1001,8 +1001,15 @@ export default function FormDesignerCanvas({
         }
       })
       setPageHeight(ph)
-      setBreakAfterIdx(breaks)
       setPageCount(pageNum)
+      // Bail if breaks content unchanged — a new object reference with
+      // identical content would otherwise re-trigger the effect via deps.
+      setBreakAfterIdx(prev => {
+        const aKeys = Object.keys(prev)
+        const bKeys = Object.keys(breaks)
+        if (aKeys.length === bKeys.length && bKeys.every(k => prev[k] === breaks[k])) return prev
+        return breaks
+      })
     }
     calc()
     const ro = new ResizeObserver(calc)

@@ -638,9 +638,17 @@ export default function FormFillerCanvas({
   const accent = accentProp || '#0066B3'
   const bodyRef = useRef(null)
 
-  const activeFields = (formDef.fields || []).filter(f => f.is_active !== false)
-  const flowFields = activeFields.filter(f => !f.free_position)
-  const freeFields = activeFields.filter(f => f.free_position)
+  // Memoize derived field lists so they're referentially stable across
+  // renders. Without this, useLayoutEffect below sees a new `activeFields`
+  // each render and re-runs forever (setBreakAfterIdx({}) returns a new
+  // object reference even when the breaks are identical), which makes the
+  // canvas paint blank because the render never settles.
+  const activeFields = useMemo(
+    () => (formDef.fields || []).filter(f => f.is_active !== false),
+    [formDef.fields]
+  )
+  const flowFields = useMemo(() => activeFields.filter(f => !f.free_position), [activeFields])
+  const freeFields = useMemo(() => activeFields.filter(f => f.free_position), [activeFields])
 
   const sectionLayouts = formDef.section_layouts || {}
 
@@ -687,14 +695,22 @@ export default function FormFillerCanvas({
         }
       })
       setPageHeight(ph)
-      setBreakAfterIdx(breaks)
       setPageCount(pageNum)
+      // Only update breakAfterIdx if the *content* changed — same content
+      // with a fresh reference would re-trigger the effect via deps and we'd
+      // loop forever.
+      setBreakAfterIdx(prev => {
+        const aKeys = Object.keys(prev)
+        const bKeys = Object.keys(breaks)
+        if (aKeys.length === bKeys.length && bKeys.every(k => prev[k] === breaks[k])) return prev
+        return breaks
+      })
     }
     calc()
     const ro = new ResizeObserver(calc)
     ro.observe(body)
     return () => ro.disconnect()
-  }, [sections, activeFields, formDef?.section_layouts, minBodyPx])
+  }, [sections, activeFields, sectionLayouts, minBodyPx])
 
   const bodyMinHeightPx = Math.max(minBodyPx, pageCount * pageHeight)
 
