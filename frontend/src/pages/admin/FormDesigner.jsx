@@ -790,6 +790,7 @@ export default function FormDesigner() {
   const [tab, setTab] = useState('fields')          // 'fields' | 'approval' | 'initiator'
   const [approvalSteps, setApprovalSteps] = useState([])
   const [initiatorRoleIds, setInitiatorRoleIds] = useState([])
+  const [initiatorUserIds, setInitiatorUserIds] = useState([])
   const initRef = useRef(false)
   const formulaBarRef = useRef(null)
 
@@ -833,6 +834,7 @@ export default function FormDesigner() {
     )
     setApprovalSteps(stepsFromApi(def.approval_template?.steps || [], roles, users))
     setInitiatorRoleIds(def.initiator_role_ids || [])
+    setInitiatorUserIds(def.initiator_user_ids || [])
   }
 
   // Fetch letterhead images once the org is available so both the canvas and
@@ -1030,6 +1032,7 @@ export default function FormDesigner() {
       // map / list = open to all / all sections default to 'grid').
       await updateFormDefinition(id, {
         initiator_role_ids: initiatorRoleIds,
+        initiator_user_ids: initiatorUserIds,
         section_layouts: sectionLayouts,
       })
 
@@ -1128,7 +1131,7 @@ export default function FormDesigner() {
       <div className="flex items-center gap-1 px-4 border-b border-border bg-card">
         <TabButton active={tab === 'fields'}    onClick={() => setTab('fields')}    icon={SettingsIcon} label="Fields"    count={fields.length} />
         <TabButton active={tab === 'approval'}  onClick={() => setTab('approval')}  icon={Workflow}     label="Approval"  count={approvalSteps.length} />
-        <TabButton active={tab === 'initiator'} onClick={() => setTab('initiator')} icon={ShieldCheck}  label="Initiator" count={initiatorRoleIds.length || null} hint={initiatorRoleIds.length === 0 ? 'All users' : null} />
+        <TabButton active={tab === 'initiator'} onClick={() => setTab('initiator')} icon={ShieldCheck}  label="Initiator" count={(initiatorRoleIds.length + initiatorUserIds.length) || null} hint={(initiatorRoleIds.length + initiatorUserIds.length) === 0 ? 'All users' : null} />
       </div>
 
       {/* Body — three-pane for Fields, centered single panel for the others */}
@@ -1147,8 +1150,11 @@ export default function FormDesigner() {
         <div className="flex-1 overflow-y-auto p-6">
           <InitiatorRolesPanel
             roles={roles}
-            selectedIds={initiatorRoleIds}
-            onChange={setInitiatorRoleIds}
+            users={users}
+            selectedRoleIds={initiatorRoleIds}
+            selectedUserIds={initiatorUserIds}
+            onChangeRoles={setInitiatorRoleIds}
+            onChangeUsers={setInitiatorUserIds}
           />
         </div>
       )}

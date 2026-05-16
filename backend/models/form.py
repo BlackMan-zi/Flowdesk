@@ -17,6 +17,14 @@ form_definition_initiator_roles = Table(
     Column("role_id", String(36), ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True),
 )
 
+# Junction table: forms restricted to specific initiator users (by id)
+form_definition_initiator_users = Table(
+    "form_definition_initiator_users",
+    Base.metadata,
+    Column("form_definition_id", String(36), ForeignKey("form_definitions.id", ondelete="CASCADE"), primary_key=True),
+    Column("user_id", String(36), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
+)
+
 
 def gen_uuid():
     return str(uuid.uuid4())
@@ -87,10 +95,15 @@ class FormDefinition(Base):
     approval_template = relationship("ApprovalTemplate", foreign_keys=[approval_template_id])
     creator = relationship("User", foreign_keys=[created_by])
     initiator_roles = relationship("Role", secondary=form_definition_initiator_roles)
+    initiator_users = relationship("User", secondary=form_definition_initiator_users)
 
     @property
     def initiator_role_ids(self):
         return [r.id for r in self.initiator_roles]
+
+    @property
+    def initiator_user_ids(self):
+        return [u.id for u in self.initiator_users]
 
 
 class FormField(Base):

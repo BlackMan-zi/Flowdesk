@@ -14,6 +14,7 @@ import Modal from '../components/ui/Modal'
 import { SkeletonFormDetail } from '../components/ui/Skeleton'
 import { Select, Textarea } from '../components/ui/Input'
 import FormFillerCanvas from '../components/forms/FormFillerCanvas'
+import { resolveClassification } from '../lib/classification'
 import {
   ChevronLeft, CheckCircle2, XCircle, Clock, RotateCcw,
   SkipForward, ShieldAlert, UserCog, Hash, User, Calendar,
@@ -257,12 +258,13 @@ export default function FormDetail() {
     fieldValuesMap[fv.form_field_id || fv.form_field?.id] = fv.value
   }
 
-  // Resolve classification + approver name lookups for the canvas. Uses
-  // effectiveFormDef so the snapshot's confidentiality wins over the live
-  // form's current setting.
-  const classification = effectiveFormDef?.confidentiality && org?.classification_labels
-    ? org.classification_labels.find(l => l.name === effectiveFormDef.confidentiality) || null
-    : null
+  // Resolve classification for the canvas. Uses effectiveFormDef so the
+  // snapshot's confidentiality wins over the live form's current setting.
+  // Falls back to the standard palette when org hasn't customised labels.
+  const classification = resolveClassification(
+    effectiveFormDef?.confidentiality,
+    org?.classification_labels,
+  )
 
   // For the inline approval block on the form: pass only the REAL approval
   // steps. The canvas's ApprovalRows component already prepends its own

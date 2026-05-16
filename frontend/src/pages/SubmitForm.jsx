@@ -16,6 +16,7 @@ import { resolveCalculatedFields } from '../utils/formulaEngine'
 import { cn } from '@/lib/utils'
 import FormFillerCanvas from '../components/forms/FormFillerCanvas'
 import SignaturePad from '../components/forms/SignaturePad'
+import { resolveClassification } from '../lib/classification'
 
 // ── Step breadcrumb ───────────────────────────────────────────────────────────
 
@@ -242,10 +243,13 @@ export default function SubmitForm() {
   })
 
   // ── Resolved props for the canvas ──
-  const classification = useMemo(() => {
-    if (!formDef?.confidentiality || !org?.classification_labels) return null
-    return org.classification_labels.find(l => l.name === formDef.confidentiality) || null
-  }, [formDef?.confidentiality, org?.classification_labels])
+  // Falls back to the standard label palette when the org hasn't customised
+  // its own labels — otherwise forms tagged with a default classification
+  // would render as "Unclassified".
+  const classification = useMemo(
+    () => resolveClassification(formDef?.confidentiality, org?.classification_labels),
+    [formDef?.confidentiality, org?.classification_labels]
+  )
 
   const approvalSteps = formDef?.approval_template?.steps || []
 

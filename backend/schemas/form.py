@@ -73,7 +73,8 @@ class FormDefinitionCreate(BaseModel):
     code_suffix: str
     visibility: FormVisibility = FormVisibility.all_users
     visible_department_ids: Optional[List[str]] = None
-    initiator_role_ids: Optional[List[str]] = None  # empty/None = open to all
+    initiator_role_ids: Optional[List[str]] = None  # empty/None = no role restriction
+    initiator_user_ids: Optional[List[str]] = None  # empty/None = no user restriction; union with roles
     allow_backdating: bool = False
     allow_attachments: bool = True
     approval_template_id: Optional[str] = None
@@ -90,6 +91,7 @@ class FormDefinitionUpdate(BaseModel):
     visibility: Optional[FormVisibility] = None
     visible_department_ids: Optional[List[str]] = None
     initiator_role_ids: Optional[List[str]] = None
+    initiator_user_ids: Optional[List[str]] = None
     allow_backdating: Optional[bool] = None
     allow_attachments: Optional[bool] = None
     approval_template_id: Optional[str] = None
@@ -131,6 +133,7 @@ class FormDefinitionResponse(BaseModel):
     visibility: FormVisibility
     visible_department_ids: Optional[List[str]] = None
     initiator_role_ids: List[str] = []
+    initiator_user_ids: List[str] = []
     allow_backdating: bool
     allow_attachments: bool
     approval_template_id: Optional[str]

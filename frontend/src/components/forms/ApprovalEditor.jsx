@@ -2,7 +2,7 @@ import React, { useState, useMemo, useRef } from 'react'
 import { cn } from '../../lib/utils'
 import {
   Plus, X, ChevronUp, ChevronDown, Workflow, Search,
-  GitBranch, Briefcase, User as UserIcon,
+  GitBranch, Briefcase, User as UserIcon, ChevronRight, Info,
 } from 'lucide-react'
 
 // ── Hierarchy labels ──────────────────────────────────────────────────────────
@@ -115,10 +115,17 @@ function StepCard({ step, index, isEditing, onToggleEdit, onUpdate, onDelete, on
           </p>
         </div>
         <div className="flex items-center gap-0.5 flex-shrink-0" onClick={e => e.stopPropagation()}>
-          {onMoveUp   && <button type="button" onClick={onMoveUp}   className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted"><ChevronUp   size={11} /></button>}
-          {onMoveDown && <button type="button" onClick={onMoveDown} className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted"><ChevronDown size={11} /></button>}
-          <button type="button" onClick={onDelete} className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10"><X size={11} /></button>
+          {onMoveUp   && <button type="button" onClick={onMoveUp}   title="Move up"   className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted"><ChevronUp   size={11} /></button>}
+          {onMoveDown && <button type="button" onClick={onMoveDown} title="Move down" className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted"><ChevronDown size={11} /></button>}
+          <button type="button" onClick={onDelete} title="Remove step" className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10"><X size={11} /></button>
         </div>
+        <ChevronRight
+          size={11}
+          className={cn(
+            'text-muted-foreground/60 flex-shrink-0 transition-transform',
+            isEditing ? 'rotate-90 text-primary' : ''
+          )}
+        />
       </div>
 
       {isEditing && (
@@ -282,6 +289,10 @@ export default function ApprovalEditor({ steps, onChange, users, roles }) {
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
             Steps run top-to-bottom after the initiator submits.
+          </p>
+          <p className="text-[10px] text-muted-foreground/80 mt-1 flex items-center gap-1">
+            <Info size={10} />
+            Click a step to edit its approver (role, hierarchy, or specific user) · use <ChevronUp size={9} className="inline" /><ChevronDown size={9} className="inline" /> to reorder.
           </p>
         </div>
         <button

@@ -61,6 +61,13 @@ def create_form_definition(
         ).all()
         form_def.initiator_roles = roles
 
+    if payload.initiator_user_ids:
+        users = db.query(User).filter(
+            User.id.in_(payload.initiator_user_ids),
+            User.organization_id == current_user.organization_id
+        ).all()
+        form_def.initiator_users = users
+
     for idx, field_data in enumerate(payload.fields):
         field = FormField(
             form_definition_id=form_def.id,
@@ -107,9 +114,13 @@ def list_form_definitions(
     visible = []
     for f in forms:
         allowed_role_ids = {r.id for r in f.initiator_roles}
-        # If form has no initiator restriction, anyone can initiate
-        # Otherwise the user must hold at least one of the allowed roles
-        if not allowed_role_ids or (allowed_role_ids & user_role_ids):
+        allowed_user_ids = {u.id for u in f.initiator_users}
+        # If neither roles nor users are listed, the form is open to all.
+        # Otherwise the user must match either an allowed role or be
+        # listed explicitly as an allowed user.
+        if not allowed_role_ids and not allowed_user_ids:
+            visible.append(f)
+        elif (allowed_role_ids & user_role_ids) or (current_user.id in allowed_user_ids):
             visible.append(f)
     return visible
 
@@ -144,6 +155,7 @@ def update_form_definition(
         raise HTTPException(status_code=404, detail="Form definition not found")
     updates = payload.model_dump(exclude_unset=True)
     initiator_role_ids = updates.pop('initiator_role_ids', None)
+    initiator_user_ids = updates.pop('initiator_user_ids', None)
 
     if 'code_suffix' in updates and updates['code_suffix']:
         updates['code_suffix'] = updates['code_suffix'].upper()
@@ -159,6 +171,16 @@ def update_form_definition(
             form_def.initiator_roles = roles
         else:
             form_def.initiator_roles = []
+
+    if initiator_user_ids is not None:
+        if initiator_user_ids:
+            users = db.query(User).filter(
+                User.id.in_(initiator_user_ids),
+                User.organization_id == current_user.organization_id
+            ).all()
+            form_def.initiator_users = users
+        else:
+            form_def.initiator_users = []
 
     db.commit()
     db.refresh(form_def)
