@@ -167,6 +167,45 @@ class FormInstanceSubmit(BaseModel):
     selected_approver_ids: Optional[Dict[str, str]] = None  # step_id -> user_id
 
 
+class FormFieldValueResponse(BaseModel):
+    id: str
+    form_field_id: str
+    value: Optional[str] = None
+    # form_field is the nested FormField record (so the view can read
+    # field_label / auto_fill_source / etc.). Kept Optional in case the
+    # relationship isn't loaded for a particular response.
+    form_field: Optional[FormFieldResponse] = None
+
+    class Config:
+        from_attributes = True
+
+
+class UserBrief(BaseModel):
+    id: str
+    name: str
+
+    class Config:
+        from_attributes = True
+
+
+class ApprovalInstanceBrief(BaseModel):
+    """Brief approval-instance shape for FormInstanceDetail responses.
+    Includes the nested approver / delegated_from User records so the
+    FormDetail page can render the approval chain without a separate
+    lookup. Mirrors what the SA relationships expose."""
+    id: str
+    step_order: int
+    step_label: Optional[str] = None
+    status: str
+    notes: Optional[str] = None
+    signed_at: Optional[datetime] = None
+    approver: Optional[UserBrief] = None
+    delegated_from: Optional[UserBrief] = None
+
+    class Config:
+        from_attributes = True
+
+
 class FormVersionResponse(BaseModel):
     id: str
     version_number: int
@@ -174,7 +213,8 @@ class FormVersionResponse(BaseModel):
     change_notes: Optional[str]
     status: VersionStatus
     created_at: datetime
-    field_values: List[Dict[str, Any]] = []
+    field_values: List[FormFieldValueResponse] = []
+    approval_instances: List[ApprovalInstanceBrief] = []
 
     class Config:
         from_attributes = True

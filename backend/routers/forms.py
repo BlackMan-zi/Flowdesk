@@ -519,7 +519,7 @@ def save_draft(
     return {"message": "Draft saved"}
 
 
-@router.get("/instances/{instance_id}")
+@router.get("/instances/{instance_id}", response_model=FormInstanceDetail)
 def get_form_instance(
     instance_id: str,
     current_user: User = Depends(get_current_active_user),
@@ -531,6 +531,21 @@ def get_form_instance(
     ).first()
     if not instance:
         raise HTTPException(status_code=404, detail="Form instance not found")
+    # Touch every lazy-loaded relationship the response_model references so
+    # Pydantic's from_attributes conversion finds them populated. Without
+    # these touches the relationship attribute is a fresh AppenderQuery /
+    # InstrumentedList that gets serialised as empty.
+    _ = list(instance.versions)
+    for v in instance.versions:
+        _ = list(v.field_values)
+        for fv in v.field_values:
+            _ = fv.form_field
+        _ = list(v.approval_instances)
+        for ai in v.approval_instances:
+            _ = ai.approver
+            _ = ai.delegated_from
+    if instance.form_definition:
+        _ = list(instance.form_definition.fields)
     return instance
 
 
