@@ -167,17 +167,22 @@ export function columnLetter(idx) {
 
 // Build a per-row context map for formula evaluation that includes BOTH
 // the user's column keys AND Excel-style cell-letter aliases (A, A2, B, B2,
-// ...). Row number is informational — letter alone or with number resolves
-// to the same value within a per-row formula.
-export function rowFormulaContext(row, columns, rowNumber = 2) {
+// ...). For per-row formulas, EVERY numbered reference resolves to *this
+// row's* value in the named column — admins write `=B2*C2` once in the
+// formula bar and expect that formula to apply identically to row 2,
+// row 3, row 17, and any user-added rows. Restricting B2 to literal row 2
+// breaks formulas on every row after the first, which is the most common
+// real-world case for tables (item lines, expense rows, etc.).
+const ROW_REF_CAP = 99
+export function rowFormulaContext(row, columns, _rowNumber = 2) {
   const ctx = { ...row }
   columns.forEach((c, i) => {
     const letter = columnLetter(i)
     const v = row[c.key]
     ctx[letter] = v
-    ctx[`${letter}${rowNumber}`] = v
-    // Also map row 1 for consistency (most users will write =B2*C2 anyway)
-    ctx[`${letter}1`] = v
+    for (let r = 1; r <= ROW_REF_CAP; r++) {
+      ctx[`${letter}${r}`] = v
+    }
   })
   return ctx
 }

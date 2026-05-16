@@ -35,6 +35,36 @@ function uiType(field) {
   return field.field_type
 }
 
+// ── Auto-grow textarea (resizes to fit content, no internal scrollbar) ──────
+//
+// useLayoutEffect runs synchronously after layout so the height stays in
+// sync with content as the user types, including pushing later sections /
+// pages down to make room. Browser zoom / font size changes also retrigger
+// via ResizeObserver on the wrapper. value `||` '' so React stays in
+// controlled-input land regardless of null/undefined.
+
+function AutoGrowTextarea({ value, onChange, disabled, required, placeholder, className }) {
+  const ref = useRef(null)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+  }, [value])
+  return (
+    <textarea
+      ref={ref}
+      value={value || ''}
+      onChange={onChange}
+      disabled={disabled}
+      required={required}
+      placeholder={placeholder}
+      rows={2}
+      className={cn(className, 'overflow-hidden resize-none')}
+    />
+  )
+}
+
 // ── Editable table cell ──────────────────────────────────────────────────────
 
 function TableField({ field, value, onChange, accent, disabled }) {
@@ -360,14 +390,13 @@ function FieldCell({
     return (
       <div className="px-2 py-1">
         {labelEl}
-        <textarea
-          rows={3}
-          value={value || ''}
+        <AutoGrowTextarea
+          value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={field.placeholder || ''}
           disabled={disabled}
           required={required}
-          className={cn(baseInputCls, 'resize-y min-h-[48px]')}
+          className={cn(baseInputCls, 'min-h-[48px]')}
         />
       </div>
     )
