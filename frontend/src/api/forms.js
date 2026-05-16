@@ -32,6 +32,13 @@ export const downloadAttachment = async (attachmentId, originalFilename) => {
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
+// Auth-gated blob URL fetch for inline preview (img src / embed src).
+// Caller is responsible for revoking the URL when done.
+export const fetchAttachmentBlobUrl = async (attachmentId) => {
+  const res = await client.get(`/forms/attachments/${attachmentId}`, { responseType: 'blob' })
+  return URL.createObjectURL(res.data)
+}
+
 // PDF template endpoints
 export const uploadPdfTemplate = (formDefId, file) => {
   const fd = new FormData()

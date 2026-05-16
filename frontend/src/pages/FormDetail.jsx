@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { getFormInstance, getFormDefinition, downloadAttachment } from '../api/forms'
+import { getFormInstance, getFormDefinition, downloadAttachment, fetchAttachmentBlobUrl } from '../api/forms'
 import { adminCancelForm, adminSendBackForm, reassignStep } from '../api/approvals'
 import { listUsers } from '../api/users'
 import { getMyOrganization, fetchHeaderImageObjectUrl, fetchFooterImageObjectUrl } from '../api/settings'
@@ -139,6 +139,31 @@ export default function FormDetail() {
     }
   }, [org?.id, org?.has_header_image, org?.has_footer_image])
 
+  // Pre-fetch blob URLs for image / PDF attachments so the canvas can show
+  // them inline. xls / doc / other types stay as a download list, no fetch
+  // needed. Re-runs only when the attachment id set actually changes.
+  const [attachmentUrls, setAttachmentUrls] = useState({})
+  const inlineableIdsKey = (instance?.attachments || [])
+    .filter(a => /^image\//.test(a.content_type || '') || /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(a.original_filename || '')
+              || (a.content_type === 'application/pdf') || /\.pdf$/i.test(a.original_filename || ''))
+    .map(a => a.id)
+    .join(',')
+  useEffect(() => {
+    if (!inlineableIdsKey) return
+    const ids = inlineableIdsKey.split(',').filter(Boolean)
+    let cancelled = false
+    const urls = {}
+    Promise.all(ids.map(id =>
+      fetchAttachmentBlobUrl(id).then(u => { urls[id] = u }).catch(() => {})
+    )).then(() => {
+      if (!cancelled) setAttachmentUrls(urls)
+    })
+    return () => {
+      cancelled = true
+      Object.values(urls).forEach(u => URL.revokeObjectURL(u))
+    }
+  }, [inlineableIdsKey])
+
   const cancelMutation = useMutation({
     mutationFn: () => adminCancelForm(id, { notes: adminNotes || null }),
     onSuccess: () => {
@@ -274,56 +299,14 @@ export default function FormDetail() {
             onFieldChange={() => {}}
             pendingFiles={{}}
             onFilesChange={() => {}}
+            attachments={instance.attachments}
+            attachmentUrls={attachmentUrls}
             disabled
           />
 
-          {/* Attachments */}
-          {(instance.attachments?.length || 0) > 0 && (
-            <div className="bg-white rounded-lg shadow-sm ring-1 ring-black/5 p-5">
-              <h3 className="text-sm font-bold mb-2">Attachments ({instance.attachments.length})</h3>
-              <ul className="space-y-1 text-xs">
-                {instance.attachments.map(att => (
-                  <li key={att.id} className="flex items-baseline gap-2 text-slate-700">
-                    <Paperclip size={11} className="text-slate-400 self-center" />
-                    <span className="font-medium">{att.original_filename}</span>
-                    <span className="text-slate-400">
-                      {att.file_size != null ? `· ${(att.file_size / 1024).toFixed(1)} KB` : ''}
-                      {att.uploaded_at ? ` · ${fmt(att.uploaded_at)}` : ''}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {/* Signatures / approval history */}
-          {approvalSteps.length > 0 && (
-            <div className="bg-white rounded-lg shadow-sm ring-1 ring-black/5 p-5">
-              <h3 className="text-sm font-bold mb-3">Approval History</h3>
-              <table className="w-full text-xs">
-                <thead className="text-slate-500">
-                  <tr>
-                    <th className="text-left font-semibold py-1">Step</th>
-                    <th className="text-left font-semibold py-1">Approver</th>
-                    <th className="text-left font-semibold py-1">Status</th>
-                    <th className="text-left font-semibold py-1">Date</th>
-                    <th className="text-left font-semibold py-1">Notes</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {approvalSteps.map(s => (
-                    <tr key={s.id} className="border-t border-slate-100">
-                      <td className="py-1.5 pr-3">{s.step_label || `Step ${s.step_order}`}</td>
-                      <td className="py-1.5 pr-3">{s.approver?.name || '—'}</td>
-                      <td className="py-1.5 pr-3">{s.status}</td>
-                      <td className="py-1.5 pr-3">{s.signed_at ? fmt(s.signed_at) : '—'}</td>
-                      <td className="py-1.5 pr-3 italic text-slate-500">{s.notes || ''}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          {/* Approval history + attachments are now rendered inside the
+              FormFillerCanvas body (above the footer band) so they print as
+              part of the document. No duplicate cards here. */}
         </div>
       </div>
     )
@@ -405,6 +388,8 @@ export default function FormDetail() {
             onFieldChange={() => {}}
             pendingFiles={{}}
             onFilesChange={() => {}}
+            attachments={instance.attachments}
+            attachmentUrls={attachmentUrls}
             disabled
           />
           <p className="text-center text-[10px] text-muted-foreground mt-2">

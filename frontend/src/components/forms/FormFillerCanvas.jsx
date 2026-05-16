@@ -634,6 +634,109 @@ function SectionBlock({
   )
 }
 
+// ── Approval-history table (rendered inline at the bottom of the document) ──
+
+function ApprovalHistorySection({ steps, accent }) {
+  if (!steps?.length) return null
+  return (
+    <div className="mt-5 mb-3">
+      <div className="flex items-center gap-2 mb-2">
+        <div className="h-[3px] w-3 rounded-full" style={{ backgroundColor: accent }} />
+        <h2 className="text-[12px] font-semibold uppercase tracking-wide" style={{ color: accent }}>
+          Approval History
+        </h2>
+        <div className="flex-1 h-px bg-slate-200" />
+      </div>
+      <table className="w-full text-[10px]">
+        <thead className="text-slate-500">
+          <tr>
+            <th className="text-left font-semibold py-1 pr-2">Step</th>
+            <th className="text-left font-semibold py-1 pr-2">Approver</th>
+            <th className="text-left font-semibold py-1 pr-2">Status</th>
+            <th className="text-left font-semibold py-1 pr-2">Date</th>
+            <th className="text-left font-semibold py-1 pr-2">Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {steps.map(s => (
+            <tr key={s.id} className="border-t border-slate-100">
+              <td className="py-1 pr-2 text-slate-800">{s.step_label || `Step ${s.step_order}`}</td>
+              <td className="py-1 pr-2 text-slate-700">{s.approver?.name || '—'}</td>
+              <td className="py-1 pr-2 text-slate-700">{s.status}</td>
+              <td className="py-1 pr-2 text-slate-500">
+                {s.signed_at ? new Date(s.signed_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+              </td>
+              <td className="py-1 pr-2 italic text-slate-500">{s.notes || ''}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+// ── Inline attachment renderers (image / pdf inline; others listed) ──────────
+
+const IMAGE_EXT = /\.(jpe?g|png|gif|webp|bmp|svg)$/i
+const PDF_EXT = /\.pdf$/i
+function isImageAttachment(att) {
+  return /^image\//.test(att?.content_type || '') || IMAGE_EXT.test(att?.original_filename || '')
+}
+function isPdfAttachment(att) {
+  return (att?.content_type || '') === 'application/pdf' || PDF_EXT.test(att?.original_filename || '')
+}
+
+function InlineAttachments({ attachments, attachmentUrls, accent }) {
+  if (!attachments?.length) return null
+  const inlineable = attachments.filter(a => isImageAttachment(a) || isPdfAttachment(a))
+  const listOnly = attachments.filter(a => !isImageAttachment(a) && !isPdfAttachment(a))
+  return (
+    <>
+      {inlineable.map((att, idx) => {
+        const url = attachmentUrls?.[att.id]
+        return (
+          <div key={att.id} className="mt-6 pt-4 border-t-2 border-dashed border-slate-200">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="h-[3px] w-3 rounded-full" style={{ backgroundColor: accent }} />
+              <p className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: accent }}>
+                Attachment {idx + 1} — {att.original_filename}
+              </p>
+              <div className="flex-1 h-px bg-slate-200" />
+            </div>
+            {!url ? (
+              <div className="text-[10px] text-slate-400 italic text-center py-6">Loading attachment…</div>
+            ) : isImageAttachment(att) ? (
+              <img src={url} alt={att.original_filename} className="w-full" />
+            ) : (
+              <embed src={url} type="application/pdf" className="w-full" style={{ height: '760px' }} />
+            )}
+          </div>
+        )
+      })}
+      {listOnly.length > 0 && (
+        <div className="mt-5">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="h-[3px] w-3 rounded-full" style={{ backgroundColor: accent }} />
+            <h2 className="text-[12px] font-semibold uppercase tracking-wide" style={{ color: accent }}>
+              Other Attachments
+            </h2>
+            <div className="flex-1 h-px bg-slate-200" />
+          </div>
+          <ul className="space-y-1 text-[11px]">
+            {listOnly.map(att => (
+              <li key={att.id} className="flex items-baseline gap-2">
+                <Paperclip size={11} className="text-slate-400 self-center" />
+                <span className="font-medium text-slate-700">{att.original_filename}</span>
+                <span className="text-slate-400">{att.content_type || ''}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </>
+  )
+}
+
 // ── Free-positioned field ────────────────────────────────────────────────────
 
 function FreeField(props) {
@@ -662,6 +765,7 @@ export default function FormFillerCanvas({
   user, users, roles, approvalSteps, referenceNumber,
   fieldValues, onFieldChange,
   pendingFiles, onFilesChange,
+  attachments, attachmentUrls,
   disabled,
 }) {
   const accent = accentProp || '#0066B3'
@@ -830,6 +934,22 @@ export default function FormFillerCanvas({
             </React.Fragment>
           )
         })}
+
+        {/* Approval history + inline attachments — only rendered in view /
+            preview mode (disabled). Approval history flows directly after
+            the last section so it prints as part of the document; image /
+            PDF attachments render below as discrete "pages" within the
+            same scrolling document. */}
+        {disabled && approvalSteps?.length > 0 && (
+          <ApprovalHistorySection steps={approvalSteps} accent={accent} />
+        )}
+        {disabled && (
+          <InlineAttachments
+            attachments={attachments}
+            attachmentUrls={attachmentUrls}
+            accent={accent}
+          />
+        )}
       </div>
 
       {/* Footer band */}
