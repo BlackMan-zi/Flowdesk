@@ -216,7 +216,21 @@ function TableField({ field, value, onChange, accent, disabled }) {
 
 // ── Approval rows (resolves real approver names from user/roles/users) ───────
 
-function ApprovalRows({ steps, accent, user, users, roles }) {
+// Render a signature value (type:Name or PNG data URL) inline. Returns
+// `null` if no value — caller renders the "not yet signed" dotted line.
+function _renderSignatureCell(value) {
+  if (!value) return null
+  const v = String(value).trim()
+  if (v.startsWith('type:')) {
+    return <span className="text-[14px]" style={{ fontFamily: "'Brush Script MT', cursive" }}>{v.slice(5)}</span>
+  }
+  if (v.startsWith('data:image/')) {
+    return <img src={v} alt="signature" className="h-5 object-contain" />
+  }
+  return <span className="text-[10px]">{v}</span>
+}
+
+function ApprovalRows({ steps, accent, user, users, roles, initiatorSignatureData, initiatorSignedAt }) {
   const resolveName = (s) => {
     if (s.role_type === 'Hierarchy' || s.source_type === 'hierarchy') {
       const lvl = s.hierarchy_level
@@ -249,24 +263,44 @@ function ApprovalRows({ steps, accent, user, users, roles }) {
             <div className="font-medium text-slate-700">Requested by</div>
             <div className="text-[9px] text-slate-500">{user?.name || 'You'}</div>
           </td>
-          <td className="py-2 pr-3 align-bottom"><div className="border-b border-dashed border-slate-400 h-4" /></td>
-          <td className="py-2 align-bottom text-[10px] text-slate-500">{new Date().toLocaleDateString('en-GB')}</td>
+          <td className="py-2 pr-3 align-bottom">
+            {_renderSignatureCell(initiatorSignatureData) || (
+              <div className="border-b border-dashed border-slate-400 h-4" />
+            )}
+          </td>
+          <td className="py-2 align-bottom text-[10px] text-slate-700">
+            {initiatorSignedAt
+              ? new Date(initiatorSignedAt).toLocaleDateString('en-GB')
+              : <div className="border-b border-dashed border-slate-400 h-4" />}
+          </td>
         </tr>
-        {(steps || []).map((s, idx) => (
-          <tr key={s.id || idx}>
-            <td className="py-2 pr-3">
-              <div className="font-medium text-slate-700 flex items-center gap-1.5">
-                {s.step_label || resolveName(s)}
-                {s.is_required === false && (
-                  <span className="text-[8px] uppercase tracking-wide text-slate-400 font-semibold border border-slate-200 rounded px-1">optional</span>
+        {(steps || []).map((s, idx) => {
+          const sigVal = s.signature?.signature_data || s.signature_data
+          const signedAt = s.signed_at
+          return (
+            <tr key={s.id || idx}>
+              <td className="py-2 pr-3">
+                <div className="font-medium text-slate-700 flex items-center gap-1.5">
+                  {s.step_label || resolveName(s)}
+                  {s.is_required === false && (
+                    <span className="text-[8px] uppercase tracking-wide text-slate-400 font-semibold border border-slate-200 rounded px-1">optional</span>
+                  )}
+                </div>
+                <div className="text-[9px] text-slate-500">{s.approver?.name || resolveName(s)}</div>
+              </td>
+              <td className="py-2 pr-3 align-bottom">
+                {_renderSignatureCell(sigVal) || (
+                  <div className="border-b border-dashed border-slate-400 h-4" />
                 )}
-              </div>
-              <div className="text-[9px] text-slate-500">{resolveName(s)}</div>
-            </td>
-            <td className="py-2 pr-3 align-bottom"><div className="border-b border-dashed border-slate-400 h-4" /></td>
-            <td className="py-2 align-bottom"><div className="border-b border-dashed border-slate-400 h-4" /></td>
-          </tr>
-        ))}
+              </td>
+              <td className="py-2 align-bottom text-[10px] text-slate-700">
+                {signedAt
+                  ? new Date(signedAt).toLocaleDateString('en-GB')
+                  : <div className="border-b border-dashed border-slate-400 h-4" />}
+              </td>
+            </tr>
+          )
+        })}
       </tbody>
     </table>
   )
@@ -298,7 +332,8 @@ function FieldCell({
   field, value, onChange,
   files, onFilesChange,
   user, classification, approvalSteps, users, roles,
-  referenceNumber, formDef, accent, disabled,
+  referenceNumber, initiatorSignatureData, initiatorSignedAt,
+  formDef, accent, disabled,
 }) {
   const t = uiType(field)
   const required = field.required && !disabled
@@ -360,7 +395,15 @@ function FieldCell({
           </h2>
           <div className="flex-1 h-px bg-slate-200" />
         </div>
-        <ApprovalRows steps={approvalSteps} accent={accent} user={user} users={users} roles={roles} />
+        <ApprovalRows
+          steps={approvalSteps}
+          accent={accent}
+          user={user}
+          users={users}
+          roles={roles}
+          initiatorSignatureData={initiatorSignatureData}
+          initiatorSignedAt={initiatorSignedAt}
+        />
       </div>
     )
   }
@@ -583,6 +626,7 @@ function FieldCell({
 function SectionBlock({
   section, fields, accent, formDef, classification, approvalSteps, users, roles, user,
   fieldValues, onFieldChange, pendingFiles, onFilesChange, referenceNumber, disabled,
+  initiatorSignatureData, initiatorSignedAt,
   layout = 'grid',
 }) {
   if (!fields.length) return null
@@ -622,6 +666,8 @@ function SectionBlock({
                 users={users}
                 roles={roles}
                 referenceNumber={referenceNumber}
+                initiatorSignatureData={initiatorSignatureData}
+                initiatorSignedAt={initiatorSignedAt}
                 formDef={formDef}
                 accent={accent}
                 disabled={disabled}
@@ -763,6 +809,7 @@ function FreeField(props) {
 export default function FormFillerCanvas({
   formDef, headerUrl, footerUrl, accent: accentProp, classification,
   user, users, roles, approvalSteps, referenceNumber,
+  initiatorSignatureData, initiatorSignedAt,
   fieldValues, onFieldChange,
   pendingFiles, onFilesChange,
   attachments, attachmentUrls,
@@ -918,6 +965,8 @@ export default function FormFillerCanvas({
                   pendingFiles={pendingFiles}
                   onFilesChange={onFilesChange}
                   referenceNumber={referenceNumber}
+                  initiatorSignatureData={initiatorSignatureData}
+                  initiatorSignedAt={initiatorSignedAt}
                   disabled={disabled}
                   layout={sectionLayouts[s] || 'grid'}
                 />

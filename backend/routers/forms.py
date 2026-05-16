@@ -654,6 +654,16 @@ def submit_form_instance(
     if not instance:
         raise HTTPException(status_code=404, detail="Form instance not found or not yours")
 
+    # Initiator must sign at submit time. Backdating is allowed -- the chosen
+    # date is captured on instance.initiator_signed_at.
+    if not payload.initiator_signature_data:
+        raise HTTPException(
+            status_code=400,
+            detail="Your signature is required to submit this form."
+        )
+    instance.initiator_signature_data = payload.initiator_signature_data
+    instance.initiator_signed_at = payload.initiator_signed_at or datetime.utcnow()
+
     try:
         instance = form_service.submit_form(
             db, instance, current_user,
@@ -718,6 +728,16 @@ def resubmit_form_instance(
         raise HTTPException(status_code=404, detail="Form instance not found or not yours")
     if instance.current_status != FormStatus.returned_for_correction:
         raise HTTPException(status_code=400, detail="Form is not in correction state")
+
+    # Re-sign on every correction. The initiator certifies the latest state
+    # of the form each time it heads back into the approval chain.
+    if not payload.initiator_signature_data:
+        raise HTTPException(
+            status_code=400,
+            detail="Your signature is required to resubmit this form."
+        )
+    instance.initiator_signature_data = payload.initiator_signature_data
+    instance.initiator_signed_at = payload.initiator_signed_at or datetime.utcnow()
 
     # Submit with field value updates
     try:

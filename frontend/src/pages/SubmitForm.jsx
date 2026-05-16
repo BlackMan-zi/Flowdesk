@@ -15,6 +15,7 @@ import { ChevronLeft, ChevronRight, FileText, Check, Save, Send, AlertCircle } f
 import { resolveCalculatedFields } from '../utils/formulaEngine'
 import { cn } from '@/lib/utils'
 import FormFillerCanvas from '../components/forms/FormFillerCanvas'
+import SignaturePad from '../components/forms/SignaturePad'
 
 // ── Step breadcrumb ───────────────────────────────────────────────────────────
 
@@ -65,6 +66,12 @@ export default function SubmitForm() {
   const [draftId, setDraftId]             = useState(null)
   const [draftSaved, setDraftSaved]       = useState(false)
   const [letterheadUrls, setLetterheadUrls] = useState({ header: null, footer: null })
+  // Initiator's signature + chosen submission date. Required at submit, not
+  // for Save Draft. Date defaults to today and is editable for backdating.
+  const [initiatorSignature, setInitiatorSignature] = useState('')
+  const [initiatorSignedAt, setInitiatorSignedAt] = useState(
+    () => new Date().toISOString().slice(0, 10)
+  )
 
   // ── Lookups ──
   const { data: defs = [], isLoading: defsLoading } = useQuery({
@@ -210,7 +217,17 @@ export default function SubmitForm() {
         setDraftId(instanceId)
       }
       await uploadAllPendingFiles(instanceId)
-      await submitFormInstance(instanceId, { field_values: values, change_notes: 'Initial submission' })
+      // Convert the date input (YYYY-MM-DD, local) to a midday ISO timestamp
+      // so the backend stores a stable date regardless of the server timezone.
+      const signedAtIso = initiatorSignedAt
+        ? new Date(`${initiatorSignedAt}T12:00:00`).toISOString()
+        : null
+      await submitFormInstance(instanceId, {
+        field_values: values,
+        change_notes: 'Initial submission',
+        initiator_signature_data: initiatorSignature,
+        initiator_signed_at: signedAtIso,
+      })
       return instanceId
     },
     onSuccess: (id) => {
@@ -335,6 +352,39 @@ export default function SubmitForm() {
                 />
               </div>
 
+              {/* Certify & Submit — initiator's signature + chosen date are
+                  mandatory to submit. Defaults to today; user can backdate
+                  for events that happened earlier. Not required for Save
+                  Draft. */}
+              <div className="max-w-2xl mx-auto bg-card border border-border rounded-lg p-4 space-y-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground">Certify & Submit</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Sign below and confirm the submission date to send this form into the approval chain.
+                  </p>
+                </div>
+                <SignaturePad
+                  value={initiatorSignature}
+                  onChange={setInitiatorSignature}
+                  label="Your signature"
+                  required
+                />
+                <div>
+                  <label className="block text-xs font-medium text-foreground mb-1">
+                    Submission date <span className="text-destructive">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={initiatorSignedAt}
+                    onChange={e => setInitiatorSignedAt(e.target.value)}
+                    className="border border-input bg-background rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    Defaults to today. Adjust if this form represents an event from another date.
+                  </p>
+                </div>
+              </div>
+
               {error && (
                 <div className="max-w-2xl mx-auto flex items-start gap-2 bg-destructive/10 border border-destructive/30 rounded-xl px-4 py-3 text-sm text-destructive">
                   <AlertCircle size={15} className="flex-shrink-0 mt-0.5" />
@@ -343,7 +393,12 @@ export default function SubmitForm() {
               )}
 
               <div className="max-w-2xl mx-auto flex items-center gap-3 flex-wrap pt-2">
-                <Button onClick={() => submitMutation.mutate()} loading={submitMutation.isPending}>
+                <Button
+                  onClick={() => submitMutation.mutate()}
+                  loading={submitMutation.isPending}
+                  disabled={!initiatorSignature || !initiatorSignedAt}
+                  title={!initiatorSignature || !initiatorSignedAt ? 'Sign and pick a date to enable submit' : undefined}
+                >
                   <Send size={14} /> Submit for Approval
                 </Button>
                 <Button variant="outline" onClick={() => draftMutation.mutate()} loading={draftMutation.isPending}>

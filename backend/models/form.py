@@ -147,6 +147,12 @@ class FormInstance(Base):
     backdated_date = Column(DateTime, nullable=True)
     submitted_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
+    # Initiator's "I certify this submission" signature + chosen date. Saved
+    # at submit time. Same encoding as SignaturePad (type:<name> or PNG data
+    # URL). initiator_signed_at lets the user backdate to when the event
+    # happened, defaulting to submitted_at on the frontend.
+    initiator_signature_data = Column(Text, nullable=True)
+    initiator_signed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

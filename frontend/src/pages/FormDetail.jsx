@@ -264,10 +264,12 @@ export default function FormDetail() {
     ? org.classification_labels.find(l => l.name === effectiveFormDef.confidentiality) || null
     : null
 
-  // Use the live approval_instances (with status/notes) as the rendered approval
-  // block when available; fallback to the template steps for pre-submit drafts.
-  const renderedApprovalSteps = approvalSteps.length > 0
-    ? approvalSteps.map(s => ({
+  // For the inline approval block on the form: pass only the REAL approval
+  // steps. The canvas's ApprovalRows component already prepends its own
+  // "Requested by <initiator>" row — including the synthetic initiator step
+  // here would double that row up.
+  const renderedApprovalSteps = rawApprovalSteps.length > 0
+    ? rawApprovalSteps.map(s => ({
         ...s,
         source_type: s.role_type === 'Hierarchy' ? 'hierarchy'
                   : s.role_type === 'Role'      ? 'role'
@@ -322,6 +324,8 @@ export default function FormDetail() {
             users={users}
             roles={[]}
             approvalSteps={renderedApprovalSteps}
+            initiatorSignatureData={instance.initiator_signature_data}
+            initiatorSignedAt={instance.initiator_signed_at}
             referenceNumber={instance.reference_number}
             fieldValues={fieldValuesMap}
             onFieldChange={() => {}}
@@ -423,6 +427,8 @@ export default function FormDetail() {
             users={users}
             roles={[]}
             approvalSteps={renderedApprovalSteps}
+            initiatorSignatureData={instance.initiator_signature_data}
+            initiatorSignedAt={instance.initiator_signed_at}
             referenceNumber={instance.reference_number}
             fieldValues={fieldValuesMap}
             onFieldChange={() => {}}

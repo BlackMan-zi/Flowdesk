@@ -165,6 +165,10 @@ class FormInstanceSubmit(BaseModel):
     field_values: List[FieldValueInput]
     change_notes: Optional[str] = None
     selected_approver_ids: Optional[Dict[str, str]] = None  # step_id -> user_id
+    # Initiator's signature + chosen date. Required for new submissions; the
+    # backend will reject submission attempts without a signature.
+    initiator_signature_data: Optional[str] = None
+    initiator_signed_at: Optional[datetime] = None
 
 
 class FormFieldValueResponse(BaseModel):
@@ -249,6 +253,8 @@ class FormInstanceResponse(BaseModel):
     backdated_date: Optional[datetime]
     submitted_at: Optional[datetime]
     completed_at: Optional[datetime]
+    initiator_signature_data: Optional[str] = None
+    initiator_signed_at: Optional[datetime] = None
     created_at: datetime
     # lightweight extras populated by the list endpoint
     form_name: Optional[str] = None
