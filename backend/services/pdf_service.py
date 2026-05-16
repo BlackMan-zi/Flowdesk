@@ -250,6 +250,7 @@ def generate_form_pdf(db: Session, instance: FormInstance) -> bytes:
             'status': 'Approved',
             'date': instance.submitted_at.strftime('%d %b %Y'),
             'notes': '',
+            'signature_data': instance.initiator_signature_data or '',
         })
     if current_ver:
         steps = sorted(current_ver.approval_instances, key=lambda a: a.step_order)
@@ -260,6 +261,7 @@ def generate_form_pdf(db: Session, instance: FormInstance) -> bytes:
                 'status': s.status.value if hasattr(s.status, 'value') else str(s.status),
                 'date': s.signed_at.strftime('%d %b %Y') if s.signed_at else '—',
                 'notes': s.notes or '',
+                'signature_data': (s.signature.signature_data if s.signature else '') or '',
             })
 
     # Inline image attachments + list of "other" attachments rendered at end.
@@ -320,10 +322,23 @@ def generate_form_pdf(db: Session, instance: FormInstance) -> bytes:
     # ── Approval history table ──
     approval_html = ''
     if approval_rows:
+        def _sig_cell(value: str) -> str:
+            # Render a signature cell: typed ("type:Name") → script-font name,
+            # base64 PNG ("data:image/...") → inline <img>, blank → em-dash.
+            v = (value or '').strip()
+            if not v:
+                return '<span class="muted">—</span>'
+            if v.startswith('type:'):
+                return f'<span class="typed-sig">{_e(v[5:])}</span>'
+            if v.startswith('data:image/'):
+                return f'<img class="sig-img" src="{v}" alt="signature" />'
+            return _e(v)
+
         rows = ''.join(
             f'<tr>'
             f'<td>{_e(r["label"])}</td>'
             f'<td>{_e(r["approver"])}</td>'
+            f'<td>{_sig_cell(r.get("signature_data", ""))}</td>'
             f'<td>{_e(r["status"])}</td>'
             f'<td>{_e(r["date"])}</td>'
             f'<td class="notes">{_e(r["notes"])}</td>'
@@ -338,7 +353,7 @@ def generate_form_pdf(db: Session, instance: FormInstance) -> bytes:
             f'</div>'
             f'<table class="approval-table">'
             f'<thead><tr>'
-            f'<th>Step</th><th>Approver</th><th>Status</th><th>Date</th><th>Notes</th>'
+            f'<th>Step</th><th>Approver</th><th>Signature</th><th>Status</th><th>Date</th><th>Notes</th>'
             f'</tr></thead>'
             f'<tbody>{rows}</tbody>'
             f'</table>'
@@ -408,6 +423,9 @@ def generate_form_pdf(db: Session, instance: FormInstance) -> bytes:
   .approval-table th, .approval-table td {{ padding: 4px 6px; font-size: 10px; text-align: left; border-bottom: 1px solid #e5e7eb; }}
   .approval-table th {{ color: #6b7280; font-weight: 600; background: #f9fafb; }}
   .approval-table .notes {{ font-style: italic; color: #6b7280; }}
+  .approval-table .muted {{ color: #9ca3af; }}
+  .approval-table .typed-sig {{ font-family: "Brush Script MT", "Apple Chancery", cursive; font-size: 14px; color: #111827; }}
+  .approval-table .sig-img {{ height: 22px; max-width: 110px; object-fit: contain; }}
   .other-atts {{ margin: 0; padding-left: 18px; font-size: 10px; }}
   .other-atts li {{ margin: 2px 0; }}
   .other-atts .att-meta {{ color: #6b7280; }}

@@ -569,6 +569,7 @@ def get_form_instance(
         for ai in v.approval_instances:
             _ = ai.approver
             _ = ai.delegated_from
+            _ = ai.signature  # eager-load so SignatureBrief serializes
     if instance.form_definition:
         _ = list(instance.form_definition.fields)
     return instance
@@ -612,6 +613,7 @@ def export_form_pdf(
         _ = list(v.approval_instances)
         for ai in v.approval_instances:
             _ = ai.approver
+            _ = ai.signature
     if instance.form_definition:
         _ = list(instance.form_definition.fields)
 

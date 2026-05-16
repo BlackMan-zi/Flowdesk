@@ -195,6 +195,18 @@ class UserBrief(BaseModel):
         from_attributes = True
 
 
+class SignatureBrief(BaseModel):
+    """Minimal shape of a Signature record for inline approval-block rendering.
+    Carries the base64/typed signature_data the canvas needs to draw the
+    signature image into each approval row."""
+    id: str
+    signature_data: Optional[str] = None
+    signature_type: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
 class ApprovalInstanceBrief(BaseModel):
     """Brief approval-instance shape for FormInstanceDetail responses.
     Includes the nested approver / delegated_from User records so the
@@ -208,6 +220,10 @@ class ApprovalInstanceBrief(BaseModel):
     signed_at: Optional[datetime] = None
     approver: Optional[UserBrief] = None
     delegated_from: Optional[UserBrief] = None
+    # Signature captured when this step was approved (or sent back / rejected
+    # with a sig). Needed so the FormFillerCanvas approval rows can render the
+    # approver's actual signature, not just their name + date.
+    signature: Optional[SignatureBrief] = None
 
     class Config:
         from_attributes = True
