@@ -7,7 +7,12 @@
 --   'row'   : single horizontal row, fields squeeze to fit
 --   'stack' : one field per row, full-width (ignoring grid_width)
 --
--- Unspecified sections default to 'grid'. Missing column is treated as {}.
+-- Existing rows get NULL, which the application treats as {} (every section
+-- defaults to 'grid'). New rows get {} via the SQLAlchemy column default.
+--
+-- Syntax is intentionally portable across Postgres (>=13) and MySQL
+-- (>=8.0.29). No DEFAULT clause because MySQL doesn't allow a literal JSON
+-- default and Postgres-cast syntax (::json) is non-portable.
 
 ALTER TABLE form_definitions
-    ADD COLUMN IF NOT EXISTS section_layouts JSON DEFAULT '{}'::json;
+    ADD COLUMN IF NOT EXISTS section_layouts JSON;
