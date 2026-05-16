@@ -984,14 +984,10 @@ export default function FormFillerCanvas({
           )
         })}
 
-        {/* Approval history + inline attachments — only rendered in view /
-            preview mode (disabled). Approval history flows directly after
-            the last section so it prints as part of the document; image /
-            PDF attachments render below as discrete "pages" within the
-            same scrolling document. */}
-        {disabled && approvalSteps?.length > 0 && (
-          <ApprovalHistorySection steps={approvalSteps} accent={accent} />
-        )}
+        {/* Inline attachments — image / PDF render as added pages within
+            the document in view / preview mode (disabled). Approval data
+            already lives in the placed approval_block field on the form
+            schema, so we don't auto-render a second copy here. */}
         {disabled && (
           <InlineAttachments
             attachments={attachments}

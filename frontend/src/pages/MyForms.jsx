@@ -50,7 +50,7 @@ const fmt = (d) => d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric',
 
 function ApprovalProgress({ progress }) {
   if (!progress) return null
-  const { total_steps, completed_steps, active_step_order, active_step_label } = progress
+  const { total_steps, completed_steps, active_step_order, active_step_label, active_approver } = progress
   return (
     <div className="mt-1.5">
       <div className="flex items-center gap-0.5 mb-1">
@@ -72,7 +72,14 @@ function ApprovalProgress({ progress }) {
         })}
       </div>
       <p className="text-[10px] text-muted-foreground">
-        Step {active_step_order}/{total_steps}{active_step_label ? ` · ${active_step_label}` : ''}
+        Step {active_step_order}/{total_steps}
+        {active_step_label ? ` · ${active_step_label}` : ''}
+        {active_approver ? (
+          <>
+            {' · waiting on '}
+            <span className="font-semibold text-foreground">{active_approver}</span>
+          </>
+        ) : ''}
       </p>
     </div>
   )

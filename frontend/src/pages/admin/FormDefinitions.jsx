@@ -254,6 +254,8 @@ export default function AdminFormDefinitions() {
   const validate = () => {
     if (!form.name.trim()) return 'Form Name is required.'
     if (!form.code_suffix.trim()) return 'Code Suffix is required.'
+    if (!form.approval_template_id) return 'Approval Workflow is required — pick a template.'
+    if (!form.confidentiality) return 'Document Classification is required.'
     if (form.visibility === 'specific_departments' && form.visible_department_ids.length === 0)
       return 'Select at least one department when visibility is restricted.'
     return null
@@ -538,13 +540,18 @@ export default function AdminFormDefinitions() {
             {/* Approval template + Visibility */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground">Approval Workflow</label>
+                <label className="text-sm font-medium text-foreground">
+                  Approval Workflow <span className="text-destructive">*</span>
+                </label>
                 <select
                   value={form.approval_template_id}
                   onChange={set('approval_template_id')}
-                  className="w-full border border-border rounded-md px-3 py-2 text-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  className={cn(
+                    'w-full border rounded-md px-3 py-2 text-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring',
+                    !form.approval_template_id ? 'border-destructive/40' : 'border-border'
+                  )}
                 >
-                  <option value="">None</option>
+                  <option value="">Select a template…</option>
                   {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                 </select>
               </div>
@@ -597,22 +604,13 @@ export default function AdminFormDefinitions() {
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground flex items-center gap-1.5">
                 <Shield size={13} className="text-muted-foreground" />
-                Document Classification
+                Document Classification <span className="text-destructive">*</span>
                 <span className="text-xs text-muted-foreground font-normal ml-1">— shown at the top of every submitted form</span>
               </label>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => setForm(p => ({ ...p, confidentiality: '' }))}
-                  className={cn(
-                    'px-3 py-1.5 rounded-full border text-xs font-medium transition-colors',
-                    !form.confidentiality
-                      ? 'bg-muted border-foreground/30 text-foreground'
-                      : 'border-border text-muted-foreground hover:border-foreground/40'
-                  )}
-                >
-                  None
-                </button>
+              <div className={cn(
+                'flex flex-wrap gap-2 p-2 rounded-md border',
+                !form.confidentiality ? 'border-destructive/40 bg-destructive/5' : 'border-transparent'
+              )}>
                 {classificationLabels.map(label => {
                   const selected = form.confidentiality === label.name
                   const color = label.color || '#64748B'
@@ -688,7 +686,11 @@ export default function AdminFormDefinitions() {
 
           <DialogFooter>
             <Button variant="secondary" onClick={() => setModalOpen(false)}>Cancel</Button>
-            <Button onClick={handleSave} loading={saveMutation.isPending}>
+            <Button
+              onClick={handleSave}
+              loading={saveMutation.isPending}
+              disabled={!form.name.trim() || !form.code_suffix.trim() || !form.approval_template_id || !form.confidentiality}
+            >
               {editing ? 'Save Changes' : 'Create Form'}
             </Button>
           </DialogFooter>

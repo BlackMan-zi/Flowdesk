@@ -480,91 +480,69 @@ export default function FormDetail() {
         </Card>
       )}
 
-      {/* Approval step timeline */}
+      {/* Approval Chain — compact one-line-per-step layout so the whole
+          chain fits in a glance and you can see immediately who needs
+          to act next. Notes still expand under each step that has them. */}
       {approvalSteps.length > 0 && (
         <Card>
           <CardHeader
             title="Approval Chain"
             subtitle={`${approvalSteps.filter(s => s.status === 'Approved').length} of ${approvalSteps.length} steps completed`}
           />
-          <div className="px-5 py-4">
-            <ol className="space-y-0">
-              {approvalSteps.map((ap, i) => {
-                const isActive  = ap.status === 'Active'
-                const isDone    = ap.status === 'Approved'
-                const isWaiting = ap.status === 'Waiting'
-
+          <div className="px-5 py-3">
+            <ol className="space-y-1.5">
+              {approvalSteps.map(ap => {
+                const isActive = ap.status === 'Active'
+                const isDone   = ap.status === 'Approved'
                 return (
-                  <li key={ap.id} className="flex items-stretch gap-4">
-                    {/* Icon + connector */}
-                    <div className="flex flex-col items-center w-9 flex-shrink-0">
-                      <div className="mt-2.5">
-                        <StepIcon status={ap.status} />
-                      </div>
-                      {i < approvalSteps.length - 1 && (
-                        <div className={`w-0.5 flex-1 min-h-6 my-1 ${isDone ? 'bg-emerald-300' : 'bg-slate-200'}`} />
-                      )}
-                    </div>
-
-                    {/* Step body */}
-                    <div className={`flex-1 mb-4 rounded-xl px-4 py-3 ${
-                      isActive  ? 'bg-amber-50 border border-amber-200' :
-                      isDone    ? 'bg-emerald-50/40 border border-emerald-100' :
-                      isWaiting ? 'opacity-50 bg-slate-50 border border-slate-100' :
-                                  'bg-slate-50 border border-slate-100'
-                    }`}>
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <p className={`text-sm font-bold ${
-                              isActive ? 'text-amber-900' : isDone ? 'text-emerald-900' : 'text-slate-500'
-                            }`}>
-                              {ap.step_label || `Step ${ap.step_order}`}
-                            </p>
-                            {isActive && (
-                              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full">
-                                Current
-                              </span>
+                  <li
+                    key={ap.id}
+                    className={`flex items-center gap-3 rounded-lg px-3 py-2 ${
+                      isActive ? 'bg-amber-50 border border-amber-200'
+                      : isDone  ? 'bg-emerald-50/40 border border-emerald-100'
+                                : 'bg-slate-50 border border-slate-100 opacity-80'
+                    }`}
+                  >
+                    <StepIcon status={ap.status} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-baseline gap-2 flex-wrap">
+                        <p className={`text-sm font-bold truncate ${
+                          isActive ? 'text-amber-900' : isDone ? 'text-emerald-900' : 'text-slate-600'
+                        }`}>
+                          {ap.step_label || `Step ${ap.step_order}`}
+                        </p>
+                        {ap.approver?.name && (
+                          <span className={`text-xs ${
+                            isActive ? 'text-amber-800 font-semibold' : 'text-slate-500'
+                          }`}>
+                            · {ap.approver.name}
+                            {ap.delegated_from?.name && (
+                              <span className="font-normal text-slate-400"> (via {ap.delegated_from.name})</span>
                             )}
-                          </div>
-                          {ap.approver && (
-                            <p className={`text-xs mt-0.5 ${isActive ? 'text-amber-800 font-semibold' : 'text-slate-400'}`}>
-                              {ap.approver.name}
-                              {ap.delegated_from && (
-                                <span className="ml-1 font-normal text-slate-400">
-                                  (delegated from {ap.delegated_from.name})
-                                </span>
-                              )}
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          <Badge label={ap.status} />
-                          {isAdmin && isActive && !isTerminal && (
-                            <button
-                              onClick={openReassign}
-                              title="Reassign this step"
-                              className="w-7 h-7 rounded-lg hover:bg-amber-100 text-amber-700 flex items-center justify-center transition-colors"
-                            >
-                              <UserCog size={13} />
-                            </button>
-                          )}
-                        </div>
+                          </span>
+                        )}
+                        {ap.signed_at && (
+                          <span className="text-[10px] text-slate-400 ml-auto">
+                            {new Date(ap.signed_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                          </span>
+                        )}
                       </div>
-
                       {ap.notes && (
-                        <p className="text-xs text-slate-600 mt-2 bg-white/80 rounded-lg px-3 py-2 border border-slate-100 italic">
+                        <p className="text-[11px] text-slate-600 mt-1 italic truncate" title={ap.notes}>
                           "{ap.notes}"
                         </p>
                       )}
-                      {ap.signed_at && (
-                        <p className="text-xs text-slate-400 mt-1.5 flex items-center gap-1">
-                          <Calendar size={10} />
-                          {new Date(ap.signed_at).toLocaleString('en-GB', {
-                            day: 'numeric', month: 'short', year: 'numeric',
-                            hour: '2-digit', minute: '2-digit'
-                          })}
-                        </p>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <Badge label={ap.status} />
+                      {isAdmin && isActive && !isTerminal && (
+                        <button
+                          onClick={openReassign}
+                          title="Reassign this step"
+                          className="w-6 h-6 rounded-md hover:bg-amber-100 text-amber-700 flex items-center justify-center"
+                        >
+                          <UserCog size={12} />
+                        </button>
                       )}
                     </div>
                   </li>
