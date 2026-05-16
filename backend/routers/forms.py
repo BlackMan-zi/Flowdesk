@@ -386,6 +386,7 @@ def update_form_fields_layout(
                 free_position=bool(fd.free_position),
                 required=fd.required,
                 auto_filled=fd.auto_filled,
+                auto_fill_source=fd.auto_fill_source,
                 options=fd.options,
                 placeholder=fd.placeholder,
                 display_order=idx,
