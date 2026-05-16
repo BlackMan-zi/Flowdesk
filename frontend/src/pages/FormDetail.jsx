@@ -17,7 +17,7 @@ import FormFillerCanvas from '../components/forms/FormFillerCanvas'
 import {
   ChevronLeft, CheckCircle2, XCircle, Clock, RotateCcw,
   SkipForward, ShieldAlert, UserCog, Hash, User, Calendar,
-  FileText, AlertCircle, Paperclip, Download
+  FileText, AlertCircle, Paperclip, Download, Eye, Printer, X
 } from 'lucide-react'
 
 // ── Step icon ─────────────────────────────────────────────────────────────────
@@ -96,6 +96,7 @@ export default function FormDetail() {
   const [reassignOpen, setReassignOpen] = useState(false)
   const [reassignUserId, setReassignUserId] = useState('')
   const [reassignNotes, setReassignNotes] = useState('')
+  const [previewMode, setPreviewMode] = useState(false)
 
   const { data: instance, isLoading } = useQuery({
     queryKey: ['form-instance', id],
@@ -235,6 +236,99 @@ export default function FormDetail() {
       }))
     : (formDef?.approval_template?.steps || [])
 
+  // ── Preview mode ──
+  // Strips admin chrome / page header so the page reads like a printable
+  // document. Browser print (Ctrl/Cmd+P → Save as PDF) gives a single-PDF
+  // export for now; proper server-side PDF + attachment merging is the
+  // next deliverable. The `print:hidden` utility classes hide the toolbar
+  // and timeline section from the actual print output.
+  if (previewMode && formDef) {
+    return (
+      <div className="bg-slate-100 min-h-screen py-6 print:py-0 print:bg-white">
+        <div className="max-w-3xl mx-auto space-y-4 px-4">
+          <div className="flex items-center justify-between print:hidden">
+            <Button variant="secondary" size="sm" onClick={() => setPreviewMode(false)}>
+              <X size={14} /> Exit Preview
+            </Button>
+            <div className="text-xs text-slate-500">
+              {instance.form_definition?.name} · <span className="font-mono">{instance.reference_number}</span>
+            </div>
+            <Button size="sm" onClick={() => window.print()}>
+              <Printer size={14} /> Print / Save as PDF
+            </Button>
+          </div>
+
+          {/* The form, full-width, no surrounding muted card */}
+          <FormFillerCanvas
+            formDef={formDef}
+            headerUrl={letterheadUrls.header}
+            footerUrl={letterheadUrls.footer}
+            accent={org?.letterhead_accent}
+            classification={classification}
+            user={instance.creator}
+            users={users}
+            roles={[]}
+            approvalSteps={renderedApprovalSteps}
+            referenceNumber={instance.reference_number}
+            fieldValues={fieldValuesMap}
+            onFieldChange={() => {}}
+            pendingFiles={{}}
+            onFilesChange={() => {}}
+            disabled
+          />
+
+          {/* Attachments */}
+          {(instance.attachments?.length || 0) > 0 && (
+            <div className="bg-white rounded-lg shadow-sm ring-1 ring-black/5 p-5">
+              <h3 className="text-sm font-bold mb-2">Attachments ({instance.attachments.length})</h3>
+              <ul className="space-y-1 text-xs">
+                {instance.attachments.map(att => (
+                  <li key={att.id} className="flex items-baseline gap-2 text-slate-700">
+                    <Paperclip size={11} className="text-slate-400 self-center" />
+                    <span className="font-medium">{att.original_filename}</span>
+                    <span className="text-slate-400">
+                      {att.file_size != null ? `· ${(att.file_size / 1024).toFixed(1)} KB` : ''}
+                      {att.uploaded_at ? ` · ${fmt(att.uploaded_at)}` : ''}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Signatures / approval history */}
+          {approvalSteps.length > 0 && (
+            <div className="bg-white rounded-lg shadow-sm ring-1 ring-black/5 p-5">
+              <h3 className="text-sm font-bold mb-3">Approval History</h3>
+              <table className="w-full text-xs">
+                <thead className="text-slate-500">
+                  <tr>
+                    <th className="text-left font-semibold py-1">Step</th>
+                    <th className="text-left font-semibold py-1">Approver</th>
+                    <th className="text-left font-semibold py-1">Status</th>
+                    <th className="text-left font-semibold py-1">Date</th>
+                    <th className="text-left font-semibold py-1">Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {approvalSteps.map(s => (
+                    <tr key={s.id} className="border-t border-slate-100">
+                      <td className="py-1.5 pr-3">{s.step_label || `Step ${s.step_order}`}</td>
+                      <td className="py-1.5 pr-3">{s.approver?.name || '—'}</td>
+                      <td className="py-1.5 pr-3">{s.status}</td>
+                      <td className="py-1.5 pr-3">{s.signed_at ? fmt(s.signed_at) : '—'}</td>
+                      <td className="py-1.5 pr-3 italic text-slate-500">{s.notes || ''}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="max-w-2xl space-y-4">
 
@@ -269,6 +363,9 @@ export default function FormDetail() {
             )}
           </div>
         </div>
+        <Button variant="secondary" size="sm" onClick={() => setPreviewMode(true)}>
+          <Eye size={14} /> Preview
+        </Button>
       </div>
 
       {/* Returned alert */}
