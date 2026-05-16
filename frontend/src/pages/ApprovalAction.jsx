@@ -1,7 +1,6 @@
-import React, { useState, useRef, useMemo } from 'react'
+import React, { useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import SignatureCanvas from 'react-signature-canvas'
 import { getFormInstance } from '../api/forms'
 import { approveForm, rejectForm, sendBackForm, getPendingApprovals } from '../api/approvals'
 import { useAuth } from '../context/AuthContext'
@@ -12,10 +11,18 @@ import Badge from '../components/ui/Badge'
 import Button from '../components/ui/Button'
 import Spinner from '../components/ui/Spinner'
 import Input, { Select, Textarea } from '../components/ui/Input'
+import SignaturePad from '../components/forms/SignaturePad'
 import {
   ChevronLeft, Check, X, RotateCcw, CheckCircle2, Clock,
-  Circle, AlertCircle, PenTool, Trash2, History
+  Circle, AlertCircle, Calendar, History
 } from 'lucide-react'
+
+// ── Today as yyyy-MM-dd for the date input default ────────────────────────────
+function todayIso() {
+  const d = new Date()
+  const pad = n => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
 
 // ── Approval chain step ───────────────────────────────────────────────────────
 
@@ -150,68 +157,6 @@ function VersionHistory({ versions, currentVersion }) {
   )
 }
 
-// ── Signature capture ─────────────────────────────────────────────────────────
-
-function SignatureCapture({ value, onChange }) {
-  const sigRef = useRef(null)
-  const [signed, setSigned] = useState(!!value)
-
-  const handleEnd = () => {
-    if (sigRef.current && !sigRef.current.isEmpty()) {
-      const data = sigRef.current.toDataURL('image/png')
-      onChange(data)
-      setSigned(true)
-    }
-  }
-
-  const handleClear = () => {
-    sigRef.current?.clear()
-    onChange(null)
-    setSigned(false)
-  }
-
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <label className="text-sm font-medium text-foreground flex items-center gap-1.5">
-          <PenTool size={14} className="text-muted-foreground" />
-          Signature <span className="text-destructive ml-0.5">*</span>
-        </label>
-        {signed && (
-          <button onClick={handleClear} className="text-xs text-muted-foreground hover:text-destructive flex items-center gap-1 transition-colors">
-            <Trash2 size={11} /> Clear
-          </button>
-        )}
-      </div>
-      <div className={cn(
-        'border-2 border-dashed rounded-lg bg-muted/20 overflow-hidden relative transition-colors',
-        signed ? 'border-border' : 'border-muted-foreground/30 hover:border-primary/60'
-      )}>
-        <SignatureCanvas
-          ref={sigRef}
-          onEnd={handleEnd}
-          canvasProps={{
-            width: 560,
-            height: 120,
-            className: 'w-full block',
-            style: { touchAction: 'none' }
-          }}
-          backgroundColor="transparent"
-          penColor="currentColor"
-        />
-        {!signed && (
-          <p className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground pointer-events-none select-none">
-            Sign here with your mouse or touch
-          </p>
-        )}
-      </div>
-      {!signed && (
-        <p className="text-xs text-destructive">A signature is required to proceed.</p>
-      )}
-    </div>
-  )
-}
-
 // ── Approver fields section ───────────────────────────────────────────────────
 
 function ApproverFields({ fields, fieldValues, myHierarchyLevel, onChange }) {
@@ -270,6 +215,7 @@ export default function ApprovalAction() {
   const [action, setAction]       = useState(null)
   const [notes, setNotes]         = useState('')
   const [signature, setSignature] = useState(null)
+  const [signedDate, setSignedDate] = useState(todayIso())
   const [approverValues, setApproverValues] = useState({})
   const [error, setError]         = useState('')
 
@@ -289,6 +235,7 @@ export default function ApprovalAction() {
   const mutation = useMutation({
     mutationFn: () => {
       if (action === 'approve' && !signature) throw new Error('Signature is required.')
+      if (action === 'approve' && !signedDate) throw new Error('Signed-on date is required.')
       if ((action === 'reject' || action === 'send_back') && !notes.trim())
         throw new Error('Notes are required when rejecting or sending back.')
 
@@ -296,7 +243,17 @@ export default function ApprovalAction() {
         form_field_id, value: value != null ? String(value) : ''
       }))
 
-      const payload = { notes, signature_data: signature, field_values: fieldValuesArr }
+      // signedDate is a yyyy-MM-dd string from <input type="date">. Send as
+      // ISO with a noon UTC offset to dodge timezone-rollback (00:00 in a
+      // negative TZ would store the previous day).
+      const signedAtIso = signedDate ? `${signedDate}T12:00:00` : null
+
+      const payload = {
+        notes,
+        signature_data: signature,
+        signed_at: signedAtIso,
+        field_values: fieldValuesArr,
+      }
       if (action === 'approve')   return approveForm(formInstanceId, payload)
       if (action === 'reject')    return rejectForm(formInstanceId, payload)
       if (action === 'send_back') return sendBackForm(formInstanceId, payload)
@@ -428,7 +385,29 @@ export default function ApprovalAction() {
               </div>
             )}
 
-            <SignatureCapture value={signature} onChange={setSignature} />
+            {/* Signature (typed or drawn) + signed-on date — mirrors the
+                initiator's submit experience for consistency. */}
+            <SignaturePad
+              value={signature}
+              onChange={setSignature}
+              label="Your signature"
+              required
+            />
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                <Calendar size={14} className="text-muted-foreground" />
+                Signed on <span className="text-destructive">*</span>
+                <span className="text-xs text-muted-foreground font-normal ml-1">— defaults to today; pick a different date if you signed earlier</span>
+              </label>
+              <input
+                type="date"
+                value={signedDate}
+                onChange={e => setSignedDate(e.target.value)}
+                max={todayIso()}
+                className="w-full md:w-56 border border-border rounded-md px-3 py-2 text-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
 
             {/* Action buttons */}
             {!action && (

@@ -136,7 +136,9 @@ def approve(
         db.flush()
         sig_id = sig.id
 
-    all_done = approval_service.approve_step(db, ap, current_user, payload.notes, sig_id)
+    all_done = approval_service.approve_step(
+        db, ap, current_user, payload.notes, sig_id, signed_at=payload.signed_at
+    )
 
     # Find next approver (if any)
     next_step = db.query(ApprovalInstance).filter(
@@ -146,11 +148,40 @@ def approve(
 
     try:
         if all_done:
-            # Generate PDF — use template overlay if available, else ReportLab fallback
+            # Generate PDF — preference order:
+            # 1. Overlay onto a custom PDF template (only when admin uploaded one)
+            # 2. Styled letterhead WYSIWYG (pdf_service.generate_form_pdf — what
+            #    the user sees in the canvas: sections, classification pill,
+            #    signatures, inline image attachments, appended PDF attachments)
+            # 3. Legacy ReportLab table-style PDF (last-resort fallback)
             from services.pdf_overlay_service import generate_pdf_with_overlay
+            from services.pdf_service import generate_form_pdf
             org_name = instance.organization.name if hasattr(instance, "organization") and instance.organization else "FlowDesk"
-            pdf_bytes = generate_pdf_with_overlay(db, instance, org_name) \
-                        or document_service.generate_final_pdf(db, instance, organization_name=org_name)
+
+            # Eager-load relationships the generator reads — these may have
+            # been touched already by approve_step, but be explicit so the
+            # SA session stays consistent across services.
+            _ = instance.creator
+            _ = list(instance.attachments)
+            _ = list(instance.versions)
+            for v in instance.versions:
+                _ = list(v.field_values)
+                for fv in v.field_values:
+                    _ = fv.form_field
+                _ = list(v.approval_instances)
+                for ai in v.approval_instances:
+                    _ = ai.approver
+                    _ = ai.signature
+            if instance.form_definition:
+                _ = list(instance.form_definition.fields)
+
+            pdf_bytes = generate_pdf_with_overlay(db, instance, org_name)
+            if not pdf_bytes:
+                try:
+                    pdf_bytes = generate_form_pdf(db, instance)
+                except Exception as gen_err:
+                    print(f"[PDF WARNING] WeasyPrint render failed, falling back to ReportLab: {gen_err}")
+                    pdf_bytes = document_service.generate_final_pdf(db, instance, organization_name=org_name)
             gen_doc = document_service.save_generated_document(
                 db, instance, pdf_bytes, current_user.organization_id, current_user.id
             )
@@ -287,7 +318,9 @@ def reject(
         raise HTTPException(status_code=400, detail="Rejection reason (notes) is required")
 
     ap = _get_active_approval_for_user(db, form_instance_id, current_user)
-    instance = approval_service.reject_step(db, ap, current_user, payload.notes)
+    instance = approval_service.reject_step(
+        db, ap, current_user, payload.notes, signed_at=payload.signed_at
+    )
 
     try:
         send_rejection_email(
@@ -320,7 +353,9 @@ def send_back(
         raise HTTPException(status_code=400, detail="Correction notes are required when sending back")
 
     ap = _get_active_approval_for_user(db, form_instance_id, current_user)
-    instance = approval_service.send_back_step(db, ap, current_user, payload.notes)
+    instance = approval_service.send_back_step(
+        db, ap, current_user, payload.notes, signed_at=payload.signed_at
+    )
 
     # Create new version
     from services.form_service import create_new_version_on_correction

@@ -190,11 +190,12 @@ def approve_step(
     approval_instance: ApprovalInstance,
     acting_user: User,
     notes: Optional[str] = None,
-    signature_id: Optional[str] = None
+    signature_id: Optional[str] = None,
+    signed_at: Optional[datetime] = None,
 ) -> bool:
     """Approve the current step; activate next. Returns True if all done."""
     approval_instance.status = ApprovalStepStatus.approved
-    approval_instance.signed_at = datetime.utcnow()
+    approval_instance.signed_at = signed_at or datetime.utcnow()
     approval_instance.notes = notes
     if signature_id:
         approval_instance.signature_id = signature_id
@@ -229,11 +230,12 @@ def reject_step(
     db: Session,
     approval_instance: ApprovalInstance,
     acting_user: User,
-    notes: str
+    notes: str,
+    signed_at: Optional[datetime] = None,
 ) -> FormInstance:
     """Reject the form entirely."""
     approval_instance.status = ApprovalStepStatus.rejected
-    approval_instance.signed_at = datetime.utcnow()
+    approval_instance.signed_at = signed_at or datetime.utcnow()
     approval_instance.notes = notes
 
     # Cancel all waiting/active steps
@@ -257,11 +259,12 @@ def send_back_step(
     db: Session,
     approval_instance: ApprovalInstance,
     acting_user: User,
-    notes: str
+    notes: str,
+    signed_at: Optional[datetime] = None,
 ) -> FormInstance:
     """Send form back for correction."""
     approval_instance.status = ApprovalStepStatus.sent_back
-    approval_instance.signed_at = datetime.utcnow()
+    approval_instance.signed_at = signed_at or datetime.utcnow()
     approval_instance.notes = notes
 
     # Cancel waiting steps

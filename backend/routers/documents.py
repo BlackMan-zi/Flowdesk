@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 from typing import List
 from database import get_db
 from models.user import User, RoleName
 from models.document import GeneratedDocument, DocumentShare
-from models.form import FormInstance
+from models.form import FormInstance, FormStatus
 from core.security import get_current_active_user
 import os
 
@@ -18,8 +18,15 @@ def download_document(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    """Download the final signed PDF for a completed form."""
-    # Verify form instance is in this org
+    """Download the final signed PDF for a completed form.
+
+    Re-renders on every request using the current pdf_service so existing
+    completed forms automatically pick up renderer improvements (styled
+    letterhead, classification pill, inline attachments, signatures). The
+    field values themselves come from the FormVersion.schema_snapshot
+    frozen at submit, so the document content is stable. On rendering
+    failure, falls back to the original saved file on disk.
+    """
     instance = db.query(FormInstance).filter(
         FormInstance.id == form_instance_id,
         FormInstance.organization_id == current_user.organization_id
@@ -27,15 +34,54 @@ def download_document(
     if not instance:
         raise HTTPException(status_code=404, detail="Form instance not found")
 
+    if instance.current_status not in (FormStatus.approved, FormStatus.completed):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Document download is only available once the form is approved. Current status: {instance.current_status.value}"
+        )
+
+    # Eager-load relationships the generator reads.
+    _ = instance.creator
+    _ = list(instance.attachments)
+    _ = list(instance.versions)
+    for v in instance.versions:
+        _ = list(v.field_values)
+        for fv in v.field_values:
+            _ = fv.form_field
+        _ = list(v.approval_instances)
+        for ai in v.approval_instances:
+            _ = ai.approver
+            _ = ai.signature
+    if instance.form_definition:
+        _ = list(instance.form_definition.fields)
+
+    safe_ref = (instance.reference_number or form_instance_id).replace('/', '_')
+    filename = f"{safe_ref}.pdf"
+
+    # Live re-render. Prefer overlay → WeasyPrint → saved file on disk.
+    try:
+        from services.pdf_overlay_service import generate_pdf_with_overlay
+        from services.pdf_service import generate_form_pdf
+        org_name = instance.organization.name if hasattr(instance, "organization") and instance.organization else "FlowDesk"
+        pdf_bytes = generate_pdf_with_overlay(db, instance, org_name) or generate_form_pdf(db, instance)
+        if pdf_bytes:
+            return Response(
+                content=pdf_bytes,
+                media_type="application/pdf",
+                headers={
+                    "Content-Disposition": f'attachment; filename="{filename}"',
+                    "Cache-Control": "no-store",
+                },
+            )
+    except Exception as render_err:
+        print(f"[DOC WARNING] Live render failed for {form_instance_id}; falling back to saved file: {render_err}")
+
     doc = db.query(GeneratedDocument).filter(
         GeneratedDocument.form_instance_id == form_instance_id,
         GeneratedDocument.is_final == True
     ).order_by(GeneratedDocument.generated_at.desc()).first()
-    if not doc:
+    if not doc or not os.path.exists(doc.file_path):
         raise HTTPException(status_code=404, detail="No generated document found for this form")
-
-    if not os.path.exists(doc.file_path):
-        raise HTTPException(status_code=404, detail="Document file not found on server")
 
     return FileResponse(
         path=doc.file_path,

@@ -115,7 +115,10 @@ def _render_value(field, value: Optional[str]) -> str:
     if afs == 'submission_date':
         return _e(value or '')
     if afs == 'form_classification':
-        return _e(value or '')
+        # Skip — the title block renders the classification pill at the top
+        # right of the document so it appears even when the placed block is
+        # in a hidden/late section. See the {classification_pill_html} block.
+        return ''
     if afs == 'reference_number':
         # Reference is rendered by the page header chrome, not as a field.
         return ''
@@ -303,8 +306,9 @@ def generate_form_pdf(db: Session, instance: FormInstance) -> bytes:
         for f in fields:
             value = field_values_map.get(f.id, '')
             rendered = _render_value(f, value)
-            if f.auto_fill_source in ('approval_block', 'reference_number'):
-                continue  # skip system blocks rendered elsewhere
+            # Skip system blocks that are rendered elsewhere on the page.
+            if f.auto_fill_source in ('approval_block', 'reference_number', 'form_classification'):
+                continue
             label = _e(f.field_label or '')
             if layout == 'grid':
                 span_style = f'grid-column: span {_span(f.grid_width)};'
@@ -384,8 +388,31 @@ def generate_form_pdf(db: Session, instance: FormInstance) -> bytes:
         for img in image_atts
     )
 
-    # ── Title block ──
+    # ── Title block + classification pill ──
     title = form_def.printed_title or form_def.name or 'Form'
+
+    # Resolve classification colour from the org's customised label palette
+    # (falling back to a neutral grey if it's a default label or unknown).
+    FALLBACK_LABELS = {
+        'Public':       '#22C55E',
+        'Internal':     '#EAB308',
+        'Confidential': '#EF4444',
+        'Restricted':   '#64748B',
+    }
+    classification_name = getattr(form_def, 'confidentiality', None)
+    classification_pill_html = ''
+    if classification_name:
+        colour = FALLBACK_LABELS.get(classification_name, '#64748B')
+        org_labels = getattr(org, 'classification_labels', None) or []
+        for lab in org_labels:
+            if isinstance(lab, dict) and lab.get('name') == classification_name:
+                colour = lab.get('color') or colour
+                break
+        classification_pill_html = (
+            f'<span class="classification-pill" '
+            f'style="color: {colour}; border-color: {colour}80; background-color: {colour}1A;">'
+            f'{_e(classification_name)}</span>'
+        )
 
     html = f"""
 <!DOCTYPE html>
@@ -399,7 +426,9 @@ def generate_form_pdf(db: Session, instance: FormInstance) -> bytes:
   .body {{ flex: 1; padding: 1cm 2cm 1cm; }}
   .footer {{ height: 2cm; display: flex; align-items: flex-end; justify-content: center; padding: 0 2cm 0.5cm; border-top: 1px solid #f3f4f6; flex-shrink: 0; }}
   .footer img {{ max-height: 1.5cm; max-width: 100%; object-fit: contain; }}
+  .title-row {{ display: flex; align-items: center; justify-content: center; position: relative; }}
   h1.title {{ text-align: center; color: {accent}; font-size: 18px; font-weight: bold; margin: 0 0 0.2em; }}
+  .classification-pill {{ position: absolute; right: 0; top: 50%; transform: translateY(-50%); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; padding: 3px 8px; border-radius: 999px; border: 1px solid; }}
   .divider {{ margin: 0.3em auto 0; width: 1.5cm; height: 2px; background: {accent}; border-radius: 1px; }}
   .ref {{ text-align: center; font-family: 'DejaVu Sans Mono', monospace; font-size: 10px; color: #6b7280; margin: 0.5em 0 1em; }}
   .section-header {{ display: flex; align-items: center; gap: 0.5em; margin: 0.8em 0 0.4em; page-break-after: avoid; }}
@@ -436,7 +465,10 @@ def generate_form_pdf(db: Session, instance: FormInstance) -> bytes:
   <div class="page">
     <div class="header">{f'<img src="{header_uri}">' if header_uri else ''}</div>
     <div class="body">
-      <h1 class="title">{_e(title)}</h1>
+      <div class="title-row">
+        <h1 class="title">{_e(title)}</h1>
+        {classification_pill_html}
+      </div>
       <div class="divider"></div>
       <div class="ref">Ref: {_e(instance.reference_number)}</div>
       {sections_html}

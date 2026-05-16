@@ -92,6 +92,11 @@ class ApprovalActionRequest(BaseModel):
     notes: Optional[str] = None
     signature_data: Optional[str] = None       # base64 canvas signature
     signature_type: Optional[str] = "canvas"
+    # Approver-chosen "signed on" date. Lets an approver record the date the
+    # decision was actually made (e.g. backdating to a meeting day) instead
+    # of using the server's wall clock. Optional; defaults to utcnow() when
+    # not provided, matching the legacy behaviour.
+    signed_at: Optional[datetime] = None
     field_values: Optional[List[ApprovalFieldValue]] = []
 
 
