@@ -190,6 +190,84 @@ function CalculationEditor({ field, allFields, onChange }) {
   )
 }
 
+function OptionsListEditor({ options, onChange }) {
+  const update = (idx, value) => {
+    const next = [...options]
+    next[idx] = value
+    onChange(next)
+  }
+  const remove = (idx) => onChange(options.filter((_, i) => i !== idx))
+  const add = () => onChange([...options, ''])
+  const move = (from, to) => {
+    if (to < 0 || to >= options.length) return
+    const next = [...options]
+    const [item] = next.splice(from, 1)
+    next.splice(to, 0, item)
+    onChange(next)
+  }
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <label className="text-xs font-medium text-foreground">Options</label>
+        <span className="text-[10px] text-muted-foreground">
+          {options.length} option{options.length === 1 ? '' : 's'}
+        </span>
+      </div>
+      <div className="space-y-1">
+        {options.length === 0 && (
+          <p className="text-[11px] text-muted-foreground italic py-1">
+            No options yet. Click "Add option" to begin.
+          </p>
+        )}
+        {options.map((opt, idx) => (
+          <div key={idx} className="flex items-center gap-1">
+            <span className="text-[10px] text-muted-foreground w-5 text-right select-none">{idx + 1}.</span>
+            <Input
+              value={opt}
+              onChange={(e) => update(idx, e.target.value)}
+              placeholder={`Option ${idx + 1}`}
+              className="flex-1 h-7 text-xs"
+            />
+            <button
+              type="button"
+              onClick={() => move(idx, idx - 1)}
+              disabled={idx === 0}
+              title="Move up"
+              className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <ChevronUp size={12} />
+            </button>
+            <button
+              type="button"
+              onClick={() => move(idx, idx + 1)}
+              disabled={idx === options.length - 1}
+              title="Move down"
+              className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <ChevronDown size={12} />
+            </button>
+            <button
+              type="button"
+              onClick={() => remove(idx)}
+              title="Remove"
+              className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+            >
+              <Trash2 size={12} />
+            </button>
+          </div>
+        ))}
+      </div>
+      <button
+        type="button"
+        onClick={add}
+        className="text-xs text-primary hover:text-primary/80 font-medium flex items-center gap-1 px-2 py-1 rounded hover:bg-primary/5"
+      >
+        <Plus size={12} /> Add option
+      </button>
+    </div>
+  )
+}
+
 function PropertiesPanel({ field, fields = [], sections, onChange }) {
   if (!field) {
     return (
@@ -385,18 +463,10 @@ function PropertiesPanel({ field, fields = [], sections, onChange }) {
 
       {/* Options for dropdown/radio/checkbox */}
       {hasOptions && (
-        <div className="space-y-1.5">
-          <label className="text-xs font-medium text-foreground">Options (one per line)</label>
-          <textarea
-            value={(field.options || []).join('\n')}
-            onChange={(e) =>
-              update({ options: e.target.value.split('\n').map(s => s.trim()).filter(Boolean) })
-            }
-            rows={5}
-            className="w-full text-sm border border-border bg-background rounded-md px-2.5 py-1.5 font-mono"
-            placeholder={'Option A\nOption B\nOption C'}
-          />
-        </div>
+        <OptionsListEditor
+          options={field.options || []}
+          onChange={(options) => update({ options })}
+        />
       )}
 
       {/* Calculation formula with live preview */}
