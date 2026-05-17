@@ -211,7 +211,9 @@ function EmptyState({ search, tab, onNew }) {
 
 export default function MyForms() {
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState('all')
+  // Default landing tab: "In Progress" (Pending). Users come here mostly to
+  // chase requests they've already submitted, not to admire the full archive.
+  const [activeTab, setActiveTab] = useState('Pending')
   const [search, setSearch] = useState('')
   const [sorting, setSorting] = useState([{ id: 'submitted_at', desc: true }])
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 })
@@ -220,6 +222,12 @@ export default function MyForms() {
     queryKey: ['form-instances'],
     queryFn: () => listFormInstances().then(r => r.data),
     refetchInterval: 30_000,
+    // Filters felt "stuck" because the cached list was reused across
+    // navigations — force a fresh fetch when the page mounts so newly
+    // submitted / sent-back / completed forms appear without F5.
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+    staleTime: 0,
   })
 
   const returnedCount = allItems.filter(i => i.current_status === 'Returned for Correction').length
