@@ -1,9 +1,9 @@
 import logging
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
-from database import get_db
+from database import get_db, SessionLocal
 
 logger = logging.getLogger(__name__)
 from models.user import User, RoleName, UserRole
@@ -17,6 +17,227 @@ from services.email_service import (
     send_approval_request_email, send_step_approved_email,
     send_rejection_email, send_sent_back_email, send_completion_email
 )
+
+
+def _finalize_completed_form(form_instance_id: str, organization_id: str, finisher_user_id: str) -> None:
+    """Background task: generate the final PDF, store it, create document
+    shares, and send completion emails. Runs AFTER the HTTP response is sent
+    so the approver isn't blocked by 10s+ WeasyPrint renders or SMTP latency.
+
+    Owns its own DB session — the request-scoped one is already closed by the
+    time this fires. Swallows all exceptions: the approval itself was already
+    committed in the request handler, so anything that fails here is a
+    notification / artefact issue, not a workflow-correctness issue. Errors
+    land in the logger for ops to investigate."""
+    db = SessionLocal()
+    try:
+        instance = db.query(FormInstance).filter(
+            FormInstance.id == form_instance_id,
+            FormInstance.organization_id == organization_id,
+        ).first()
+        if not instance:
+            logger.warning("[FINALIZE] FormInstance %s not found", form_instance_id)
+            return
+
+        # Generate PDF — preference order:
+        # 1. Overlay onto a custom PDF template (only when admin uploaded one)
+        # 2. Styled letterhead WYSIWYG (pdf_service.generate_form_pdf)
+        # 3. Legacy ReportLab table-style PDF (last-resort fallback)
+        from services.pdf_overlay_service import generate_pdf_with_overlay
+        from services.pdf_service import generate_form_pdf
+        org_name = instance.organization.name if instance.organization else "FlowDesk"
+
+        # Force-load relationships the renderers walk.
+        _ = instance.creator
+        _ = list(instance.attachments)
+        _ = list(instance.versions)
+        for v in instance.versions:
+            _ = list(v.field_values)
+            for fv in v.field_values:
+                _ = fv.form_field
+            _ = list(v.approval_instances)
+            for ai in v.approval_instances:
+                _ = ai.approver
+                _ = ai.signature
+        if instance.form_definition:
+            _ = list(instance.form_definition.fields)
+
+        try:
+            pdf_bytes = generate_pdf_with_overlay(db, instance, org_name)
+            if not pdf_bytes:
+                try:
+                    pdf_bytes = generate_form_pdf(db, instance)
+                except Exception as gen_err:
+                    logger.warning("[FINALIZE] WeasyPrint failed, falling back to ReportLab: %s", gen_err)
+                    pdf_bytes = document_service.generate_final_pdf(db, instance, organization_name=org_name)
+        except Exception as e:
+            logger.exception("[FINALIZE] PDF generation failed for %s: %s", form_instance_id, e)
+            return
+
+        try:
+            gen_doc = document_service.save_generated_document(
+                db, instance, pdf_bytes, organization_id, finisher_user_id
+            )
+        except Exception as e:
+            logger.exception("[FINALIZE] save_generated_document failed: %s", e)
+            return
+
+        template_id = (
+            instance.form_definition.approval_template_id
+            if instance.form_definition else None
+        )
+
+        # --- DocumentShare: initiator, approvers, CC recipients ---
+        if gen_doc:
+            seen_user_ids: set = set()
+
+            def _share(user_id, reason):
+                if user_id and user_id not in seen_user_ids:
+                    seen_user_ids.add(user_id)
+                    db.add(DocumentShare(
+                        document_id=gen_doc.id,
+                        organization_id=organization_id,
+                        user_id=user_id,
+                        share_reason=reason
+                    ))
+
+            _share(instance.created_by, "initiator")
+
+            final_ver = db.query(FormVersion).filter(
+                FormVersion.form_instance_id == instance.id,
+                FormVersion.version_number == instance.current_version
+            ).first()
+            if final_ver:
+                approved_steps = db.query(ApprovalInstance).filter(
+                    ApprovalInstance.form_version_id == final_ver.id,
+                    ApprovalInstance.status == ApprovalStepStatus.approved
+                ).all()
+                for step in approved_steps:
+                    _share(step.approver_user_id, "approver")
+
+            if template_id:
+                cc_list = db.query(ApprovalTemplateCCRecipient).filter(
+                    ApprovalTemplateCCRecipient.template_id == template_id
+                ).all()
+                initiator = instance.creator
+                for cc in cc_list:
+                    uid = None
+                    if cc.role_type == RoleType.specific_user:
+                        uid = cc.specific_user_id
+                    elif cc.role_type == RoleType.hierarchy:
+                        lvl = cc.hierarchy_level
+                        if lvl == "manager":
+                            uid = initiator.manager_id if initiator else None
+                        elif lvl == "sn_manager":
+                            uid = initiator.sn_manager_id if initiator else None
+                        elif lvl == "hod":
+                            uid = initiator.hod_id if initiator else None
+                    elif cc.role_type in (RoleType.functional, RoleType.executive):
+                        if cc.role_id:
+                            ur = db.query(UserRole).filter(UserRole.role_id == cc.role_id).first()
+                            uid = ur.user_id if ur else None
+                    _share(uid, "cc")
+
+            try:
+                db.commit()
+            except Exception as e:
+                logger.exception("[FINALIZE] DocumentShare commit failed: %s", e)
+                db.rollback()
+
+        # --- Completion emails ---
+        if instance.creator and instance.creator.email:
+            try:
+                send_completion_email(
+                    to_email=instance.creator.email,
+                    initiator_name=instance.creator.name,
+                    form_name=instance.form_definition.name if instance.form_definition else "Form",
+                    reference_number=instance.reference_number,
+                    form_instance_id=instance.id,
+                    pdf_data=pdf_bytes
+                )
+            except Exception as e:
+                logger.warning("[FINALIZE] initiator completion email failed: %s", e)
+
+        if template_id:
+            email_ccs = db.query(ApprovalTemplateCCRecipient).filter(
+                ApprovalTemplateCCRecipient.template_id == template_id,
+                ApprovalTemplateCCRecipient.role_type == RoleType.email,
+                ApprovalTemplateCCRecipient.email.isnot(None)
+            ).all()
+            for ec in email_ccs:
+                try:
+                    send_completion_email(
+                        to_email=ec.email,
+                        initiator_name=instance.creator.name if instance.creator else "—",
+                        form_name=instance.form_definition.name if instance.form_definition else "Form",
+                        reference_number=instance.reference_number,
+                        form_instance_id=instance.id,
+                        pdf_data=pdf_bytes
+                    )
+                except Exception as e:
+                    logger.warning("[FINALIZE] CC completion email to %s failed: %s", ec.email, e)
+    finally:
+        db.close()
+
+
+def _notify_next_approver(
+    form_instance_id: str, organization_id: str,
+    next_approver_user_id: Optional[str], finisher_user_id: str
+) -> None:
+    """Background task: email the next approver + status email to the
+    initiator. Same rationale as _finalize_completed_form — keep SMTP
+    latency off the request path."""
+    db = SessionLocal()
+    try:
+        instance = db.query(FormInstance).filter(
+            FormInstance.id == form_instance_id,
+            FormInstance.organization_id == organization_id,
+        ).first()
+        if not instance:
+            return
+        finisher = db.query(User).filter(User.id == finisher_user_id).first()
+        next_approver_name = None
+        if next_approver_user_id:
+            next_step = db.query(ApprovalInstance).filter(
+                ApprovalInstance.form_version_id.in_(
+                    db.query(FormVersion.id).filter(
+                        FormVersion.form_instance_id == instance.id,
+                        FormVersion.version_number == instance.current_version
+                    )
+                ),
+                ApprovalInstance.approver_user_id == next_approver_user_id,
+                ApprovalInstance.status == ApprovalStepStatus.active
+            ).first()
+            if next_step and next_step.approver:
+                next_approver_name = next_step.approver.name
+                try:
+                    send_approval_request_email(
+                        to_email=next_step.approver.email,
+                        approver_name=next_step.approver.name,
+                        initiator_name=instance.creator.name if instance.creator else "—",
+                        form_name=instance.form_definition.name if instance.form_definition else "Form",
+                        reference_number=instance.reference_number,
+                        step_label=next_step.step_label or "Approval Step",
+                        form_instance_id=instance.id
+                    )
+                except Exception as e:
+                    logger.warning("[NOTIFY] next-approver email failed: %s", e)
+
+        if instance.creator and instance.creator.email and finisher:
+            try:
+                send_step_approved_email(
+                    to_email=instance.creator.email,
+                    initiator_name=instance.creator.name,
+                    form_name=instance.form_definition.name if instance.form_definition else "Form",
+                    reference_number=instance.reference_number,
+                    approved_by=finisher.name,
+                    next_approver=next_approver_name,
+                    form_instance_id=instance.id
+                )
+            except Exception as e:
+                logger.warning("[NOTIFY] step-approved email failed: %s", e)
+    finally:
+        db.close()
 
 router = APIRouter(prefix="/approvals", tags=["Approvals"])
 
@@ -100,6 +321,7 @@ def get_pending_approvals(
 def approve(
     form_instance_id: str,
     payload: ApprovalActionRequest,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
@@ -140,170 +362,40 @@ def approve(
         db, ap, current_user, payload.notes, sig_id, signed_at=payload.signed_at
     )
 
-    # Find next approver (if any)
-    next_step = db.query(ApprovalInstance).filter(
-        ApprovalInstance.form_version_id == ap.form_version_id,
-        ApprovalInstance.status == ApprovalStepStatus.active
-    ).first()
-
-    try:
-        if all_done:
-            # Generate PDF — preference order:
-            # 1. Overlay onto a custom PDF template (only when admin uploaded one)
-            # 2. Styled letterhead WYSIWYG (pdf_service.generate_form_pdf — what
-            #    the user sees in the canvas: sections, classification pill,
-            #    signatures, inline image attachments, appended PDF attachments)
-            # 3. Legacy ReportLab table-style PDF (last-resort fallback)
-            from services.pdf_overlay_service import generate_pdf_with_overlay
-            from services.pdf_service import generate_form_pdf
-            org_name = instance.organization.name if hasattr(instance, "organization") and instance.organization else "FlowDesk"
-
-            # Eager-load relationships the generator reads — these may have
-            # been touched already by approve_step, but be explicit so the
-            # SA session stays consistent across services.
-            _ = instance.creator
-            _ = list(instance.attachments)
-            _ = list(instance.versions)
-            for v in instance.versions:
-                _ = list(v.field_values)
-                for fv in v.field_values:
-                    _ = fv.form_field
-                _ = list(v.approval_instances)
-                for ai in v.approval_instances:
-                    _ = ai.approver
-                    _ = ai.signature
-            if instance.form_definition:
-                _ = list(instance.form_definition.fields)
-
-            pdf_bytes = generate_pdf_with_overlay(db, instance, org_name)
-            if not pdf_bytes:
-                try:
-                    pdf_bytes = generate_form_pdf(db, instance)
-                except Exception as gen_err:
-                    print(f"[PDF WARNING] WeasyPrint render failed, falling back to ReportLab: {gen_err}")
-                    pdf_bytes = document_service.generate_final_pdf(db, instance, organization_name=org_name)
-            gen_doc = document_service.save_generated_document(
-                db, instance, pdf_bytes, current_user.organization_id, current_user.id
-            )
-
-            # --- DocumentShare: give access to initiator, approvers, and CC recipients ---
-            if gen_doc:
-                seen_user_ids = set()
-
-                def _share(user_id, reason):
-                    if user_id and user_id not in seen_user_ids:
-                        seen_user_ids.add(user_id)
-                        db.add(DocumentShare(
-                            document_id=gen_doc.id,
-                            organization_id=current_user.organization_id,
-                            user_id=user_id,
-                            share_reason=reason
-                        ))
-
-                # 1. Initiator
-                _share(instance.created_by, "initiator")
-
-                # 2. All approvers (approved steps on the final version)
-                final_ver = db.query(FormVersion).filter(
-                    FormVersion.form_instance_id == instance.id,
-                    FormVersion.version_number == instance.current_version
-                ).first()
-                if final_ver:
-                    approved_steps = db.query(ApprovalInstance).filter(
-                        ApprovalInstance.form_version_id == final_ver.id,
-                        ApprovalInstance.status == ApprovalStepStatus.approved
-                    ).all()
-                    for step in approved_steps:
-                        _share(step.approver_user_id, "approver")
-
-                # 3. CC recipients from the approval template
-                template_id = instance.form_definition.approval_template_id if instance.form_definition else None
-                if template_id:
-                    cc_list = db.query(ApprovalTemplateCCRecipient).filter(
-                        ApprovalTemplateCCRecipient.template_id == template_id
-                    ).all()
-                    initiator = instance.creator
-                    for cc in cc_list:
-                        uid = None
-                        if cc.role_type == RoleType.specific_user:
-                            uid = cc.specific_user_id
-                        elif cc.role_type == RoleType.hierarchy:
-                            lvl = cc.hierarchy_level
-                            if lvl == "manager":
-                                uid = initiator.manager_id
-                            elif lvl == "sn_manager":
-                                uid = initiator.sn_manager_id
-                            elif lvl == "hod":
-                                uid = initiator.hod_id
-                        elif cc.role_type in (RoleType.functional, RoleType.executive):
-                            if cc.role_id:
-                                ur = db.query(UserRole).filter(UserRole.role_id == cc.role_id).first()
-                                uid = ur.user_id if ur else None
-                        # Email-type CC has no user_id; handled below as an external send
-                        _share(uid, "cc")
-
-                db.commit()
-
-            send_completion_email(
-                to_email=instance.creator.email,
-                initiator_name=instance.creator.name,
-                form_name=instance.form_definition.name if instance.form_definition else "Form",
-                reference_number=instance.reference_number,
-                form_instance_id=instance.id,
-                pdf_data=pdf_bytes
-            )
-
-            # Send completion notice to email-type CC recipients (external addresses)
-            if template_id:
-                email_ccs = db.query(ApprovalTemplateCCRecipient).filter(
-                    ApprovalTemplateCCRecipient.template_id == template_id,
-                    ApprovalTemplateCCRecipient.role_type == RoleType.email,
-                    ApprovalTemplateCCRecipient.email.isnot(None)
-                ).all()
-                for ec in email_ccs:
-                    try:
-                        send_completion_email(
-                            to_email=ec.email,
-                            initiator_name=instance.creator.name,
-                            form_name=instance.form_definition.name if instance.form_definition else "Form",
-                            reference_number=instance.reference_number,
-                            form_instance_id=instance.id,
-                            pdf_data=pdf_bytes
-                        )
-                    except Exception as e:
-                        logger.warning(f"Failed to send CC completion email to {ec.email}: {e}")
-        else:
-            # Notify next approver
-            next_approver_name = None
-            if next_step and next_step.approver:
-                next_approver_name = next_step.approver.name
-                send_approval_request_email(
-                    to_email=next_step.approver.email,
-                    approver_name=next_step.approver.name,
-                    initiator_name=instance.creator.name,
-                    form_name=instance.form_definition.name if instance.form_definition else "Form",
-                    reference_number=instance.reference_number,
-                    step_label=next_step.step_label or "Approval Step",
-                    form_instance_id=instance.id
-                )
-
-            send_step_approved_email(
-                to_email=instance.creator.email,
-                initiator_name=instance.creator.name,
-                form_name=instance.form_definition.name if instance.form_definition else "Form",
-                reference_number=instance.reference_number,
-                approved_by=current_user.name,
-                next_approver=next_approver_name,
-                form_instance_id=instance.id
-            )
-    except Exception as e:
-        print(f"[POST-APPROVE WARNING] {e}")
-
+    # Audit-log inside the request transaction so the action is visible
+    # immediately in /logs even if the post-approval work below fails.
     audit_service.log_event(
         db, current_user.organization_id, "STEP_APPROVED",
         user_id=current_user.id, entity_type="ApprovalInstance", entity_id=ap.id,
         details={"form_instance_id": form_instance_id, "all_done": all_done}
     )
+
+    # Heavy post-approval work (PDF generation, document shares, emails) was
+    # previously inline — WeasyPrint + SMTP can easily take 20-60s, which
+    # pushed nginx into a gateway timeout and surfaced as a "500 then doc
+    # completes later" UX. Move it to a background task: the response goes
+    # out the moment the approval row is committed, and the slow work runs
+    # against a fresh session afterward.
+    if all_done:
+        background_tasks.add_task(
+            _finalize_completed_form,
+            form_instance_id,
+            current_user.organization_id,
+            current_user.id,
+        )
+    else:
+        next_step = db.query(ApprovalInstance).filter(
+            ApprovalInstance.form_version_id == ap.form_version_id,
+            ApprovalInstance.status == ApprovalStepStatus.active
+        ).first()
+        background_tasks.add_task(
+            _notify_next_approver,
+            form_instance_id,
+            current_user.organization_id,
+            next_step.approver_user_id if next_step else None,
+            current_user.id,
+        )
+
     return {"message": "Step approved", "all_approvals_complete": all_done}
 
 
