@@ -292,10 +292,10 @@ export default function ApprovalAction() {
   }, [inlineableIdsKey])
 
   const mutation = useMutation({
-    mutationFn: () => {
-      if (action === 'approve' && !signature) throw new Error('Signature is required.')
-      if (action === 'approve' && !signedDate) throw new Error('Signed-on date is required.')
-      if ((action === 'reject' || action === 'send_back') && !notes.trim())
+    mutationFn: ({ act, actionNotes }) => {
+      if (act === 'approve' && !signature) throw new Error('Signature is required.')
+      if (act === 'approve' && !signedDate) throw new Error('Signed-on date is required.')
+      if ((act === 'reject' || act === 'send_back') && !(actionNotes || '').trim())
         throw new Error('Notes are required when rejecting or sending back.')
 
       const fieldValuesArr = Object.entries(approverValues).map(([form_field_id, value]) => ({
@@ -308,22 +308,23 @@ export default function ApprovalAction() {
       const signedAtIso = signedDate ? `${signedDate}T12:00:00` : null
 
       const payload = {
-        notes,
+        notes: actionNotes || '',
         signature_data: signature,
         signed_at: signedAtIso,
         field_values: fieldValuesArr,
       }
-      if (action === 'approve')   return approveForm(formInstanceId, payload)
-      if (action === 'reject')    return rejectForm(formInstanceId, payload)
-      if (action === 'send_back') return sendBackForm(formInstanceId, payload)
+      if (act === 'approve')   return approveForm(formInstanceId, payload)
+      if (act === 'reject')    return rejectForm(formInstanceId, payload)
+      if (act === 'send_back') return sendBackForm(formInstanceId, payload)
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       qc.invalidateQueries(['approvals'])
       qc.invalidateQueries(['dashboard'])
+      const act = variables?.act
       toast.success(
-        action === 'approve'   ? 'Request approved.' :
-        action === 'reject'    ? 'Request rejected.' :
-                                 'Request returned for correction.'
+        act === 'approve'   ? 'Request approved.' :
+        act === 'reject'    ? 'Request rejected.' :
+                              'Request returned for correction.'
       )
       navigate('/approvals')
     },
@@ -334,7 +335,16 @@ export default function ApprovalAction() {
     }
   })
 
-  const handleConfirm = () => { setError(''); mutation.mutate() }
+  const approveNow = () => {
+    setError('')
+    if (!signature)  { setError('Sign above to approve.');  toast.error('Sign above to approve.');  return }
+    if (!signedDate) { setError('Pick the signed-on date.'); toast.error('Pick the signed-on date.'); return }
+    mutation.mutate({ act: 'approve', actionNotes: notes })
+  }
+  const confirmRejectOrSendBack = () => {
+    setError('')
+    mutation.mutate({ act: action, actionNotes: notes })
+  }
 
   if (isLoading) return <div className="flex justify-center py-20"><Spinner /></div>
   if (!instance) return <p className="text-muted-foreground p-8">Form not found.</p>
@@ -511,10 +521,19 @@ export default function ApprovalAction() {
               />
             </div>
 
-            {/* Action buttons */}
+            {/* Inline error (shared across approve / reject / send-back paths) */}
+            {error && (
+              <div className="bg-destructive/10 border border-destructive/30 rounded-lg px-3 py-2.5 text-sm text-destructive flex items-center gap-2">
+                <AlertCircle size={14} className="flex-shrink-0" /> {error}
+              </div>
+            )}
+
+            {/* Action buttons. Approve fires straight from the button — the
+                signature pad above is its own confirmation. Reject and Send
+                Back drop into a confirm panel since they require notes. */}
             {!action && (
               <div className="flex flex-wrap gap-3 pt-1">
-                <Button variant="success" onClick={() => { setAction('approve'); setError('') }}>
+                <Button variant="success" onClick={approveNow} loading={mutation.isPending && mutation.variables?.act === 'approve'}>
                   <Check size={15} /> Approve
                 </Button>
                 <Button variant="destructive" onClick={() => { setAction('reject'); setError('') }}>
@@ -526,47 +545,37 @@ export default function ApprovalAction() {
               </div>
             )}
 
-            {/* Confirmation flow */}
-            {action && (
+            {/* Confirmation flow (reject + send-back only) */}
+            {action && (action === 'reject' || action === 'send_back') && (
               <div className="space-y-4">
                 <div className={cn('rounded-lg px-4 py-2.5 text-sm font-medium flex items-center gap-2', {
-                  'bg-emerald-50 text-emerald-800 border border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-800': action === 'approve',
                   'bg-red-50 text-red-800 border border-red-200 dark:bg-red-900/20 dark:text-red-300 dark:border-red-800': action === 'reject',
                   'bg-orange-50 text-orange-800 border border-orange-200 dark:bg-orange-900/20 dark:text-orange-300 dark:border-orange-800': action === 'send_back',
                 })}>
-                  {action === 'approve'   && <><Check size={15} /> Approving this request</>}
                   {action === 'reject'    && <><X size={15} /> Rejecting this request — permanent, no appeal</>}
                   {action === 'send_back' && <><RotateCcw size={15} /> Returning to submitter from step 1</>}
                 </div>
 
                 <Textarea
-                  label={`Notes${action !== 'approve' ? ' (required)' : ' (optional)'}`}
+                  label="Notes (required)"
                   placeholder={
-                    action === 'approve'   ? 'Add a comment for the record (optional)…' :
-                    action === 'reject'    ? 'Explain why this request is being rejected…' :
-                                            'Describe exactly what needs to be corrected…'
+                    action === 'reject'
+                      ? 'Explain why this request is being rejected…'
+                      : 'Describe exactly what needs to be corrected…'
                   }
                   value={notes}
                   onChange={e => setNotes(e.target.value)}
                   rows={3}
                 />
 
-                {error && (
-                  <div className="bg-destructive/10 border border-destructive/30 rounded-lg px-3 py-2.5 text-sm text-destructive flex items-center gap-2">
-                    <AlertCircle size={14} className="flex-shrink-0" /> {error}
-                  </div>
-                )}
-
                 <div className="flex items-center gap-3">
                   <Button
-                    onClick={handleConfirm}
+                    onClick={confirmRejectOrSendBack}
                     loading={mutation.isPending}
-                    variant={action === 'approve' ? 'success' : action === 'reject' ? 'destructive' : 'default'}
+                    variant={action === 'reject' ? 'destructive' : 'default'}
                     className={action === 'send_back' ? 'bg-orange-500 hover:bg-orange-600 text-white' : ''}
                   >
-                    {action === 'approve'   ? 'Confirm Approval' :
-                     action === 'reject'    ? 'Confirm Rejection' :
-                                             'Confirm Send Back'}
+                    {action === 'reject' ? 'Confirm Rejection' : 'Confirm Send Back'}
                   </Button>
                   <Button variant="ghost" onClick={() => { setAction(null); setNotes(''); setError('') }}>
                     Cancel
