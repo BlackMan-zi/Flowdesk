@@ -328,6 +328,15 @@ function ApprovalRows({ steps, accent, user, users, roles, initiatorSignatureDat
         {(steps || []).map((s, idx) => {
           const sigVal = s.signature?.signature_data || s.signature_data
           const signedAt = s.signed_at
+          // When a step was signed by a delegate, surface that explicitly so
+          // readers know who actually put pen to paper vs. whose authority
+          // they signed under. Format: "Acting <original-approver> (Signed by
+          // <delegate>)". Only applied to steps that actually have a delegate
+          // recorded (delegated_from is null for normal signers).
+          const delegateOf = s.delegated_from?.name
+          const signerLine = delegateOf
+            ? `Acting ${delegateOf} (Signed by ${s.approver?.name || resolveName(s)})`
+            : (s.approver?.name || resolveName(s))
           return (
             <tr key={s.id || idx}>
               <td className="py-2 pr-3">
@@ -337,7 +346,7 @@ function ApprovalRows({ steps, accent, user, users, roles, initiatorSignatureDat
                     <span className="text-[8px] uppercase tracking-wide text-slate-400 font-semibold border border-slate-200 rounded px-1">optional</span>
                   )}
                 </div>
-                <div className="text-[9px] text-slate-500">{s.approver?.name || resolveName(s)}</div>
+                <div className="text-[9px] text-slate-500">{signerLine}</div>
               </td>
               <td className="py-2 pr-3 align-bottom">
                 {_renderSignatureCell(sigVal) || (

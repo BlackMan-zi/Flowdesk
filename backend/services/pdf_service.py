@@ -258,9 +258,18 @@ def generate_form_pdf(db: Session, instance: FormInstance) -> bytes:
     if current_ver:
         steps = sorted(current_ver.approval_instances, key=lambda a: a.step_order)
         for s in steps:
+            # Surface delegate-signed steps explicitly in the completed PDF
+            # so the final document records both whose authority was being
+            # exercised and who actually signed.
+            delegate_of = s.delegated_from.name if s.delegated_from else None
+            signer_name = s.approver.name if s.approver else '—'
+            display_name = (
+                f'Acting {delegate_of} (Signed by {signer_name})'
+                if delegate_of else signer_name
+            )
             approval_rows.append({
                 'label': s.step_label or f'Step {s.step_order}',
-                'approver': s.approver.name if s.approver else '—',
+                'approver': display_name,
                 'status': s.status.value if hasattr(s.status, 'value') else str(s.status),
                 'date': s.signed_at.strftime('%d %b %Y') if s.signed_at else '—',
                 'notes': s.notes or '',
