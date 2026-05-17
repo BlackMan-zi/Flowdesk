@@ -50,7 +50,7 @@ export default function Delegations() {
   )
 
   const createMutation = useMutation({
-    mutationFn: () => createDelegation(form),
+    mutationFn: () => createDelegation({ ...form, role_id: form.role_id || null }),
     onSuccess: () => {
       qc.invalidateQueries(['delegations'])
       setModalOpen(false)
@@ -136,19 +136,26 @@ export default function Delegations() {
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         title="Create Delegation"
-        subtitle="Delegate one of your approval roles to another user for a specific period."
+        subtitle="Delegate your approval responsibilities to another user for a specific period."
       >
         <div className="space-y-4">
           <Select
-            label="Approval Role to Delegate *"
+            label="Scope of Delegation *"
             value={form.role_id}
             onChange={set('role_id')}
           >
-            <option value="">Select role…</option>
-            {delegatableRoles.map(r => (
-              <option key={r.id} value={r.id}>{r.name}</option>
-            ))}
+            <option value="">All my approval responsibilities</option>
+            {delegatableRoles.length > 0 && (
+              <optgroup label="Or scope to a specific role">
+                {delegatableRoles.map(r => (
+                  <option key={r.id} value={r.id}>{r.name}</option>
+                ))}
+              </optgroup>
+            )}
           </Select>
+          <p className="text-xs text-muted-foreground -mt-2">
+            "All" covers every form you'd sign during this period — your functional roles and your hierarchy position (manager / SN manager / HOD).
+          </p>
 
           <Select
             label="Delegate To *"

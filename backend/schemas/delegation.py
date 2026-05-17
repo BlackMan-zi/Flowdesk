@@ -23,7 +23,7 @@ class RoleBrief(BaseModel):
 
 class DelegationCreate(BaseModel):
     delegate_user_id: str
-    role_id: str
+    role_id: Optional[str] = None  # None == delegate ALL approval responsibilities
     start_date: date
     end_date: date
     reason: Optional[str] = None
@@ -32,7 +32,7 @@ class DelegationCreate(BaseModel):
 class DelegationAdminCreate(BaseModel):
     original_approver_id: str
     delegate_user_id: str
-    role_id: str
+    role_id: Optional[str] = None  # None == delegate ALL approval responsibilities
     start_date: date
     end_date: date
     reason: Optional[str] = None

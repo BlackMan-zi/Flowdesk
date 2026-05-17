@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { listAllDelegations, adminCreateDelegation, returnDelegation } from '../../api/delegations'
-import { listUsers } from '../../api/users'
+import { listUsers, listRoles } from '../../api/users'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import Card from '../../components/ui/Card'
@@ -12,7 +12,7 @@ import Input, { Select, Textarea } from '../../components/ui/Input'
 import Spinner from '../../components/ui/Spinner'
 import { Search, X, Plus, AlertTriangle, RotateCcw, UserCheck } from 'lucide-react'
 
-const EMPTY = { original_approver_id: '', delegate_user_id: '', start_date: '', end_date: '', reason: '' }
+const EMPTY = { original_approver_id: '', delegate_user_id: '', role_id: '', start_date: '', end_date: '', reason: '' }
 
 function fmt(d) {
   if (!d) return '—'
@@ -37,12 +37,25 @@ export default function AdminDelegations() {
     queryFn: () => listUsers().then(r => r.data),
     enabled: modalOpen
   })
+  const { data: allRoles = [] } = useQuery({
+    queryKey: ['roles'],
+    queryFn: () => listRoles().then(r => r.data),
+    enabled: modalOpen
+  })
+  const delegatableRoles = useMemo(
+    () => allRoles.filter(r => ['functional', 'executive', 'hierarchy'].includes(r.role_category)),
+    [allRoles]
+  )
 
   const set = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.value }))
   const openCreate = () => { setForm(EMPTY); setError(''); setModalOpen(true) }
 
   const createMutation = useMutation({
-    mutationFn: () => adminCreateDelegation({ ...form, reason: form.reason || null }),
+    mutationFn: () => adminCreateDelegation({
+      ...form,
+      role_id: form.role_id || null,
+      reason: form.reason || null,
+    }),
     onSuccess: () => {
       qc.invalidateQueries(['delegations', 'all'])
       setModalOpen(false)
@@ -89,6 +102,11 @@ export default function AdminDelegations() {
         <p className="text-sm font-medium text-foreground">{r.delegate_user?.name || '—'}</p>
         <p className="text-xs text-muted-foreground">{r.delegate_user?.email}</p>
       </div>
+    )},
+    { key: 'scope', label: 'Scope', render: r => r.role ? (
+      <span className="text-sm font-medium text-foreground">{r.role.name}</span>
+    ) : (
+      <span className="text-xs text-muted-foreground italic">All responsibilities</span>
     )},
     { key: 'period', label: 'Period', render: r => (
       <span className="text-sm text-muted-foreground">{fmt(r.start_date)} → {fmt(r.end_date)}</span>
@@ -181,6 +199,19 @@ export default function AdminDelegations() {
               <option key={u.id} value={u.id}>{u.name} ({u.email})</option>
             ))}
           </Select>
+          <Select label="Scope of Delegation *" value={form.role_id} onChange={set('role_id')}>
+            <option value="">All approval responsibilities</option>
+            {delegatableRoles.length > 0 && (
+              <optgroup label="Or scope to a specific role">
+                {delegatableRoles.map(r => (
+                  <option key={r.id} value={r.id}>{r.name}</option>
+                ))}
+              </optgroup>
+            )}
+          </Select>
+          <p className="text-xs text-muted-foreground -mt-2">
+            "All" covers every form the approver would sign during this period — both functional roles and hierarchy position.
+          </p>
           <div className="grid grid-cols-2 gap-3">
             <Input label="Start Date *" type="date" value={form.start_date} onChange={set('start_date')} />
             <Input label="End Date *"   type="date" value={form.end_date}   onChange={set('end_date')} />
