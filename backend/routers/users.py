@@ -199,6 +199,24 @@ def create_user(
     return user
 
 
+@router.get("/directory")
+def list_users_directory(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Minimal user listing for picker UIs (delegation, CC, etc.).
+
+    Any authenticated user in the org can call this. Returns only id/name/email
+    for active users — no roles, no admin-only fields. Use the full GET /users
+    (admin-only) when you need the complete profile.
+    """
+    users = db.query(User).filter(
+        User.organization_id == current_user.organization_id,
+        User.status == UserStatus.active,
+    ).order_by(User.name).all()
+    return [{"id": u.id, "name": u.name, "email": u.email} for u in users]
+
+
 @router.get("", response_model=List[UserResponse])
 def list_users(
     current_user: User = Depends(require_roles(RoleName.admin)),

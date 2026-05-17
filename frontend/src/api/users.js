@@ -1,6 +1,7 @@
 import client from './client'
 
 export const listUsers = () => client.get('/users')
+export const listUsersDirectory = () => client.get('/users/directory')
 export const getUser = (id) => client.get(`/users/${id}`)
 export const createUser = (data) => client.post('/users', data)
 export const updateUser = (id, data) => client.patch(`/users/${id}`, data)

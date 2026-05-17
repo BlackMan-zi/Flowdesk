@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { listAllDelegations, adminCreateDelegation, returnDelegation } from '../../api/delegations'
-import { listUsers, listRoles } from '../../api/users'
+import { listUsersDirectory, listRoles } from '../../api/users'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import Card from '../../components/ui/Card'
@@ -9,6 +9,7 @@ import Table from '../../components/ui/Table'
 import Button from '../../components/ui/Button'
 import Modal from '../../components/ui/Modal'
 import Input, { Select, Textarea } from '../../components/ui/Input'
+import SearchCombobox from '../../components/ui/SearchCombobox'
 import Spinner from '../../components/ui/Spinner'
 import { Search, X, Plus, AlertTriangle, RotateCcw, UserCheck } from 'lucide-react'
 
@@ -33,10 +34,19 @@ export default function AdminDelegations() {
     queryFn: () => listAllDelegations().then(r => r.data)
   })
   const { data: users = [] } = useQuery({
-    queryKey: ['users'],
-    queryFn: () => listUsers().then(r => r.data),
+    queryKey: ['users', 'directory'],
+    queryFn: () => listUsersDirectory().then(r => r.data),
     enabled: modalOpen
   })
+
+  const userItems = useMemo(
+    () => users.map(u => ({ id: u.id, label: u.name, sublabel: u.email })),
+    [users]
+  )
+  const delegateItems = useMemo(
+    () => userItems.filter(u => u.id !== form.original_approver_id),
+    [userItems, form.original_approver_id]
+  )
   const { data: allRoles = [] } = useQuery({
     queryKey: ['roles'],
     queryFn: () => listRoles().then(r => r.data),
@@ -189,16 +199,31 @@ export default function AdminDelegations() {
         size="md"
       >
         <div className="space-y-4">
-          <Select label="Original Approver *" value={form.original_approver_id} onChange={set('original_approver_id')}>
-            <option value="">Select approver…</option>
-            {users.map(u => <option key={u.id} value={u.id}>{u.name} ({u.email})</option>)}
-          </Select>
-          <Select label="Delegate To *" value={form.delegate_user_id} onChange={set('delegate_user_id')}>
-            <option value="">Select delegate…</option>
-            {users.filter(u => u.id !== form.original_approver_id).map(u => (
-              <option key={u.id} value={u.id}>{u.name} ({u.email})</option>
-            ))}
-          </Select>
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-1.5">Original Approver *</label>
+            <SearchCombobox
+              items={userItems}
+              selectedId={form.original_approver_id}
+              selectedLabel={userItems.find(u => u.id === form.original_approver_id)?.label}
+              onSelect={(id) => setForm(p => ({
+                ...p,
+                original_approver_id: id || '',
+                // clear delegate if it's the same as the new original
+                delegate_user_id: id && p.delegate_user_id === id ? '' : p.delegate_user_id,
+              }))}
+              placeholder="Search by name or email…"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-1.5">Delegate To *</label>
+            <SearchCombobox
+              items={delegateItems}
+              selectedId={form.delegate_user_id}
+              selectedLabel={delegateItems.find(u => u.id === form.delegate_user_id)?.label}
+              onSelect={(id) => setForm(p => ({ ...p, delegate_user_id: id || '' }))}
+              placeholder="Search by name or email…"
+            />
+          </div>
           <Select label="Scope of Delegation *" value={form.role_id} onChange={set('role_id')}>
             <option value="">All approval responsibilities</option>
             {delegatableRoles.length > 0 && (

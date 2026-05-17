@@ -1,7 +1,7 @@
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { listDelegations, createDelegation, returnDelegation } from '../api/delegations'
-import { listUsers, listRoles } from '../api/users'
+import { listUsersDirectory, listRoles } from '../api/users'
 import { useAuth } from '../context/AuthContext'
 import { toast } from 'sonner'
 import Card, { CardHeader } from '../components/ui/Card'
@@ -11,6 +11,7 @@ import Modal from '../components/ui/Modal'
 import Input, { Select, Textarea } from '../components/ui/Input'
 import Spinner from '../components/ui/Spinner'
 import Badge from '../components/ui/Badge'
+import SearchCombobox from '../components/ui/SearchCombobox'
 import { UserCheck, Plus } from 'lucide-react'
 
 function fmt(d) {
@@ -31,10 +32,17 @@ export default function Delegations() {
   })
 
   const { data: users = [] } = useQuery({
-    queryKey: ['users'],
-    queryFn: () => listUsers().then(r => r.data),
+    queryKey: ['users', 'directory'],
+    queryFn: () => listUsersDirectory().then(r => r.data),
     enabled: modalOpen
   })
+
+  const userItems = useMemo(
+    () => users
+      .filter(u => u.id !== user?.id)
+      .map(u => ({ id: u.id, label: u.name, sublabel: u.email })),
+    [users, user?.id]
+  )
 
   const { data: allRoles = [] } = useQuery({
     queryKey: ['roles'],
@@ -157,16 +165,16 @@ export default function Delegations() {
             "All" covers every form you'd sign during this period — your functional roles and your hierarchy position (manager / SN manager / HOD).
           </p>
 
-          <Select
-            label="Delegate To *"
-            value={form.delegate_user_id}
-            onChange={set('delegate_user_id')}
-          >
-            <option value="">Select user…</option>
-            {users.filter(u => u.id !== user?.id).map(u => (
-              <option key={u.id} value={u.id}>{u.name} ({u.email})</option>
-            ))}
-          </Select>
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-1.5">Delegate To *</label>
+            <SearchCombobox
+              items={userItems}
+              selectedId={form.delegate_user_id}
+              selectedLabel={userItems.find(u => u.id === form.delegate_user_id)?.label}
+              onSelect={(id) => setForm(p => ({ ...p, delegate_user_id: id || '' }))}
+              placeholder="Search by name or email…"
+            />
+          </div>
 
           <div className="grid grid-cols-2 gap-3">
             <Input label="Start Date *" type="date" value={form.start_date} onChange={set('start_date')} />
