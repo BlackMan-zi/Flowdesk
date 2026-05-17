@@ -1,8 +1,10 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getFormInstance } from '../api/forms'
+import { getFormInstance, getFormDefinition, fetchAttachmentBlobUrl } from '../api/forms'
 import { approveForm, rejectForm, sendBackForm, getPendingApprovals } from '../api/approvals'
+import { listUsersDirectory } from '../api/users'
+import { getMyOrganization, fetchHeaderImageObjectUrl, fetchFooterImageObjectUrl } from '../api/settings'
 import { useAuth } from '../context/AuthContext'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -12,6 +14,8 @@ import Button from '../components/ui/Button'
 import Spinner from '../components/ui/Spinner'
 import Input, { Select, Textarea } from '../components/ui/Input'
 import SignaturePad from '../components/forms/SignaturePad'
+import FormFillerCanvas from '../components/forms/FormFillerCanvas'
+import { resolveClassification } from '../lib/classification'
 import {
   ChevronLeft, Check, X, RotateCcw, CheckCircle2, Clock,
   Circle, AlertCircle, Calendar, History
@@ -232,6 +236,61 @@ export default function ApprovalAction() {
   const pendingItem      = pending.find(p => p.form_instance_id === formInstanceId)
   const myHierarchyLevel = pendingItem?.hierarchy_level || null
 
+  // ── Data the FormFillerCanvas needs (mirrors FormDetail) ──
+  const { data: org } = useQuery({
+    queryKey: ['my-organization'],
+    queryFn: () => getMyOrganization().then(r => r.data),
+  })
+  const { data: formDef } = useQuery({
+    queryKey: ['form-definition', instance?.form_definition_id],
+    queryFn: () => getFormDefinition(instance.form_definition_id).then(r => r.data),
+    enabled: !!instance?.form_definition_id,
+  })
+  const { data: usersList = [] } = useQuery({
+    queryKey: ['users', 'directory'],
+    queryFn: () => listUsersDirectory().then(r => r.data),
+    staleTime: 60_000,
+  })
+
+  const [letterheadUrls, setLetterheadUrls] = useState({ header: null, footer: null })
+  useEffect(() => {
+    if (!org) return
+    let cancelled = false
+    const urls = { header: null, footer: null }
+    const ps = []
+    if (org.has_header_image) ps.push(fetchHeaderImageObjectUrl().then(u => { urls.header = u }).catch(() => {}))
+    if (org.has_footer_image) ps.push(fetchFooterImageObjectUrl().then(u => { urls.footer = u }).catch(() => {}))
+    Promise.all(ps).then(() => { if (!cancelled) setLetterheadUrls(urls) })
+    return () => {
+      cancelled = true
+      if (urls.header) URL.revokeObjectURL(urls.header)
+      if (urls.footer) URL.revokeObjectURL(urls.footer)
+    }
+  }, [org?.id, org?.has_header_image, org?.has_footer_image])
+
+  // Pre-fetch blob URLs for image / PDF attachments so the canvas can show them inline.
+  const [attachmentUrls, setAttachmentUrls] = useState({})
+  const inlineableIdsKey = (instance?.attachments || [])
+    .filter(a => /^image\//.test(a.content_type || '') || /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(a.original_filename || '')
+              || (a.content_type === 'application/pdf') || /\.pdf$/i.test(a.original_filename || ''))
+    .map(a => a.id)
+    .join(',')
+  useEffect(() => {
+    if (!inlineableIdsKey) return
+    const ids = inlineableIdsKey.split(',').filter(Boolean)
+    let cancelled = false
+    const urls = {}
+    Promise.all(ids.map(id =>
+      fetchAttachmentBlobUrl(id).then(u => { urls[id] = u }).catch(() => {})
+    )).then(() => {
+      if (!cancelled) setAttachmentUrls(urls)
+    })
+    return () => {
+      cancelled = true
+      Object.values(urls).forEach(u => URL.revokeObjectURL(u))
+    }
+  }, [inlineableIdsKey])
+
   const mutation = useMutation({
     mutationFn: () => {
       if (action === 'approve' && !signature) throw new Error('Signature is required.')
@@ -288,11 +347,41 @@ export default function ApprovalAction() {
   const fieldValues    = currentVersion?.field_values || []
   const formFields     = instance.form_definition?.fields || []
 
+  // Canvas data (mirrors FormDetail's preview-mode setup)
+  const effectiveFormDef = currentVersion?.schema_snapshot
+    ? {
+        id: instance.form_definition_id,
+        approval_template: formDef?.approval_template,
+        ...currentVersion.schema_snapshot,
+      }
+    : formDef
+
+  const fieldValuesMap = {}
+  for (const fv of fieldValues) {
+    fieldValuesMap[fv.form_field_id || fv.form_field?.id] = fv.value
+  }
+
+  const classification = resolveClassification(
+    effectiveFormDef?.confidentiality,
+    org?.classification_labels,
+  )
+
+  const renderedApprovalSteps = approvalSteps.length > 0
+    ? approvalSteps.map(s => ({
+        ...s,
+        source_type: s.role_type === 'Hierarchy' ? 'hierarchy'
+                  : s.role_type === 'Role'      ? 'role'
+                  : s.role_type === 'Specific'  ? 'specific_user'
+                  : s.source_type,
+        specific_user_name: s.approver?.name,
+      }))
+    : (formDef?.approval_template?.steps || [])
+
   const setApproverField = (fieldId, val) =>
     setApproverValues(p => ({ ...p, [fieldId]: val }))
 
   return (
-    <div className="max-w-2xl space-y-5">
+    <div className="max-w-3xl space-y-5">
 
       {/* Back + title */}
       <div className="flex items-center gap-3">
@@ -339,26 +428,39 @@ export default function ApprovalAction() {
       {/* 2. Version history */}
       <VersionHistory versions={instance.versions} currentVersion={instance.current_version} />
 
-      {/* 3. Form data */}
-      <Card>
-        <CardHeader title="Request Details" subtitle={`Version ${instance.current_version}`} />
-        {fieldValues.length === 0 ? (
-          <p className="px-6 pb-6 text-sm text-muted-foreground">No field data available.</p>
-        ) : (
-          <div className="divide-y divide-border/50">
-            {fieldValues
-              .filter(fv => fv.form_field?.filled_by === 'initiator' || !fv.form_field?.filled_by)
-              .map(fv => (
-                <div key={fv.id} className="grid grid-cols-5 gap-4 px-6 py-3 text-sm">
-                  <span className="col-span-2 text-muted-foreground font-medium">{fv.form_field?.field_label}</span>
-                  <span className="col-span-3 text-foreground break-words">
-                    {fv.value || <span className="text-muted-foreground/40">—</span>}
-                  </span>
-                </div>
-              ))}
-          </div>
-        )}
-      </Card>
+      {/* 3. Form document — full WYSIWYG canvas with letterhead, sections,
+          tables rendered as tables, etc. Read-only; the approver fills any
+          assigned fields in the "Fields to Complete" panel below. */}
+      {effectiveFormDef ? (
+        <div className="bg-muted/30 rounded-lg p-3 sm:p-4">
+          <FormFillerCanvas
+            formDef={effectiveFormDef}
+            headerUrl={letterheadUrls.header}
+            footerUrl={letterheadUrls.footer}
+            accent={org?.letterhead_accent}
+            classification={classification}
+            user={instance.creator}
+            users={usersList}
+            roles={[]}
+            approvalSteps={renderedApprovalSteps}
+            initiatorSignatureData={instance.initiator_signature_data}
+            initiatorSignedAt={instance.initiator_signed_at}
+            referenceNumber={instance.reference_number}
+            fieldValues={fieldValuesMap}
+            onFieldChange={() => {}}
+            pendingFiles={{}}
+            onFilesChange={() => {}}
+            attachments={instance.attachments}
+            attachmentUrls={attachmentUrls}
+            disabled
+          />
+        </div>
+      ) : (
+        <Card>
+          <CardHeader title="Request Details" subtitle="Loading form…" />
+          <div className="flex justify-center py-8"><Spinner /></div>
+        </Card>
+      )}
 
       {/* 4. Approver-assigned fields */}
       {isPending && myStep && (
