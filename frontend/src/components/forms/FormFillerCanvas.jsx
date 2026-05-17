@@ -16,6 +16,57 @@ const WIDTH_TO_PCT = {
 
 const DEFAULT_SECTION = 'General'
 
+// Format a raw numeric string with comma thousand-separators for display.
+// Preserves a trailing "." and trailing zeros so users editing decimals don't
+// see them silently stripped. Returns the original string for non-numeric
+// values so the caller can render them as-is.
+function formatNumberWithCommas(raw) {
+  if (raw === '' || raw === null || raw === undefined) return ''
+  const s = String(raw)
+  const isNegative = s.startsWith('-')
+  const body = isNegative ? s.slice(1) : s
+  if (!/^\d*\.?\d*$/.test(body)) return s
+  const [intPart, decPart] = body.split('.')
+  const intFmt = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+  const out = decPart !== undefined ? `${intFmt}.${decPart}` : intFmt
+  return isNegative ? `-${out}` : out
+}
+
+// Strip everything except digits, one leading minus, and one decimal point.
+function cleanNumericInput(s) {
+  if (s === '' || s === null || s === undefined) return ''
+  let v = String(s).replace(/,/g, '')
+  // Allow leading minus
+  const neg = v.startsWith('-')
+  v = v.replace(/-/g, '')
+  // Allow only one dot
+  const firstDot = v.indexOf('.')
+  if (firstDot !== -1) {
+    v = v.slice(0, firstDot + 1) + v.slice(firstDot + 1).replace(/\./g, '')
+  }
+  v = v.replace(/[^\d.]/g, '')
+  return neg ? `-${v}` : v
+}
+
+function NumberInputWithCommas({ value, onChange, disabled, required, placeholder, className }) {
+  const [focused, setFocused] = React.useState(false)
+  const display = focused ? (value ?? '') : formatNumberWithCommas(value ?? '')
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      value={display}
+      onChange={(e) => onChange(cleanNumericInput(e.target.value))}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      placeholder={placeholder || ''}
+      disabled={disabled}
+      required={required}
+      className={className}
+    />
+  )
+}
+
 const HIERARCHY_LABELS = {
   manager: 'Line Manager', sn_manager: 'Senior Manager', hod: 'Head of Department',
 }
@@ -448,11 +499,9 @@ function FieldCell({
     return (
       <div className="px-2 py-1">
         {labelEl}
-        <input
-          type="number"
-          step={t === 'currency' ? '0.01' : '1'}
+        <NumberInputWithCommas
           value={value || ''}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={onChange}
           placeholder={field.placeholder || ''}
           disabled={disabled}
           required={required}
