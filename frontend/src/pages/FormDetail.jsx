@@ -18,7 +18,7 @@ import { resolveClassification } from '../lib/classification'
 import {
   ChevronLeft, CheckCircle2, XCircle, Clock, RotateCcw,
   SkipForward, ShieldAlert, UserCog, Hash, User, Calendar,
-  FileText, AlertCircle, Paperclip, Download, Eye, Printer, X
+  FileText, AlertCircle, Paperclip, Download, Eye, Printer, X, Pencil
 } from 'lucide-react'
 
 // ── Step icon ─────────────────────────────────────────────────────────────────
@@ -90,7 +90,7 @@ export default function FormDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const qc = useQueryClient()
-  const { isObserver, isAdmin } = useAuth()
+  const { user, isObserver, isAdmin } = useAuth()
 
   const [adminModal, setAdminModal] = useState(null)
   const [adminNotes, setAdminNotes] = useState('')
@@ -212,6 +212,7 @@ export default function FormDetail() {
   const canResubmit   = instance.current_status === 'Returned for Correction'
   const isCompleted   = instance.current_status === 'Completed' || instance.current_status === 'Approved'
   const canExportPdf  = isCompleted
+  const canEditDraft  = instance.current_status === 'Draft' && instance.created_by === user?.id
   const isTerminal    = ['Completed', 'Approved', 'Rejected'].includes(instance.current_status)
   const isUnderReview = ['Pending', 'Submitted'].includes(instance.current_status)
 
@@ -381,6 +382,11 @@ export default function FormDetail() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {canEditDraft && (
+            <Button size="sm" onClick={() => navigate(`/my-forms/${id}/edit`)}>
+              <Pencil size={14} /> Edit Draft
+            </Button>
+          )}
           {canExportPdf && (
             <Button
               size="sm"

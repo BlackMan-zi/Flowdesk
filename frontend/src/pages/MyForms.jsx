@@ -285,16 +285,22 @@ export default function MyForms() {
     },
     {
       id: 'action',
-      cell: ({ row }) => (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 px-2"
-          onClick={() => navigate(`/my-forms/${row.original.id}`)}
-        >
-          View <ChevronRight size={13} />
-        </Button>
-      ),
+      cell: ({ row }) => {
+        const isDraft = row.original.current_status === 'Draft'
+        return (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2"
+            onClick={(e) => {
+              e.stopPropagation()
+              navigate(isDraft ? `/my-forms/${row.original.id}/edit` : `/my-forms/${row.original.id}`)
+            }}
+          >
+            {isDraft ? 'Resume' : 'View'} <ChevronRight size={13} />
+          </Button>
+        )
+      },
     },
   ], [navigate])
 
@@ -421,7 +427,11 @@ export default function MyForms() {
                           <TableRow
                             key={row.id}
                             className="cursor-pointer"
-                            onClick={() => navigate(`/my-forms/${row.original.id}`)}
+                            onClick={() => navigate(
+                              row.original.current_status === 'Draft'
+                                ? `/my-forms/${row.original.id}/edit`
+                                : `/my-forms/${row.original.id}`
+                            )}
                           >
                             {row.getVisibleCells().map(cell => (
                               <TableCell key={cell.id}>
@@ -441,7 +451,11 @@ export default function MyForms() {
                     <RequestCard
                       key={row.id}
                       item={row.original}
-                      onClick={() => navigate(`/my-forms/${row.original.id}`)}
+                      onClick={() => navigate(
+                        row.original.current_status === 'Draft'
+                          ? `/my-forms/${row.original.id}/edit`
+                          : `/my-forms/${row.original.id}`
+                      )}
                     />
                   ))}
                 </div>

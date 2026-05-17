@@ -1,9 +1,9 @@
 import React, { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
-  listFormDefinitions, getFormDefinition,
+  listFormDefinitions, getFormDefinition, getFormInstance,
   createFormInstance, saveDraft, submitFormInstance, uploadAttachment,
 } from '../api/forms'
 import { getMyOrganization, fetchHeaderImageObjectUrl, fetchFooterImageObjectUrl } from '../api/settings'
@@ -58,14 +58,16 @@ export default function SubmitForm() {
   const navigate  = useNavigate()
   const qc        = useQueryClient()
   const { user }  = useAuth()
+  const { id: draftIdFromRoute } = useParams()  // present when editing an existing draft
 
   const [selectedDefId, setSelectedDefId] = useState('')
   const [fieldValues, setFieldValues]     = useState({})
   const [pendingFiles, setPendingFiles]   = useState({})
-  const [step, setStep]                   = useState('select')
+  const [step, setStep]                   = useState(draftIdFromRoute ? 'fill' : 'select')
   const [error, setError]                 = useState('')
-  const [draftId, setDraftId]             = useState(null)
+  const [draftId, setDraftId]             = useState(draftIdFromRoute || null)
   const [draftSaved, setDraftSaved]       = useState(false)
+  const [draftHydrated, setDraftHydrated] = useState(false)
   const [letterheadUrls, setLetterheadUrls] = useState({ header: null, footer: null })
   // Initiator's signature + chosen submission date. Required at submit, not
   // for Save Draft. Date defaults to today and is editable for backdating.
@@ -93,6 +95,41 @@ export default function SubmitForm() {
     queryKey: ['users'],
     queryFn: () => listUsers().then(r => r.data),
   })
+
+  // ── Resume-draft hydration ──
+  // When the route includes :id, fetch the draft and pre-fill form state.
+  // Backend `save_draft` already enforces initiator+Draft, so unauthorised
+  // edits 404 there. We surface the same as a hard error here.
+  const { data: existingDraft, isLoading: draftLoading, error: draftLoadError } = useQuery({
+    queryKey: ['form-instance', draftIdFromRoute],
+    queryFn: () => getFormInstance(draftIdFromRoute).then(r => r.data),
+    enabled: !!draftIdFromRoute,
+  })
+
+  useEffect(() => {
+    if (!existingDraft || draftHydrated) return
+    if (existingDraft.current_status !== 'Draft') {
+      toast.error('This form is no longer editable.')
+      navigate(`/my-forms/${existingDraft.id}`, { replace: true })
+      return
+    }
+    if (user && existingDraft.created_by && existingDraft.created_by !== user.id) {
+      toast.error('Only the initiator can edit this draft.')
+      navigate('/my-forms', { replace: true })
+      return
+    }
+    // Hydrate state: form definition, field values map, draftId.
+    setSelectedDefId(existingDraft.form_definition_id)
+    const version = existingDraft.versions?.[existingDraft.current_version - 1]
+    const map = {}
+    for (const fv of version?.field_values || []) {
+      map[fv.form_field_id || fv.form_field?.id] = fv.value
+    }
+    setFieldValues(map)
+    setDraftId(existingDraft.id)
+    setStep('fill')
+    setDraftHydrated(true)
+  }, [existingDraft, draftHydrated, user, navigate])
 
   // Header/footer object URLs from the org
   useEffect(() => {

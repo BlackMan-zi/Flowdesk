@@ -62,6 +62,7 @@ function AppRoutes() {
         <Route index element={<Dashboard />} />
         <Route path="my-forms" element={<MyForms />} />
         <Route path="my-forms/new" element={<SubmitForm />} />
+        <Route path="my-forms/:id/edit" element={<SubmitForm />} />
         <Route path="my-forms/:id" element={<FormDetail />} />
         <Route path="approvals" element={<ApprovalsInbox />} />
         <Route path="approvals/history" element={<ApprovalsInbox initialTab="history" />} />
