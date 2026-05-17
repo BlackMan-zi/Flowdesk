@@ -294,7 +294,10 @@ export default function MyForms() {
     {
       id: 'action',
       cell: ({ row }) => {
-        const isDraft = row.original.current_status === 'Draft'
+        const status = row.original.current_status
+        const isDraft    = status === 'Draft'
+        const isReturned = status === 'Returned for Correction'
+        const editable   = isDraft || isReturned
         return (
           <Button
             variant="ghost"
@@ -302,10 +305,10 @@ export default function MyForms() {
             className="h-7 px-2"
             onClick={(e) => {
               e.stopPropagation()
-              navigate(isDraft ? `/my-forms/${row.original.id}/edit` : `/my-forms/${row.original.id}`)
+              navigate(editable ? `/my-forms/${row.original.id}/edit` : `/my-forms/${row.original.id}`)
             }}
           >
-            {isDraft ? 'Resume' : 'View'} <ChevronRight size={13} />
+            {isDraft ? 'Resume' : isReturned ? 'Edit' : 'View'} <ChevronRight size={13} />
           </Button>
         )
       },
@@ -436,7 +439,7 @@ export default function MyForms() {
                             key={row.id}
                             className="cursor-pointer"
                             onClick={() => navigate(
-                              row.original.current_status === 'Draft'
+                              ['Draft', 'Returned for Correction'].includes(row.original.current_status)
                                 ? `/my-forms/${row.original.id}/edit`
                                 : `/my-forms/${row.original.id}`
                             )}
@@ -460,7 +463,7 @@ export default function MyForms() {
                       key={row.id}
                       item={row.original}
                       onClick={() => navigate(
-                        row.original.current_status === 'Draft'
+                        ['Draft', 'Returned for Correction'].includes(row.original.current_status)
                           ? `/my-forms/${row.original.id}/edit`
                           : `/my-forms/${row.original.id}`
                       )}

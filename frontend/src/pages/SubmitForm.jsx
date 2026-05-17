@@ -4,7 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
   listFormDefinitions, getFormDefinition, getFormInstance,
-  createFormInstance, saveDraft, submitFormInstance, uploadAttachment,
+  createFormInstance, saveDraft, submitFormInstance, resubmitFormInstance, uploadAttachment,
 } from '../api/forms'
 import { getMyOrganization, fetchHeaderImageObjectUrl, fetchFooterImageObjectUrl } from '../api/settings'
 import { listUsers } from '../api/users'
@@ -68,6 +68,10 @@ export default function SubmitForm() {
   const [draftId, setDraftId]             = useState(draftIdFromRoute || null)
   const [draftSaved, setDraftSaved]       = useState(false)
   const [draftHydrated, setDraftHydrated] = useState(false)
+  // Tracks whether this edit session started from a "Returned for Correction"
+  // form. If so, the final submit goes through /resubmit so the audit log /
+  // version-bump treat it as a re-submission, not a fresh submit.
+  const [isCorrection, setIsCorrection]   = useState(false)
   const [letterheadUrls, setLetterheadUrls] = useState({ header: null, footer: null })
   // Initiator's signature + chosen submission date. Required at submit, not
   // for Save Draft. Date defaults to today and is editable for backdating.
@@ -108,13 +112,16 @@ export default function SubmitForm() {
 
   useEffect(() => {
     if (!existingDraft || draftHydrated) return
-    if (existingDraft.current_status !== 'Draft') {
+    // Editable in either Draft (initial fill) or Returned for Correction
+    // (approver returned it) state. Anything else is read-only.
+    const editable = ['Draft', 'Returned for Correction'].includes(existingDraft.current_status)
+    if (!editable) {
       toast.error('This form is no longer editable.')
       navigate(`/my-forms/${existingDraft.id}`, { replace: true })
       return
     }
     if (user && existingDraft.created_by && existingDraft.created_by !== user.id) {
-      toast.error('Only the initiator can edit this draft.')
+      toast.error('Only the initiator can edit this form.')
       navigate('/my-forms', { replace: true })
       return
     }
@@ -127,6 +134,7 @@ export default function SubmitForm() {
     }
     setFieldValues(map)
     setDraftId(existingDraft.id)
+    setIsCorrection(existingDraft.current_status === 'Returned for Correction')
     setStep('fill')
     setDraftHydrated(true)
   }, [existingDraft, draftHydrated, user, navigate])
@@ -260,9 +268,13 @@ export default function SubmitForm() {
       const signedAtIso = initiatorSignedAt
         ? new Date(`${initiatorSignedAt}T12:00:00`).toISOString()
         : null
-      await submitFormInstance(instanceId, {
+      // Correction → /resubmit (restarts the workflow from step 1 and
+      // audit-logs as FORM_RESUBMITTED so already-signed approvers know
+      // they're being asked to re-review). Fresh submit → /submit.
+      const sendFn = isCorrection ? resubmitFormInstance : submitFormInstance
+      await sendFn(instanceId, {
         field_values: values,
-        change_notes: 'Initial submission',
+        change_notes: isCorrection ? 'Resubmitted after correction' : 'Initial submission',
         initiator_signature_data: initiatorSignature,
         initiator_signed_at: signedAtIso,
       })
@@ -270,7 +282,7 @@ export default function SubmitForm() {
     },
     onSuccess: (id) => {
       qc.invalidateQueries({ queryKey: ['form-instances'] })
-      toast.success('Form submitted for approval!')
+      toast.success(isCorrection ? 'Form resubmitted for re-approval!' : 'Form submitted for approval!')
       navigate(`/my-forms/${id}`)
     },
     onError: (err) => {

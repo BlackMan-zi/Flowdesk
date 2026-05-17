@@ -213,6 +213,7 @@ export default function FormDetail() {
   const isCompleted   = instance.current_status === 'Completed' || instance.current_status === 'Approved'
   const canExportPdf  = isCompleted
   const canEditDraft  = instance.current_status === 'Draft' && instance.created_by === user?.id
+  const canEditReturned = canResubmit && instance.created_by === user?.id
   const isTerminal    = ['Completed', 'Approved', 'Rejected'].includes(instance.current_status)
   const isUnderReview = ['Pending', 'Submitted'].includes(instance.current_status)
 
@@ -387,6 +388,11 @@ export default function FormDetail() {
               <Pencil size={14} /> Edit Draft
             </Button>
           )}
+          {canEditReturned && (
+            <Button size="sm" onClick={() => navigate(`/my-forms/${id}/edit`)}>
+              <Pencil size={14} /> Edit & Resubmit
+            </Button>
+          )}
           {canExportPdf && (
             <Button
               size="sm"
@@ -411,7 +417,7 @@ export default function FormDetail() {
             <p className="text-sm font-bold text-orange-900">Action required</p>
             <p className="text-xs text-orange-700 mt-0.5">This form was returned for correction. Review the feedback, make your changes, and resubmit.</p>
           </div>
-          <Button size="sm" onClick={() => navigate(`/my-forms/${id}/resubmit`)}>
+          <Button size="sm" onClick={() => navigate(`/my-forms/${id}/edit`)}>
             Correct & Resubmit
           </Button>
         </div>
@@ -565,7 +571,7 @@ export default function FormDetail() {
       {!isObserver && (
         <div className="flex gap-3 flex-wrap">
           {canResubmit && (
-            <Button onClick={() => navigate(`/my-forms/${id}/resubmit`)}>
+            <Button onClick={() => navigate(`/my-forms/${id}/edit`)}>
               Correct & Resubmit
             </Button>
           )}
