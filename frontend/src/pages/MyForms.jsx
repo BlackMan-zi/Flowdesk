@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { listFormInstances } from '../api/forms'
+import { useAuth } from '../context/AuthContext'
 import {
   useReactTable, getCoreRowModel, getFilteredRowModel,
   getPaginationRowModel, getSortedRowModel, flexRender,
@@ -232,6 +233,7 @@ function normalizeTabKey(raw) {
 
 export default function MyForms() {
   const navigate = useNavigate()
+  const { isAdmin } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   // Deep-link support: ?status=Pending sets the initial tab so dashboard
   // cards can route here with a specific filter applied. Default to
@@ -240,13 +242,27 @@ export default function MyForms() {
   const [activeTab, setActiveTab] = useState(
     initialTab && VALID_TAB_KEYS.has(initialTab) ? initialTab : 'Pending'
   )
+  // View mode — admins can flip between their own forms ('mine') and the
+  // org-wide list ('org'). Non-admins are locked to 'mine'. ?scope=org in
+  // the URL opens the All Users view directly from dashboard cards.
+  const initialScope = isAdmin && searchParams.get('scope') === 'org' ? 'org' : 'mine'
+  const [viewMode, setViewMode] = useState(initialScope)
   const [search, setSearch] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const [sorting, setSorting] = useState([{ id: 'submitted_at', desc: true }])
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 })
 
   const { data: allItems = [], isLoading } = useQuery({
-    queryKey: ['form-instances'],
-    queryFn: () => listFormInstances().then(r => r.data),
+    // Key by view mode + date range so switching/filtering yields fresh
+    // server-side results. Search is applied client-side so it doesn't
+    // need to be in the key.
+    queryKey: ['form-instances', viewMode, dateFrom, dateTo],
+    queryFn: () => listFormInstances({
+      scope: viewMode,
+      dateFrom: dateFrom || undefined,
+      dateTo:   dateTo   || undefined,
+    }).then(r => r.data),
     // Near-realtime: poll every second so newly-submitted / sent-back /
     // completed forms appear without F5. `refetchIntervalInBackground:
     // false` pauses the polling when the tab is hidden so we don't burn
@@ -277,6 +293,10 @@ export default function MyForms() {
         item.form_name, item.reference_number, item.current_status,
         item.approval_progress?.active_step_label,
         item.approval_progress?.active_approver,
+        // Org-view callers want to find rows by initiator too. Including the
+        // creator name + email unconditionally is harmless in the mine-view
+        // since they all belong to one user.
+        item.creator?.name, item.creator?.email,
       ].filter(Boolean).join(' ').toLowerCase()
       return tokens.every(t => haystack.includes(t))
     })
@@ -288,68 +308,96 @@ export default function MyForms() {
     return allItems.filter(i => allowed.has(i.current_status)).length
   }
 
-  const columns = useMemo(() => [
-    {
-      accessorKey: 'form_name',
-      header: ({ column }) => (
-        <button className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider hover:text-foreground transition-colors" onClick={() => column.toggleSorting()}>
-          Form <ArrowUpDown size={12} />
-        </button>
-      ),
-      cell: ({ row }) => {
-        const item = row.original
-        const isPending = item.current_status === 'Pending'
-        return (
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-foreground truncate max-w-[200px]">{item.form_name}</p>
-            <p className="text-xs text-muted-foreground font-mono mt-0.5">{item.reference_number}</p>
-            {isPending && item.approval_progress && <ApprovalProgress progress={item.approval_progress} />}
-          </div>
-        )
+  const columns = useMemo(() => {
+    const cols = [
+      {
+        accessorKey: 'form_name',
+        header: ({ column }) => (
+          <button className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider hover:text-foreground transition-colors" onClick={() => column.toggleSorting()}>
+            Form <ArrowUpDown size={12} />
+          </button>
+        ),
+        cell: ({ row }) => {
+          const item = row.original
+          const isPending = item.current_status === 'Pending'
+          return (
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-foreground truncate max-w-[200px]">{item.form_name}</p>
+              <p className="text-xs text-muted-foreground font-mono mt-0.5">{item.reference_number}</p>
+              {isPending && item.approval_progress && <ApprovalProgress progress={item.approval_progress} />}
+            </div>
+          )
+        },
       },
-    },
-    {
-      accessorKey: 'current_status',
-      header: 'Status',
-      cell: ({ getValue }) => {
-        const status = getValue()
-        return <Badge label={status === 'Pending' ? 'In Progress' : status} />
+    ]
+    // Initiator column only appears in the org-wide admin view — there's no
+    // point showing the same name on every row in the "My Forms" view.
+    if (viewMode === 'org') {
+      cols.push({
+        accessorKey: 'creator',
+        id: 'initiator',
+        header: ({ column }) => (
+          <button className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider hover:text-foreground transition-colors" onClick={() => column.toggleSorting()}>
+            Initiator <ArrowUpDown size={12} />
+          </button>
+        ),
+        cell: ({ row }) => {
+          const c = row.original.creator
+          return (
+            <div className="min-w-0">
+              <p className="text-sm text-foreground truncate">{c?.name || '—'}</p>
+              {c?.email && <p className="text-xs text-muted-foreground truncate">{c.email}</p>}
+            </div>
+          )
+        },
+        sortingFn: (a, b) => (a.original.creator?.name || '').localeCompare(b.original.creator?.name || ''),
+      })
+    }
+    cols.push(
+      {
+        accessorKey: 'current_status',
+        header: 'Status',
+        cell: ({ getValue }) => {
+          const status = getValue()
+          return <Badge label={status === 'Pending' ? 'In Progress' : status} />
+        },
       },
-    },
-    {
-      accessorKey: 'submitted_at',
-      header: ({ column }) => (
-        <button className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider hover:text-foreground transition-colors" onClick={() => column.toggleSorting()}>
-          Submitted <ArrowUpDown size={12} />
-        </button>
-      ),
-      cell: ({ getValue }) => (
-        <span className="text-xs text-muted-foreground">{fmt(getValue())}</span>
-      ),
-    },
-    {
-      id: 'action',
-      cell: ({ row }) => {
-        const status = row.original.current_status
-        const isDraft    = status === 'Draft'
-        const isReturned = status === 'Returned for Correction'
-        const editable   = isDraft || isReturned
-        return (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2"
-            onClick={(e) => {
-              e.stopPropagation()
-              navigate(editable ? `/my-forms/${row.original.id}/edit` : `/my-forms/${row.original.id}`)
-            }}
-          >
-            {isDraft ? 'Resume' : isReturned ? 'Edit' : 'View'} <ChevronRight size={13} />
-          </Button>
-        )
+      {
+        accessorKey: 'submitted_at',
+        header: ({ column }) => (
+          <button className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider hover:text-foreground transition-colors" onClick={() => column.toggleSorting()}>
+            Submitted <ArrowUpDown size={12} />
+          </button>
+        ),
+        cell: ({ getValue }) => (
+          <span className="text-xs text-muted-foreground">{fmt(getValue())}</span>
+        ),
       },
-    },
-  ], [navigate])
+      {
+        id: 'action',
+        cell: ({ row }) => {
+          const status = row.original.current_status
+          const isDraft    = status === 'Draft'
+          const isReturned = status === 'Returned for Correction'
+          const editable   = isDraft || isReturned
+          return (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2"
+              onClick={(e) => {
+                e.stopPropagation()
+                navigate(editable ? `/my-forms/${row.original.id}/edit` : `/my-forms/${row.original.id}`)
+              }}
+            >
+              {isDraft ? 'Resume' : isReturned ? 'Edit' : 'View'} <ChevronRight size={13} />
+            </Button>
+          )
+        },
+      }
+    )
+    return cols
+  }, [navigate, viewMode])
 
   const table = useReactTable({
     data: searchFiltered,
@@ -378,28 +426,76 @@ export default function MyForms() {
 
   // If the user lands on this page via a dashboard-card link AFTER the
   // component has already mounted (back-forward navigation), keep the
-  // active tab in sync with the URL.
+  // active tab + scope in sync with the URL.
   useEffect(() => {
     const fromUrl = normalizeTabKey(searchParams.get('status'))
     if (fromUrl && VALID_TAB_KEYS.has(fromUrl) && fromUrl !== activeTab) {
       setActiveTab(fromUrl)
     }
+    const scopeFromUrl = searchParams.get('scope')
+    const desired = isAdmin && scopeFromUrl === 'org' ? 'org' : 'mine'
+    if (desired !== viewMode) setViewMode(desired)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams])
+  }, [searchParams, isAdmin])
+
+  const handleViewModeChange = (mode) => {
+    setViewMode(mode)
+    setPagination(p => ({ ...p, pageIndex: 0 }))
+    const next = new URLSearchParams(searchParams)
+    if (mode === 'org') next.set('scope', 'org')
+    else next.delete('scope')
+    setSearchParams(next, { replace: true })
+  }
+
+  const isOrgView = viewMode === 'org'
 
   return (
-    <div className="max-w-5xl space-y-5">
+    <div className="max-w-6xl space-y-5">
 
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-foreground">My Requests</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Track all your requisitions and approval progress</p>
+          <h1 className="text-xl font-bold text-foreground">
+            {isOrgView ? 'All Requests' : 'My Requests'}
+          </h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {isOrgView
+              ? 'Organisation-wide view of every submitted request'
+              : 'Track all your requisitions and approval progress'}
+          </p>
         </div>
         <Button onClick={() => navigate('/my-forms/new')} className="flex-shrink-0">
           <Plus size={14} /> New Request
         </Button>
       </div>
+
+      {/* Admin-only view-mode toggle: My Forms vs All Users */}
+      {isAdmin && (
+        <div className="inline-flex rounded-lg border border-border bg-card p-1 text-sm">
+          <button
+            onClick={() => handleViewModeChange('mine')}
+            className={cn(
+              'px-3 py-1.5 rounded-md font-medium transition-colors',
+              viewMode === 'mine'
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            My Forms
+          </button>
+          <button
+            onClick={() => handleViewModeChange('org')}
+            className={cn(
+              'px-3 py-1.5 rounded-md font-medium transition-colors',
+              viewMode === 'org'
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            All Users
+          </button>
+        </div>
+      )}
 
       {/* Attention alert */}
       {returnedCount > 0 && (
@@ -445,13 +541,46 @@ export default function MyForms() {
               type="text"
               value={search}
               onChange={e => { setSearch(e.target.value); setPagination(p => ({ ...p, pageIndex: 0 })) }}
-              placeholder="Search forms, refs, approvers…"
+              placeholder={isOrgView
+                ? 'Search form, initiator, ref…'
+                : 'Search forms, refs, approvers…'}
               className="flex h-8 w-full rounded-md border border-input bg-background pl-8 pr-7 text-xs shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             />
             {search && (
               <button
                 onClick={() => setSearch('')}
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5 rounded"
+              >
+                <X size={12} />
+              </button>
+            )}
+          </div>
+
+          {/* Date range. Filters server-side on submitted_at (or created_at
+              for drafts). Shown for everyone — admins on the org view get
+              the most use out of it but initiators with long histories
+              benefit too. */}
+          <div className="flex items-center gap-1.5">
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={e => { setDateFrom(e.target.value); setPagination(p => ({ ...p, pageIndex: 0 })) }}
+              className="h-8 rounded-md border border-input bg-background px-2 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              title="From"
+            />
+            <span className="text-xs text-muted-foreground">→</span>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={e => { setDateTo(e.target.value); setPagination(p => ({ ...p, pageIndex: 0 })) }}
+              className="h-8 rounded-md border border-input bg-background px-2 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              title="To"
+            />
+            {(dateFrom || dateTo) && (
+              <button
+                onClick={() => { setDateFrom(''); setDateTo('') }}
+                className="text-muted-foreground hover:text-foreground p-1 rounded"
+                title="Clear date filter"
               >
                 <X size={12} />
               </button>

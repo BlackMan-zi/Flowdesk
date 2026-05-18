@@ -6,8 +6,22 @@ export const createFormDefinition = (data) => client.post('/forms/definitions', 
 export const updateFormDefinition = (id, data) => client.patch(`/forms/definitions/${id}`, data)
 export const deleteFormDefinition = (id) => client.delete(`/forms/definitions/${id}`)
 
-export const listFormInstances = (status) =>
-  client.get('/forms/instances', { params: status ? { status } : {} })
+// Accepts either a bare status string (legacy callers) or an options object:
+//   { status, scope: 'mine'|'org', dateFrom, dateTo, search }
+// The bare-string form is kept for backwards compatibility with callers that
+// only pass a status filter.
+export const listFormInstances = (statusOrOpts) => {
+  const opts = typeof statusOrOpts === 'string' || statusOrOpts == null
+    ? { status: statusOrOpts }
+    : statusOrOpts
+  const params = {}
+  if (opts.status)   params.status    = opts.status
+  if (opts.scope)    params.scope     = opts.scope
+  if (opts.dateFrom) params.date_from = opts.dateFrom
+  if (opts.dateTo)   params.date_to   = opts.dateTo
+  if (opts.search)   params.search    = opts.search
+  return client.get('/forms/instances', { params })
+}
 export const getFormInstance = (id) => client.get(`/forms/instances/${id}`)
 export const createFormInstance = (data) => client.post('/forms/instances', data)
 export const saveDraft = (id, data) => client.patch(`/forms/instances/${id}/draft`, data)

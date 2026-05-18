@@ -213,30 +213,35 @@ export default function AdminDashboard() {
         </Alert>
       )}
 
-      {/* KPI Cards */}
+      {/* KPI Cards. Every card deep-links into the org-wide My Forms view
+          (scope=org) with the matching status filter — so the number on
+          the card always agrees with the rows the user sees after the
+          click. */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KPICard
           label="Total Forms"        value={total}     icon={FileText}
           colorClass="bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400"
           accentClass="bg-gradient-to-r from-blue-500 to-primary"
-          onClick={() => navigate('/my-forms')}
+          onClick={() => navigate('/my-forms?scope=org')}
         />
         <KPICard
           label="Pending Approval"   value={pending}   icon={Clock}
           colorClass="bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400"
           accentClass="bg-gradient-to-r from-amber-500 to-orange-400"
           alert={stuckForms.length > 0}
-          onClick={() => navigate('/approvals')}
+          onClick={() => navigate('/my-forms?scope=org&status=Pending')}
         />
         <KPICard
           label="Completed"          value={completed} icon={CheckCircle2}
           colorClass="bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400"
           accentClass="bg-gradient-to-r from-emerald-500 to-teal-400"
+          onClick={() => navigate('/my-forms?scope=org&status=Completed')}
         />
         <KPICard
           label="Rejected"           value={rejected}  icon={XCircle}
           colorClass="bg-red-50 dark:bg-red-950 text-red-500 dark:text-red-400"
           accentClass="bg-gradient-to-r from-red-500 to-rose-400"
+          onClick={() => navigate('/my-forms?scope=org&status=Rejected')}
         />
       </div>
 
@@ -255,7 +260,12 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card
+          className="cursor-pointer hover:shadow-md transition-shadow"
+          onClick={() => navigate('/my-forms?scope=org&status=Returned%20for%20Correction')}
+          role="button"
+          tabIndex={0}
+        >
           <CardContent className="p-5 flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-orange-50 dark:bg-orange-950 flex items-center justify-center flex-shrink-0">
               <RotateCcw size={20} className="text-orange-500" />
