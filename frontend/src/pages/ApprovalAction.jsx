@@ -17,6 +17,7 @@ import SignaturePad from '../components/forms/SignaturePad'
 import FormFillerCanvas from '../components/forms/FormFillerCanvas'
 import VersionHistory from '../components/forms/VersionHistory'
 import { resolveClassification } from '../lib/classification'
+import { dedupeChain } from '../lib/approvalChain'
 import {
   ChevronLeft, Check, X, RotateCcw, CheckCircle2, Clock,
   Circle, AlertCircle, Calendar
@@ -223,6 +224,20 @@ export default function ApprovalAction() {
     }
   }, [inlineableIdsKey])
 
+  // Centralised cache invalidation. Called from BOTH success and error
+  // paths because the backend may have committed the action even when it
+  // returns a 500 (e.g. send-back succeeds but a downstream non-essential
+  // step fails). The user has had cases where the form was correctly
+  // sent back but the inbox still showed it until manual refresh —
+  // invalidating on error closes that gap.
+  const invalidateAfterAction = () => {
+    qc.invalidateQueries({ queryKey: ['approvals'] })
+    qc.invalidateQueries({ queryKey: ['approvals', 'pending'] })
+    qc.invalidateQueries({ queryKey: ['dashboard'] })
+    qc.invalidateQueries({ queryKey: ['form-instance', formInstanceId] })
+    qc.invalidateQueries({ queryKey: ['form-instances'] })
+  }
+
   const mutation = useMutation({
     mutationFn: ({ act, actionNotes }) => {
       if (act === 'approve' && !signature) throw new Error('Signature is required.')
@@ -250,8 +265,7 @@ export default function ApprovalAction() {
       if (act === 'send_back') return sendBackForm(formInstanceId, payload)
     },
     onSuccess: (_data, variables) => {
-      qc.invalidateQueries(['approvals'])
-      qc.invalidateQueries(['dashboard'])
+      invalidateAfterAction()
       const act = variables?.act
       toast.success(
         act === 'approve'   ? 'Request approved.' :
@@ -261,6 +275,12 @@ export default function ApprovalAction() {
       navigate('/approvals')
     },
     onError: (err) => {
+      // The action MAY have committed even when the request 500s — the
+      // backend now logs & swallows downstream failures but older
+      // versions could have left the form correctly transitioned and
+      // still returned an error. Invalidate so the inbox / dashboard
+      // reflect reality regardless.
+      invalidateAfterAction()
       const msg = err.message || err.response?.data?.detail || 'Action failed.'
       setError(msg)
       toast.error(msg)
@@ -283,7 +303,7 @@ export default function ApprovalAction() {
 
   const currentVersion = instance.versions?.find(v => v.version_number === instance.current_version)
                       || instance.versions?.[instance.current_version - 1]
-  const approvalSteps  = (currentVersion?.approval_instances || []).slice().sort((a, b) => a.step_order - b.step_order)
+  const approvalSteps  = dedupeChain(currentVersion?.approval_instances || [])
   const myStep         = approvalSteps.find(a => a.status === 'Active' || a.status === 'active')
   const isPending      = instance.current_status === 'Pending'
   const fieldValues    = currentVersion?.field_values || []
