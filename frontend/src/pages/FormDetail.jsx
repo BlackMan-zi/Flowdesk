@@ -16,6 +16,7 @@ import { Select, Textarea } from '../components/ui/Input'
 import FormFillerCanvas from '../components/forms/FormFillerCanvas'
 import VersionHistory from '../components/forms/VersionHistory'
 import { resolveClassification } from '../lib/classification'
+import { dedupeChain } from '../lib/approvalChain'
 import {
   ChevronLeft, CheckCircle2, XCircle, Clock, RotateCcw,
   SkipForward, ShieldAlert, UserCog, Hash, User, Calendar,
@@ -221,8 +222,12 @@ export default function FormDetail() {
   const openAdminModal = (type) => { setAdminModal(type); setAdminNotes('') }
   const openReassign   = () => { setReassignOpen(true); setReassignUserId(''); setReassignNotes('') }
 
-  const rawApprovalSteps = (instance.versions?.[instance.current_version - 1]?.approval_instances || [])
-    .slice().sort((a, b) => a.step_order - b.step_order)
+  // dedupeChain collapses any duplicate rows-per-template-step that older
+  // /submit + /resubmit bugs may have left on the version; sort is also
+  // handled there. Always emits one row per step_order.
+  const rawApprovalSteps = dedupeChain(
+    instance.versions?.[instance.current_version - 1]?.approval_instances || []
+  )
   const activeStep = rawApprovalSteps.find(s => s.status === 'Active')
 
   // Prepend a synthetic "Submitted by" step so the chain shows the
