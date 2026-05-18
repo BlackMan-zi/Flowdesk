@@ -132,7 +132,13 @@ export default function ApprovalsInbox({ initialTab = 'pending' }) {
   const { data: pending = [], isLoading: pLoading } = useQuery({
     queryKey: ['approvals', 'pending'],
     queryFn: () => getPendingApprovals().then(r => r.data),
-    refetchInterval: 30_000,
+    // Near-realtime polling; pauses when the tab is backgrounded so we
+    // don't hammer the API for an inactive tab.
+    refetchInterval: 1_000,
+    refetchIntervalInBackground: false,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+    staleTime: 0,
   })
 
   const historyParams = useMemo(() => {

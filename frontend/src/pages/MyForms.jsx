@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { listFormInstances } from '../api/forms'
 import {
   useReactTable, getCoreRowModel, getFilteredRowModel,
@@ -209,11 +209,18 @@ function EmptyState({ search, tab, onNew }) {
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
+const VALID_TAB_KEYS = new Set(['all', 'Draft', 'Pending', 'Returned for Correction', 'Rejected', 'Completed', 'Approved'])
+
 export default function MyForms() {
   const navigate = useNavigate()
-  // Default landing tab: "In Progress" (Pending). Users come here mostly to
-  // chase requests they've already submitted, not to admire the full archive.
-  const [activeTab, setActiveTab] = useState('Pending')
+  const [searchParams, setSearchParams] = useSearchParams()
+  // Deep-link support: ?status=Pending sets the initial tab so dashboard
+  // cards can route here with a specific filter applied. Default to
+  // "In Progress" (Pending) when no param is set.
+  const initialTab = searchParams.get('status')
+  const [activeTab, setActiveTab] = useState(
+    initialTab && VALID_TAB_KEYS.has(initialTab) ? initialTab : 'Pending'
+  )
   const [search, setSearch] = useState('')
   const [sorting, setSorting] = useState([{ id: 'submitted_at', desc: true }])
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 })
@@ -221,10 +228,12 @@ export default function MyForms() {
   const { data: allItems = [], isLoading } = useQuery({
     queryKey: ['form-instances'],
     queryFn: () => listFormInstances().then(r => r.data),
-    refetchInterval: 30_000,
-    // Filters felt "stuck" because the cached list was reused across
-    // navigations — force a fresh fetch when the page mounts so newly
-    // submitted / sent-back / completed forms appear without F5.
+    // Near-realtime: poll every second so newly-submitted / sent-back /
+    // completed forms appear without F5. `refetchIntervalInBackground:
+    // false` pauses the polling when the tab is hidden so we don't burn
+    // bandwidth on a backgrounded tab.
+    refetchInterval: 1_000,
+    refetchIntervalInBackground: false,
     refetchOnMount: 'always',
     refetchOnWindowFocus: true,
     staleTime: 0,
@@ -330,7 +339,23 @@ export default function MyForms() {
   const handleTabChange = (key) => {
     setActiveTab(key)
     setPagination(p => ({ ...p, pageIndex: 0 }))
+    // Keep the URL in sync so the tab survives refresh / back-button.
+    const next = new URLSearchParams(searchParams)
+    if (key && key !== 'Pending') next.set('status', key)
+    else next.delete('status')
+    setSearchParams(next, { replace: true })
   }
+
+  // If the user lands on this page via a dashboard-card link AFTER the
+  // component has already mounted (back-forward navigation), keep the
+  // active tab in sync with the URL.
+  useEffect(() => {
+    const fromUrl = searchParams.get('status')
+    if (fromUrl && VALID_TAB_KEYS.has(fromUrl) && fromUrl !== activeTab) {
+      setActiveTab(fromUrl)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
 
   return (
     <div className="max-w-5xl space-y-5">
