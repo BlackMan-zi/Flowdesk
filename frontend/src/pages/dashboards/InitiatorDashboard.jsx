@@ -197,15 +197,22 @@ export default function InitiatorDashboard() {
 
       {/* KPI cards + donut */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {/* Stats */}
+        {/* Stats — each card deep-links into the matching My Forms tab. */}
         <div className="grid grid-cols-2 gap-3">
           {[
-            { label: 'In Progress', value: summary.pending,   icon: Clock,        colorClass: 'bg-amber-50 dark:bg-amber-950 text-amber-600',   accent: 'bg-amber-400' },
-            { label: 'Completed',   value: summary.completed, icon: CheckCircle2, colorClass: 'bg-emerald-50 dark:bg-emerald-950 text-emerald-600', accent: 'bg-emerald-400' },
-            { label: 'Rejected',    value: summary.rejected,  icon: XCircle,      colorClass: 'bg-red-50 dark:bg-red-950 text-red-500',          accent: 'bg-red-400' },
-            { label: 'Draft',       value: summary.draft,     icon: FileText,     colorClass: 'bg-muted text-muted-foreground',                  accent: 'bg-muted-foreground/30' },
-          ].map(({ label, value, icon: Icon, colorClass, accent }) => (
-            <Card key={label} className="relative overflow-hidden">
+            { label: 'In Progress', value: summary.pending,   icon: Clock,        colorClass: 'bg-amber-50 dark:bg-amber-950 text-amber-600',   accent: 'bg-amber-400',  tab: 'Pending' },
+            { label: 'Completed',   value: summary.completed, icon: CheckCircle2, colorClass: 'bg-emerald-50 dark:bg-emerald-950 text-emerald-600', accent: 'bg-emerald-400', tab: 'Completed' },
+            { label: 'Rejected',    value: summary.rejected,  icon: XCircle,      colorClass: 'bg-red-50 dark:bg-red-950 text-red-500',          accent: 'bg-red-400',     tab: 'Rejected' },
+            { label: 'Draft',       value: summary.draft,     icon: FileText,     colorClass: 'bg-muted text-muted-foreground',                  accent: 'bg-muted-foreground/30', tab: 'Draft' },
+          ].map(({ label, value, icon: Icon, colorClass, accent, tab }) => (
+            <Card
+              key={label}
+              className="relative overflow-hidden cursor-pointer hover:shadow-md hover:border-primary/40 transition-all"
+              onClick={() => navigate(`/my-forms?status=${encodeURIComponent(tab)}`)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/my-forms?status=${encodeURIComponent(tab)}`) } }}
+            >
               <div className={`absolute top-0 left-0 right-0 h-0.5 ${accent}`} />
               <CardContent className="p-4">
                 <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-3 ${colorClass}`}>

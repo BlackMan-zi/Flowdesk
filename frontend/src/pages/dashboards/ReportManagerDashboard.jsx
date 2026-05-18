@@ -121,12 +121,19 @@ export default function ReportManagerDashboard() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="grid grid-cols-2 gap-3">
           {[
-            { label: 'Pending',   value: pending,   icon: Clock,        accent: 'bg-amber-400',   colorClass: 'bg-amber-50 dark:bg-amber-950 text-amber-600' },
-            { label: 'Completed', value: completed, icon: CheckCircle2, accent: 'bg-emerald-400', colorClass: 'bg-emerald-50 dark:bg-emerald-950 text-emerald-600' },
-            { label: 'Rejected',  value: rejected,  icon: XCircle,      accent: 'bg-red-400',     colorClass: 'bg-red-50 dark:bg-red-950 text-red-500' },
-            { label: 'Returned',  value: returned,  icon: RotateCcw,    accent: 'bg-orange-400',  colorClass: 'bg-orange-50 dark:bg-orange-950 text-orange-600' },
-          ].map(({ label, value, icon: Icon, accent, colorClass }) => (
-            <Card key={label} className="relative overflow-hidden">
+            { label: 'Pending',   value: pending,   icon: Clock,        accent: 'bg-amber-400',   colorClass: 'bg-amber-50 dark:bg-amber-950 text-amber-600', tab: 'Pending' },
+            { label: 'Completed', value: completed, icon: CheckCircle2, accent: 'bg-emerald-400', colorClass: 'bg-emerald-50 dark:bg-emerald-950 text-emerald-600', tab: 'Completed' },
+            { label: 'Rejected',  value: rejected,  icon: XCircle,      accent: 'bg-red-400',     colorClass: 'bg-red-50 dark:bg-red-950 text-red-500', tab: 'Rejected' },
+            { label: 'Returned',  value: returned,  icon: RotateCcw,    accent: 'bg-orange-400',  colorClass: 'bg-orange-50 dark:bg-orange-950 text-orange-600', tab: 'Returned for Correction' },
+          ].map(({ label, value, icon: Icon, accent, colorClass, tab }) => (
+            <Card
+              key={label}
+              className="relative overflow-hidden cursor-pointer hover:shadow-md hover:border-primary/40 transition-all"
+              onClick={() => navigate(`/my-forms?status=${encodeURIComponent(tab)}`)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/my-forms?status=${encodeURIComponent(tab)}`) } }}
+            >
               <div className={`absolute top-0 left-0 right-0 h-0.5 ${accent}`} />
               <CardContent className="p-4">
                 <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-3 ${colorClass}`}>
