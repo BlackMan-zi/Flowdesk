@@ -282,11 +282,18 @@ function ClassificationLabelsEditor({ labels, onChange }) {
 
 export default function Settings() {
   const qc = useQueryClient()
-  const { data: orgRes, isLoading } = useQuery({
+  // Other pages (Dashboard, FormDetail, SubmitForm, ApprovalAction) all
+  // share the same ['my-organization'] queryKey but unwrap the axios
+  // response inside their queryFn — so the cached value is the org data
+  // object itself, not a full response. Calling getMyOrganization directly
+  // here returned the raw response, which collided with the unwrapped
+  // shape and surfaced as "Could not load organization settings." whenever
+  // the cache was primed by another page first (i.e. always, except after
+  // a hard refresh). Unwrap to match.
+  const { data: org, isLoading } = useQuery({
     queryKey: ['my-organization'],
-    queryFn: getMyOrganization,
+    queryFn: () => getMyOrganization().then(r => r.data),
   })
-  const org = orgRes?.data
 
   const [accent, setAccent] = useState('')
   const [labels, setLabels] = useState(DEFAULT_LABELS)
