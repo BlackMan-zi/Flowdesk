@@ -473,23 +473,8 @@ export default function FormDetail() {
         </Card>
       )}
 
-        </div>{/* /left column */}
-
-        {/* Right column (1/3) — sticky workflow chrome: progress bar,
-            version history, the detailed approval chain, action buttons,
-            admin overrides, attachments. The user can always see the
-            workflow state while scrolling through a long form. */}
-        <div className="lg:col-span-1 space-y-4 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
-
-      {/* Approval progress bar */}
-      {approvalSteps.length > 0 && (
-        <ApprovalProgressBar steps={approvalSteps} />
-      )}
-
-      {/* Version history (only renders when there's more than one version) */}
-      <VersionHistory versions={instance.versions} currentVersion={instance.current_version} />
-
-      {/* Attachments uploaded with this submission */}
+      {/* Attachments uploaded with this submission — stay in the LEFT
+          column with the form they belong to. */}
       {(instance.attachments?.length || 0) > 0 && (
         <Card>
           <CardHeader
@@ -519,6 +504,21 @@ export default function FormDetail() {
           </div>
         </Card>
       )}
+
+        </div>{/* /left column */}
+
+        {/* Right column (1/3) — sticky workflow chrome: progress bar,
+            version history, the detailed approval chain, action buttons,
+            admin overrides. Always visible while scrolling the form. */}
+        <div className="lg:col-span-1 space-y-4 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
+
+      {/* Approval progress bar */}
+      {approvalSteps.length > 0 && (
+        <ApprovalProgressBar steps={approvalSteps} />
+      )}
+
+      {/* Version history (only renders when there's more than one version) */}
+      <VersionHistory versions={instance.versions} currentVersion={instance.current_version} />
 
       {/* Approval Chain — compact one-line-per-step layout so the whole
           chain fits in a glance and you can see immediately who needs

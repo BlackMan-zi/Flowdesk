@@ -417,24 +417,12 @@ export default function ApprovalAction() {
             </Card>
           )}
 
-          {/* Approver-assigned fields — sit directly under the form they
-              relate to. Only render when the current user has an active
-              step on this form. */}
-          {isPending && myStep && (
-            <ApproverFields
-              fields={formFields}
-              fieldValues={approverValues}
-              myHierarchyLevel={myHierarchyLevel}
-              onChange={setApproverField}
-            />
-          )}
+        </div>{/* /left column (form + attachments) */}
 
-        </div>
-
-        {/* Right column (1/3) — sticky workflow context. Approval chain
-            and version history live here so they're always visible while
-            scrolling the form. The decision panel goes here too so the
-            signature + Approve / Reject / Send Back buttons stay in view. */}
+        {/* Right column (1/3) — sticky workflow + decision. Holds chain,
+            version history, approver-fill fields, and the Approve / Reject
+            / Send Back panel, so everything the approver needs to act on
+            stays in view while they scroll the form on the left. */}
         <div className="lg:col-span-1 space-y-5 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
 
           {/* Approval chain */}
@@ -454,6 +442,18 @@ export default function ApprovalAction() {
 
           {/* Version history (collapses when a form has only one version) */}
           <VersionHistory versions={instance.versions} currentVersion={instance.current_version} />
+
+          {/* Approver-assigned fields — part of the decision flow, so they
+              live with the action panel on the right. Only render when the
+              current user has an active step on this form. */}
+          {isPending && myStep && (
+            <ApproverFields
+              fields={formFields}
+              fieldValues={approverValues}
+              myHierarchyLevel={myHierarchyLevel}
+              onChange={setApproverField}
+            />
+          )}
 
       {/* Action panel (still inside the right column) */}
       {isPending && myStep && (
