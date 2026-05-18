@@ -399,10 +399,55 @@ def approve(
     return {"message": "Step approved", "all_approvals_complete": all_done}
 
 
+def _send_rejection_notice(
+    creator_email: Optional[str], initiator_name: str, form_name: str,
+    reference_number: str, rejected_by: str, notes: str, form_instance_id: str
+) -> None:
+    """Background task: rejection email. Owns its own session implicitly via
+    nothing (pure SMTP call) — kept signature explicit so the request handler
+    can hand off without re-reading rows after commit."""
+    if not creator_email:
+        return
+    try:
+        send_rejection_email(
+            to_email=creator_email,
+            initiator_name=initiator_name,
+            form_name=form_name,
+            reference_number=reference_number,
+            rejected_by=rejected_by,
+            rejection_notes=notes,
+            form_instance_id=form_instance_id,
+        )
+    except Exception as e:
+        logger.warning("[NOTIFY] rejection email failed: %s", e)
+
+
+def _send_sent_back_notice(
+    creator_email: Optional[str], initiator_name: str, form_name: str,
+    reference_number: str, sent_back_by: str, notes: str, form_instance_id: str
+) -> None:
+    """Background task: sent-back email. Same shape as the rejection helper."""
+    if not creator_email:
+        return
+    try:
+        send_sent_back_email(
+            to_email=creator_email,
+            initiator_name=initiator_name,
+            form_name=form_name,
+            reference_number=reference_number,
+            sent_back_by=sent_back_by,
+            correction_notes=notes,
+            form_instance_id=form_instance_id,
+        )
+    except Exception as e:
+        logger.warning("[NOTIFY] sent-back email failed: %s", e)
+
+
 @router.post("/{form_instance_id}/reject")
 def reject(
     form_instance_id: str,
     payload: ApprovalActionRequest,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
@@ -414,22 +459,23 @@ def reject(
         db, ap, current_user, payload.notes, signed_at=payload.signed_at
     )
 
-    try:
-        send_rejection_email(
-            to_email=instance.creator.email,
-            initiator_name=instance.creator.name,
-            form_name=instance.form_definition.name if instance.form_definition else "Form",
-            reference_number=instance.reference_number,
-            rejected_by=current_user.name,
-            rejection_notes=payload.notes,
-            form_instance_id=instance.id
-        )
-    except Exception as e:
-        print(f"[EMAIL WARNING] {e}")
-
     audit_service.log_event(
         db, current_user.organization_id, "FORM_REJECTED",
         user_id=current_user.id, entity_type="ApprovalInstance", entity_id=ap.id
+    )
+
+    # Email goes via BackgroundTasks for the same reason as approve: SMTP
+    # latency was bouncing rejection / send-back through the nginx gateway
+    # timeout, surfacing as a 500 even though the form was already rejected.
+    background_tasks.add_task(
+        _send_rejection_notice,
+        instance.creator.email if instance.creator else None,
+        instance.creator.name if instance.creator else "—",
+        instance.form_definition.name if instance.form_definition else "Form",
+        instance.reference_number,
+        current_user.name,
+        payload.notes,
+        instance.id,
     )
     return {"message": "Form rejected"}
 
@@ -438,6 +484,7 @@ def reject(
 def send_back(
     form_instance_id: str,
     payload: ApprovalActionRequest,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
@@ -449,26 +496,37 @@ def send_back(
         db, ap, current_user, payload.notes, signed_at=payload.signed_at
     )
 
-    # Create new version
-    from services.form_service import create_new_version_on_correction
-    create_new_version_on_correction(db, instance, current_user, payload.notes)
-
+    # Create new version (so initiator has a fresh draft to edit against).
+    # Wrapped so a failure here doesn't undo the send-back the user just saw
+    # take effect — the form is already in Returned-for-Correction state.
     try:
-        send_sent_back_email(
-            to_email=instance.creator.email,
-            initiator_name=instance.creator.name,
-            form_name=instance.form_definition.name if instance.form_definition else "Form",
-            reference_number=instance.reference_number,
-            sent_back_by=current_user.name,
-            correction_notes=payload.notes,
-            form_instance_id=instance.id
-        )
+        from services.form_service import create_new_version_on_correction
+        create_new_version_on_correction(db, instance, current_user, payload.notes)
     except Exception as e:
-        print(f"[EMAIL WARNING] {e}")
+        logger.exception("[SEND-BACK] create_new_version failed: %s", e)
+        raise HTTPException(
+            status_code=500,
+            detail="Form was sent back but a new draft version could not be created."
+        )
 
     audit_service.log_event(
         db, current_user.organization_id, "FORM_SENT_BACK",
         user_id=current_user.id, entity_type="ApprovalInstance", entity_id=ap.id
+    )
+
+    # Email goes via BackgroundTasks: previously synchronous SMTP was the
+    # likely source of the 500 the user saw on send-back (the action itself
+    # had already committed). Now the response returns the moment the new
+    # version is created.
+    background_tasks.add_task(
+        _send_sent_back_notice,
+        instance.creator.email if instance.creator else None,
+        instance.creator.name if instance.creator else "—",
+        instance.form_definition.name if instance.form_definition else "Form",
+        instance.reference_number,
+        current_user.name,
+        payload.notes,
+        instance.id,
     )
     return {"message": "Form sent back for correction"}
 
