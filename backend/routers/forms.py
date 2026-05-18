@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import List, Optional
 from database import get_db
 from models.user import User, RoleName, UserRole, Role
@@ -463,18 +464,87 @@ def create_form_instance(
 @router.get("/instances", response_model=List[FormInstanceResponse])
 def list_form_instances(
     status: Optional[str] = None,
+    scope: Optional[str] = Query(None, regex="^(mine|org)$"),
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    search: Optional[str] = None,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
+    """List form instances for the dashboard / My Forms views.
+
+    `scope=mine` (default) — only forms the current user initiated. Non-admins
+    are always pinned to this scope regardless of what they pass.
+    `scope=org` — every form in the organization. Admin-only; non-admins
+    asking for `org` are silently downgraded to `mine`.
+
+    Optional filters:
+    - `status` — exact FormStatus value (e.g. `Pending`, `Approved`).
+    - `date_from` / `date_to` — ISO date strings (yyyy-MM-dd). Filters on
+      submitted_at when present, otherwise created_at, so drafts also
+      respect the range.
+    - `search` — whitespace-split tokens; every token must appear in the
+      concatenation of reference_number + form_name + initiator name/email.
+    """
     role_names = [ur.role.name for ur in current_user.user_roles if ur.role]
+    is_admin = RoleName.admin in role_names
+
+    # Resolve effective scope. Non-admins are pinned to "mine"; admin defaults
+    # to "mine" too unless they explicitly opt into the org-wide view.
+    effective_scope = "org" if (is_admin and scope == "org") else "mine"
+
     query = db.query(FormInstance).filter(
         FormInstance.organization_id == current_user.organization_id
     )
-    if RoleName.admin not in role_names:
+    if effective_scope == "mine":
         query = query.filter(FormInstance.created_by == current_user.id)
     if status:
         query = query.filter(FormInstance.current_status == status)
+
+    # Date range. submitted_at preferred (the canonical "when did this go
+    # into the chain" date) with created_at as the fallback for drafts.
+    def _parse_iso_date(s: str):
+        try:
+            return datetime.fromisoformat(s)
+        except Exception:
+            return None
+
+    if date_from:
+        df = _parse_iso_date(date_from)
+        if df:
+            query = query.filter(
+                func.coalesce(FormInstance.submitted_at, FormInstance.created_at) >= df
+            )
+    if date_to:
+        dt = _parse_iso_date(date_to)
+        if dt:
+            # Inclusive end-of-day so the user picking "to 2026-05-18"
+            # captures anything that day.
+            dt_end = dt.replace(hour=23, minute=59, second=59, microsecond=999999)
+            query = query.filter(
+                func.coalesce(FormInstance.submitted_at, FormInstance.created_at) <= dt_end
+            )
+
     instances = query.order_by(FormInstance.created_at.desc()).all()
+
+    # Token-based search applied in Python (search hits form_name and
+    # initiator details that aren't direct FormInstance columns). Token
+    # match: every token must appear in the haystack.
+    if search and search.strip():
+        tokens = [t for t in search.lower().split() if t]
+        if tokens:
+            filtered = []
+            for inst in instances:
+                hay_parts = [
+                    inst.reference_number or "",
+                    inst.form_definition.name if inst.form_definition else "",
+                    inst.creator.name if inst.creator else "",
+                    inst.creator.email if inst.creator else "",
+                ]
+                hay = " ".join(hay_parts).lower()
+                if all(t in hay for t in tokens):
+                    filtered.append(inst)
+            instances = filtered
 
     results = []
     for inst in instances:
