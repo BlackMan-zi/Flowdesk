@@ -11,7 +11,7 @@ import { listUsers } from '../api/users'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import { useAuth } from '../context/AuthContext'
-import { ChevronLeft, ChevronRight, FileText, Check, Save, Send, AlertCircle } from 'lucide-react'
+import { ChevronLeft, ChevronRight, FileText, Check, Save, Send, AlertCircle, Search, X } from 'lucide-react'
 import { resolveCalculatedFields } from '../utils/formulaEngine'
 import { cn } from '@/lib/utils'
 import FormFillerCanvas from '../components/forms/FormFillerCanvas'
@@ -64,6 +64,7 @@ export default function SubmitForm() {
   const [selectedDefId, setSelectedDefId] = useState('')
   const [fieldValues, setFieldValues]     = useState({})
   const [pendingFiles, setPendingFiles]   = useState({})
+  const [defSearch, setDefSearch]         = useState('')
   const [step, setStep]                   = useState(draftIdFromRoute ? 'fill' : 'select')
   const [error, setError]                 = useState('')
   const [draftId, setDraftId]             = useState(draftIdFromRoute || null)
@@ -343,35 +344,73 @@ export default function SubmitForm() {
                   <p className="text-sm font-medium text-foreground">No form types available</p>
                   <p className="text-xs text-muted-foreground mt-1">Ask your administrator to set up form definitions.</p>
                 </div>
-              ) : defs.map(def => (
-                <button
-                  key={def.id}
-                  onClick={() => {
-                    setSelectedDefId(def.id)
-                    setFieldValues({})
-                    setPendingFiles({})
-                    setDraftId(null)
-                    setStep('fill')
-                  }}
-                  className="w-full flex items-center justify-between px-4 py-3.5 rounded-xl border border-border hover:border-primary/50 hover:bg-primary/5 text-left transition-all group"
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-muted group-hover:bg-primary/10 flex items-center justify-center flex-shrink-0 transition-colors">
-                      <FileText size={15} className="text-muted-foreground group-hover:text-primary transition-colors" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">{def.name}</p>
-                      {def.description && (
-                        <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{def.description}</p>
+              ) : (() => {
+                // Token-based search across name + description + code so users
+                // can find the form they want quickly when there are many.
+                const tokens = defSearch.toLowerCase().split(/\s+/).filter(Boolean)
+                const filtered = tokens.length === 0 ? defs : defs.filter(def => {
+                  const hay = [def.name, def.description, def.code_suffix]
+                    .filter(Boolean).join(' ').toLowerCase()
+                  return tokens.every(t => hay.includes(t))
+                })
+                return (
+                  <>
+                    <div className="relative mb-2">
+                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                      <input
+                        type="text"
+                        value={defSearch}
+                        onChange={e => setDefSearch(e.target.value)}
+                        placeholder="Search by name, code, or description…"
+                        className="flex h-9 w-full rounded-md border border-input bg-background pl-8 pr-7 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        autoFocus
+                      />
+                      {defSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setDefSearch('')}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5 rounded"
+                        >
+                          <X size={12} />
+                        </button>
                       )}
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0 ml-3">
-                    <span className="text-xs text-muted-foreground font-mono bg-muted px-2 py-0.5 rounded-md">{def.code_suffix}</span>
-                    <ChevronRight size={14} className="text-muted-foreground/40 group-hover:text-primary transition-colors" />
-                  </div>
-                </button>
-              ))}
+                    {filtered.length === 0 ? (
+                      <div className="text-center py-10">
+                        <p className="text-sm text-muted-foreground">No forms match "{defSearch}"</p>
+                      </div>
+                    ) : filtered.map(def => (
+                      <button
+                        key={def.id}
+                        onClick={() => {
+                          setSelectedDefId(def.id)
+                          setFieldValues({})
+                          setPendingFiles({})
+                          setDraftId(null)
+                          setStep('fill')
+                        }}
+                        className="w-full flex items-center justify-between px-4 py-3.5 rounded-xl border border-border hover:border-primary/50 hover:bg-primary/5 text-left transition-all group"
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="w-9 h-9 rounded-xl bg-muted group-hover:bg-primary/10 flex items-center justify-center flex-shrink-0 transition-colors">
+                            <FileText size={15} className="text-muted-foreground group-hover:text-primary transition-colors" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-foreground">{def.name}</p>
+                            {def.description && (
+                              <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{def.description}</p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                          <span className="text-xs text-muted-foreground font-mono bg-muted px-2 py-0.5 rounded-md">{def.code_suffix}</span>
+                          <ChevronRight size={14} className="text-muted-foreground/40 group-hover:text-primary transition-colors" />
+                        </div>
+                      </button>
+                    ))}
+                  </>
+                )
+              })()}
             </CardContent>
           </Card>
         </div>
