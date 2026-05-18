@@ -16,6 +16,7 @@ import { resolveCalculatedFields } from '../utils/formulaEngine'
 import { cn } from '@/lib/utils'
 import FormFillerCanvas from '../components/forms/FormFillerCanvas'
 import SignaturePad from '../components/forms/SignaturePad'
+import VersionHistory, { CorrectionNoteBanner } from '../components/forms/VersionHistory'
 import { resolveClassification } from '../lib/classification'
 
 // ── Step breadcrumb ───────────────────────────────────────────────────────────
@@ -386,6 +387,25 @@ export default function SubmitForm() {
             </div>
           ) : formDef ? (
             <div className="space-y-4">
+              {/* When editing a Returned-for-Correction form, surface the
+                  approver's reason at the top so the user sees what they
+                  need to fix without flipping pages. Falls back silently
+                  to nothing for fresh drafts. */}
+              {isCorrection && existingDraft && (
+                <CorrectionNoteBanner
+                  versions={existingDraft.versions}
+                  currentVersion={existingDraft.current_version}
+                />
+              )}
+              {/* Full version timeline (collapsed by default) — gives the
+                  corrector context on prior submissions / notes if they
+                  want to dig in. */}
+              {isCorrection && existingDraft && (
+                <VersionHistory
+                  versions={existingDraft.versions}
+                  currentVersion={existingDraft.current_version}
+                />
+              )}
               <div className="bg-muted/30 rounded-lg p-4">
                 <FormFillerCanvas
                   formDef={formDef}

@@ -14,6 +14,7 @@ import Modal from '../components/ui/Modal'
 import { SkeletonFormDetail } from '../components/ui/Skeleton'
 import { Select, Textarea } from '../components/ui/Input'
 import FormFillerCanvas from '../components/forms/FormFillerCanvas'
+import VersionHistory from '../components/forms/VersionHistory'
 import { resolveClassification } from '../lib/classification'
 import {
   ChevronLeft, CheckCircle2, XCircle, Clock, RotateCcw,
@@ -427,6 +428,9 @@ export default function FormDetail() {
       {approvalSteps.length > 0 && (
         <ApprovalProgressBar steps={approvalSteps} />
       )}
+
+      {/* Version history (only renders when there's more than one version) */}
+      <VersionHistory versions={instance.versions} currentVersion={instance.current_version} />
 
       {/* Form data (WYSIWYG, read-only) */}
       {effectiveFormDef ? (

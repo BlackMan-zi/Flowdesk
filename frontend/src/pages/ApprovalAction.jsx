@@ -15,10 +15,11 @@ import Spinner from '../components/ui/Spinner'
 import Input, { Select, Textarea } from '../components/ui/Input'
 import SignaturePad from '../components/forms/SignaturePad'
 import FormFillerCanvas from '../components/forms/FormFillerCanvas'
+import VersionHistory from '../components/forms/VersionHistory'
 import { resolveClassification } from '../lib/classification'
 import {
   ChevronLeft, Check, X, RotateCcw, CheckCircle2, Clock,
-  Circle, AlertCircle, Calendar, History
+  Circle, AlertCircle, Calendar
 } from 'lucide-react'
 
 // ── Today as yyyy-MM-dd for the date input default ────────────────────────────
@@ -89,75 +90,6 @@ function ChainStep({ step, isLast }) {
         )}
       </div>
     </div>
-  )
-}
-
-// ── Version history panel ─────────────────────────────────────────────────────
-
-function VersionHistory({ versions, currentVersion }) {
-  const [open, setOpen] = useState(false)
-  if (!versions || versions.length <= 1) return null
-
-  const sorted = [...versions].sort((a, b) => b.version_number - a.version_number)
-
-  return (
-    <Card>
-      <button
-        onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-5 py-3.5 text-sm font-semibold text-foreground hover:bg-muted/40 transition-colors rounded-xl"
-      >
-        <div className="flex items-center gap-2">
-          <History size={15} className="text-muted-foreground" />
-          Version History
-          <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">
-            {versions.length} versions
-          </span>
-        </div>
-        <span className="text-xs text-muted-foreground">{open ? 'Collapse ▲' : 'Expand ▼'}</span>
-      </button>
-
-      {open && (
-        <div className="border-t border-border divide-y divide-border">
-          {sorted.map(ver => {
-            const isCurrent = ver.version_number === currentVersion
-            const sentBackStep = ver.approval_instances?.find(
-              a => a.status === 'sent_back' || a.status === 'Sent Back' || a.status === 'SendBack'
-            )
-            return (
-              <div key={ver.id} className={cn('px-5 py-3', isCurrent && 'bg-primary/5')}>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className={cn('text-xs font-bold px-2 py-0.5 rounded',
-                    isCurrent ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
-                  )}>
-                    v{ver.version_number}
-                  </span>
-                  {isCurrent && <span className="text-xs text-primary font-medium">Current</span>}
-                  <span className="text-xs text-muted-foreground ml-auto">
-                    {ver.created_at && new Date(ver.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                  </span>
-                </div>
-                {ver.change_notes && (
-                  <p className="text-xs text-muted-foreground italic">Submitter note: "{ver.change_notes}"</p>
-                )}
-                {sentBackStep && (
-                  <div className="mt-1.5 flex items-start gap-1.5 bg-orange-50 border border-orange-200 rounded px-2.5 py-1.5 dark:bg-orange-900/20 dark:border-orange-800">
-                    <RotateCcw size={11} className="text-orange-500 mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="text-xs text-orange-800 font-medium dark:text-orange-300">
-                        Sent back by {sentBackStep.approver?.name || 'approver'}
-                      </p>
-                      {sentBackStep.notes && (
-                        <p className="text-xs text-orange-700 italic mt-0.5 dark:text-orange-400">"{sentBackStep.notes}"</p>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      )}
-    </Card>
   )
 }
 
