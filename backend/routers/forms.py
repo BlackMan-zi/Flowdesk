@@ -704,10 +704,23 @@ def submit_form_instance(
     ).first()
 
     if current_ver:
-        ap_instances = approval_service.initialize_approval_steps(
-            db, current_ver, instance, current_user,
-            payload.selected_approver_ids
-        )
+        # Defensive: same cleanup as /resubmit. /submit accepts both Draft
+        # and Returned-for-Correction (legacy), so a Returned-form submit
+        # could land here and double up the chain otherwise.
+        existing = db.query(ApprovalInstance).filter(
+            ApprovalInstance.form_version_id == current_ver.id
+        ).all()
+        for ai in existing:
+            db.delete(ai)
+        if existing:
+            db.flush()
+        try:
+            ap_instances = approval_service.initialize_approval_steps(
+                db, current_ver, instance, current_user,
+                payload.selected_approver_ids
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
 
         # Notify first active approver
         first_active = next(
@@ -780,10 +793,29 @@ def resubmit_form_instance(
     ).first()
 
     if current_ver:
-        approval_service.initialize_approval_steps(
-            db, current_ver, instance, current_user,
-            payload.selected_approver_ids
-        )
+        # Defensive cleanup: any pre-existing approval rows on this version
+        # would double up the chain. The version is fresh after send-back so
+        # there shouldn't be any, but a double-click on Submit or an old
+        # /submit codepath could have seeded some. Wipe and re-create from
+        # the template so the chain is always exactly one row per template
+        # step.
+        existing = db.query(ApprovalInstance).filter(
+            ApprovalInstance.form_version_id == current_ver.id
+        ).all()
+        for ai in existing:
+            db.delete(ai)
+        if existing:
+            db.flush()
+        try:
+            approval_service.initialize_approval_steps(
+                db, current_ver, instance, current_user,
+                payload.selected_approver_ids
+            )
+        except ValueError as e:
+            # Approver-resolution failure (missing manager / HOD / etc.) — the
+            # form is now stuck "submitted" with no chain. Surface as 400 so
+            # the user sees the actual reason instead of a generic 500.
+            raise HTTPException(status_code=400, detail=str(e))
 
     audit_service.log_event(
         db, current_user.organization_id, "FORM_RESUBMITTED",
