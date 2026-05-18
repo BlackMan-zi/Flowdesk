@@ -34,14 +34,18 @@ const STATUS_CONFIG = {
   Approved:                  { label: 'Approved',    icon: CheckCircle2, color: 'text-emerald-600' },
 }
 
+// "Completed" buckets both backend statuses (Completed and Approved). The
+// backend almost always lands on Approved once the chain finishes; the
+// distinction was a legacy implementation detail that confused the user.
+// Tab keys that contain a comma get split into a list-membership check
+// in the filter below.
 const STATUS_TABS = [
   { key: 'all',                       label: 'All' },
   { key: 'Draft',                     label: 'Draft' },
   { key: 'Pending',                   label: 'In Progress' },
   { key: 'Returned for Correction',   label: 'Returned' },
   { key: 'Rejected',                  label: 'Rejected' },
-  { key: 'Completed',                 label: 'Completed' },
-  { key: 'Approved',                  label: 'Approved' },
+  { key: 'Completed,Approved',        label: 'Completed' },
 ]
 
 const fmt = (d) => d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
@@ -94,12 +98,12 @@ function SummaryStats({ items, onTabChange }) {
   }, {})
 
   const stats = [
-    { label: 'Total',       value: items.length,                                              key: 'all',      color: 'text-foreground' },
-    { label: 'In Progress', value: counts['Pending'] || 0,                                    key: 'Pending',  color: 'text-amber-600' },
-    { label: 'Returned',    value: counts['Returned for Correction'] || 0,                    key: 'Returned for Correction', color: 'text-orange-600' },
-    { label: 'Completed',   value: (counts['Completed'] || 0) + (counts['Approved'] || 0),   key: 'Completed', color: 'text-emerald-600' },
-    { label: 'Rejected',    value: counts['Rejected'] || 0,                                   key: 'Rejected', color: 'text-red-600' },
-    { label: 'Draft',       value: counts['Draft'] || 0,                                      key: 'Draft',    color: 'text-muted-foreground' },
+    { label: 'Total',       value: items.length,                                                  key: 'all',      color: 'text-foreground' },
+    { label: 'In Progress', value: counts['Pending'] || 0,                                        key: 'Pending',  color: 'text-amber-600' },
+    { label: 'Returned',    value: counts['Returned for Correction'] || 0,                        key: 'Returned for Correction', color: 'text-orange-600' },
+    { label: 'Completed',   value: (counts['Completed'] || 0) + (counts['Approved'] || 0),       key: 'Completed,Approved', color: 'text-emerald-600' },
+    { label: 'Rejected',    value: counts['Rejected'] || 0,                                       key: 'Rejected', color: 'text-red-600' },
+    { label: 'Draft',       value: counts['Draft'] || 0,                                          key: 'Draft',    color: 'text-muted-foreground' },
   ]
 
   return (
@@ -182,15 +186,22 @@ function EmptyState({ search, tab, onNew }) {
       <p className="text-xs text-muted-foreground mt-1">Try different keywords or clear the search</p>
     </div>
   )
-  if (tab && tab !== 'all') return (
-    <div className="text-center py-16">
-      <div className="w-14 h-14 rounded-xl bg-muted flex items-center justify-center mx-auto mb-4">
-        <FileText size={22} className="text-muted-foreground" />
+  if (tab && tab !== 'all') {
+    // Resolve the human label from STATUS_TABS so merged keys like
+    // "Completed,Approved" render as "completed" rather than a raw
+    // comma-joined dump.
+    const labelObj = STATUS_TABS.find(t => t.key === tab)
+    const label = (labelObj?.label || tab).toLowerCase()
+    return (
+      <div className="text-center py-16">
+        <div className="w-14 h-14 rounded-xl bg-muted flex items-center justify-center mx-auto mb-4">
+          <FileText size={22} className="text-muted-foreground" />
+        </div>
+        <p className="text-sm font-semibold text-foreground">No {label} requests</p>
+        <p className="text-xs text-muted-foreground mt-1">Switch tabs to view other requests</p>
       </div>
-      <p className="text-sm font-semibold text-foreground">No {tab.toLowerCase()} requests</p>
-      <p className="text-xs text-muted-foreground mt-1">Switch tabs to view other requests</p>
-    </div>
-  )
+    )
+  }
   return (
     <div className="text-center py-20">
       <div className="w-16 h-16 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-5">
@@ -209,7 +220,15 @@ function EmptyState({ search, tab, onNew }) {
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
-const VALID_TAB_KEYS = new Set(['all', 'Draft', 'Pending', 'Returned for Correction', 'Rejected', 'Completed', 'Approved'])
+const VALID_TAB_KEYS = new Set(['all', 'Draft', 'Pending', 'Returned for Correction', 'Rejected', 'Completed', 'Approved', 'Completed,Approved'])
+
+// Accept legacy / dashboard-link inputs ('Completed', 'Approved') and map
+// them to the merged tab key. Unknown values fall through to the caller's
+// own fallback handling.
+function normalizeTabKey(raw) {
+  if (raw === 'Completed' || raw === 'Approved') return 'Completed,Approved'
+  return raw
+}
 
 export default function MyForms() {
   const navigate = useNavigate()
@@ -217,7 +236,7 @@ export default function MyForms() {
   // Deep-link support: ?status=Pending sets the initial tab so dashboard
   // cards can route here with a specific filter applied. Default to
   // "In Progress" (Pending) when no param is set.
-  const initialTab = searchParams.get('status')
+  const initialTab = normalizeTabKey(searchParams.get('status'))
   const [activeTab, setActiveTab] = useState(
     initialTab && VALID_TAB_KEYS.has(initialTab) ? initialTab : 'Pending'
   )
@@ -243,7 +262,11 @@ export default function MyForms() {
 
   const tabFiltered = useMemo(() => {
     if (activeTab === 'all') return allItems
-    return allItems.filter(i => i.current_status === activeTab)
+    // Tab keys can encode multiple statuses comma-separated (e.g.
+    // "Completed,Approved") so backend status drift between Approved /
+    // Completed both surface in one logical tab.
+    const allowed = new Set(activeTab.split(','))
+    return allItems.filter(i => allowed.has(i.current_status))
   }, [allItems, activeTab])
 
   const searchFiltered = useMemo(() => {
@@ -259,7 +282,11 @@ export default function MyForms() {
     })
   }, [tabFiltered, search])
 
-  const tabCount = (key) => key === 'all' ? allItems.length : allItems.filter(i => i.current_status === key).length
+  const tabCount = (key) => {
+    if (key === 'all') return allItems.length
+    const allowed = new Set(key.split(','))
+    return allItems.filter(i => allowed.has(i.current_status)).length
+  }
 
   const columns = useMemo(() => [
     {
@@ -340,8 +367,11 @@ export default function MyForms() {
     setActiveTab(key)
     setPagination(p => ({ ...p, pageIndex: 0 }))
     // Keep the URL in sync so the tab survives refresh / back-button.
+    // For the merged "Completed,Approved" tab, surface the cleaner
+    // "Completed" alias in the URL — it normalises back on read.
+    const urlValue = key === 'Completed,Approved' ? 'Completed' : key
     const next = new URLSearchParams(searchParams)
-    if (key && key !== 'Pending') next.set('status', key)
+    if (urlValue && urlValue !== 'Pending') next.set('status', urlValue)
     else next.delete('status')
     setSearchParams(next, { replace: true })
   }
@@ -350,7 +380,7 @@ export default function MyForms() {
   // component has already mounted (back-forward navigation), keep the
   // active tab in sync with the URL.
   useEffect(() => {
-    const fromUrl = searchParams.get('status')
+    const fromUrl = normalizeTabKey(searchParams.get('status'))
     if (fromUrl && VALID_TAB_KEYS.has(fromUrl) && fromUrl !== activeTab) {
       setActiveTab(fromUrl)
     }
