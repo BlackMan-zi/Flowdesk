@@ -343,9 +343,9 @@ export default function ApprovalAction() {
     setApproverValues(p => ({ ...p, [fieldId]: val }))
 
   return (
-    <div className="max-w-3xl space-y-5">
+    <div className="max-w-7xl space-y-5">
 
-      {/* Back + title */}
+      {/* Back + title — full width across the layout */}
       <div className="flex items-center gap-3">
         <button
           onClick={() => navigate('/approvals')}
@@ -372,69 +372,90 @@ export default function ApprovalAction() {
         </div>
       </div>
 
-      {/* 1. Approval chain */}
-      {approvalSteps.length > 0 && (
-        <Card>
-          <CardHeader
-            title="Approval Chain"
-            subtitle={`${approvalSteps.filter(s => s.status === 'Approved' || s.status === 'approved').length} of ${approvalSteps.length} steps completed`}
-          />
-          <div className="px-6 pt-4 pb-1">
-            {approvalSteps.map((step, i) => (
-              <ChainStep key={step.id} step={step} isLast={i === approvalSteps.length - 1} />
-            ))}
-          </div>
-        </Card>
-      )}
+      {/* Two-column layout on wide screens: form document on the left, the
+          approval chain + version history pinned in a sticky right column
+          so the approver always has the workflow context in view as they
+          scroll the form. Stacks vertically on narrow screens. */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 lg:items-start">
 
-      {/* 2. Version history */}
-      <VersionHistory versions={instance.versions} currentVersion={instance.current_version} />
+        {/* Left column (2/3) — the document the approver is reviewing,
+            plus the approver-only fields and the decision panel.
+            min-w-0 lets the inner grid shrink properly inside the parent. */}
+        <div className="lg:col-span-2 space-y-5 min-w-0">
 
-      {/* 3. Form document — full WYSIWYG canvas with letterhead, sections,
-          tables rendered as tables, etc. Read-only; the approver fills any
-          assigned fields in the "Fields to Complete" panel below. */}
-      {effectiveFormDef ? (
-        <div className="bg-muted/30 rounded-lg p-3 sm:p-4">
-          <FormFillerCanvas
-            formDef={effectiveFormDef}
-            headerUrl={letterheadUrls.header}
-            footerUrl={letterheadUrls.footer}
-            accent={org?.letterhead_accent}
-            classification={classification}
-            user={instance.creator}
-            users={usersList}
-            roles={[]}
-            approvalSteps={renderedApprovalSteps}
-            initiatorSignatureData={instance.initiator_signature_data}
-            initiatorSignedAt={instance.initiator_signed_at}
-            referenceNumber={instance.reference_number}
-            fieldValues={fieldValuesMap}
-            onFieldChange={() => {}}
-            pendingFiles={{}}
-            onFilesChange={() => {}}
-            attachments={instance.attachments}
-            attachmentUrls={attachmentUrls}
-            disabled
-          />
+          {/* Form document — full WYSIWYG canvas with letterhead, sections,
+              tables rendered as tables, etc. Read-only; the approver fills
+              any assigned fields in the "Fields to Complete" panel below. */}
+          {effectiveFormDef ? (
+            <div className="bg-muted/30 rounded-lg p-3 sm:p-4">
+              <FormFillerCanvas
+                formDef={effectiveFormDef}
+                headerUrl={letterheadUrls.header}
+                footerUrl={letterheadUrls.footer}
+                accent={org?.letterhead_accent}
+                classification={classification}
+                user={instance.creator}
+                users={usersList}
+                roles={[]}
+                approvalSteps={renderedApprovalSteps}
+                initiatorSignatureData={instance.initiator_signature_data}
+                initiatorSignedAt={instance.initiator_signed_at}
+                referenceNumber={instance.reference_number}
+                fieldValues={fieldValuesMap}
+                onFieldChange={() => {}}
+                pendingFiles={{}}
+                onFilesChange={() => {}}
+                attachments={instance.attachments}
+                attachmentUrls={attachmentUrls}
+                disabled
+              />
+            </div>
+          ) : (
+            <Card>
+              <CardHeader title="Request Details" subtitle="Loading form…" />
+              <div className="flex justify-center py-8"><Spinner /></div>
+            </Card>
+          )}
+
+          {/* Approver-assigned fields — sit directly under the form they
+              relate to. Only render when the current user has an active
+              step on this form. */}
+          {isPending && myStep && (
+            <ApproverFields
+              fields={formFields}
+              fieldValues={approverValues}
+              myHierarchyLevel={myHierarchyLevel}
+              onChange={setApproverField}
+            />
+          )}
+
         </div>
-      ) : (
-        <Card>
-          <CardHeader title="Request Details" subtitle="Loading form…" />
-          <div className="flex justify-center py-8"><Spinner /></div>
-        </Card>
-      )}
 
-      {/* 4. Approver-assigned fields */}
-      {isPending && myStep && (
-        <ApproverFields
-          fields={formFields}
-          fieldValues={approverValues}
-          myHierarchyLevel={myHierarchyLevel}
-          onChange={setApproverField}
-        />
-      )}
+        {/* Right column (1/3) — sticky workflow context. Approval chain
+            and version history live here so they're always visible while
+            scrolling the form. The decision panel goes here too so the
+            signature + Approve / Reject / Send Back buttons stay in view. */}
+        <div className="lg:col-span-1 space-y-5 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
 
-      {/* 5. Action panel */}
+          {/* Approval chain */}
+          {approvalSteps.length > 0 && (
+            <Card>
+              <CardHeader
+                title="Approval Chain"
+                subtitle={`${approvalSteps.filter(s => s.status === 'Approved' || s.status === 'approved').length} of ${approvalSteps.length} steps completed`}
+              />
+              <div className="px-5 pt-4 pb-1">
+                {approvalSteps.map((step, i) => (
+                  <ChainStep key={step.id} step={step} isLast={i === approvalSteps.length - 1} />
+                ))}
+              </div>
+            </Card>
+          )}
+
+          {/* Version history (collapses when a form has only one version) */}
+          <VersionHistory versions={instance.versions} currentVersion={instance.current_version} />
+
+      {/* Action panel (still inside the right column) */}
       {isPending && myStep && (
         <Card>
           <CardHeader
@@ -539,14 +560,19 @@ export default function ApprovalAction() {
         </Card>
       )}
 
-      {/* No active step — view only */}
-      {!isPending && (
-        <div className="text-center py-8 bg-card rounded-xl border border-border">
-          <p className="text-sm text-muted-foreground">
-            This form is <strong className="text-foreground">{instance.current_status}</strong> — no action required.
-          </p>
-        </div>
-      )}
+          {/* No active step — view only. Lives inside the right column
+              so it appears in the same place as the decision panel
+              would have, just with a different message. */}
+          {!isPending && (
+            <div className="text-center py-8 bg-card rounded-xl border border-border">
+              <p className="text-sm text-muted-foreground">
+                This form is <strong className="text-foreground">{instance.current_status}</strong> — no action required.
+              </p>
+            </div>
+          )}
+
+        </div>{/* /right column */}
+      </div>{/* /two-column grid */}
     </div>
   )
 }
