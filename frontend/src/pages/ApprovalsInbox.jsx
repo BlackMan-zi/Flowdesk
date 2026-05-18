@@ -179,7 +179,7 @@ export default function ApprovalsInbox({ initialTab = 'pending' }) {
   const clearHistoryFilters = () => { setHAction(''); setHDateFrom(''); setHDateTo('') }
 
   return (
-    <div className="max-w-3xl space-y-5">
+    <div className="max-w-7xl space-y-5">
 
       {/* Header */}
       <div className="flex items-center justify-between">

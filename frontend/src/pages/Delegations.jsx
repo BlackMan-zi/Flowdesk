@@ -116,7 +116,7 @@ export default function Delegations() {
   ]
 
   return (
-    <div className="max-w-4xl space-y-5">
+    <div className="max-w-7xl space-y-5">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-foreground flex items-center gap-2">

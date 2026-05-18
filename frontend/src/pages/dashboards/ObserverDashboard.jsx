@@ -42,7 +42,7 @@ export default function ObserverDashboard() {
   }
 
   return (
-    <div className="max-w-3xl space-y-5">
+    <div className="max-w-7xl space-y-5">
       <div>
         <h1 className="text-xl font-bold text-foreground">Document Library</h1>
         <p className="text-sm text-muted-foreground mt-0.5">Completed and approved forms available to you.</p>

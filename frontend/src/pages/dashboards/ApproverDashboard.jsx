@@ -108,7 +108,7 @@ export default function ApproverDashboard() {
   ]
 
   return (
-    <div className="max-w-3xl space-y-5">
+    <div className="max-w-7xl space-y-5">
 
       {/* Header */}
       <div>

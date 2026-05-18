@@ -155,7 +155,7 @@ export default function InitiatorDashboard() {
   const firstName = user?.name?.split(' ')[0] || 'there'
 
   return (
-    <div className="max-w-3xl space-y-5">
+    <div className="max-w-7xl space-y-5">
 
       {/* Welcome */}
       <div className="flex items-start justify-between gap-4">

@@ -355,9 +355,9 @@ export default function FormDetail() {
   }
 
   return (
-    <div className="max-w-2xl space-y-4">
+    <div className="max-w-7xl space-y-4">
 
-      {/* Header */}
+      {/* Header — full width across the layout */}
       <div className="flex items-center gap-3">
         <button
           onClick={() => navigate(-1)}
@@ -415,7 +415,7 @@ export default function FormDetail() {
         </div>
       </div>
 
-      {/* Returned alert */}
+      {/* Returned alert (full-width — needs the user's attention before anything else) */}
       {canResubmit && (
         <div className="bg-orange-50 border border-orange-200 rounded-2xl px-5 py-4 flex items-start gap-3">
           <AlertCircle size={18} className="text-orange-500 flex-shrink-0 mt-0.5" />
@@ -429,13 +429,14 @@ export default function FormDetail() {
         </div>
       )}
 
-      {/* Approval progress bar */}
-      {approvalSteps.length > 0 && (
-        <ApprovalProgressBar steps={approvalSteps} />
-      )}
+      {/* Two-column layout on wide screens: form document + attachments on
+          the left, workflow chrome (progress, version history, chain,
+          actions, admin overrides) pinned to a sticky right column. Stacks
+          vertically on narrow screens. */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 lg:items-start">
 
-      {/* Version history (only renders when there's more than one version) */}
-      <VersionHistory versions={instance.versions} currentVersion={instance.current_version} />
+        {/* Left column (2/3) — the document being reviewed */}
+        <div className="lg:col-span-2 space-y-4 min-w-0">
 
       {/* Form data (WYSIWYG, read-only) */}
       {effectiveFormDef ? (
@@ -471,6 +472,22 @@ export default function FormDetail() {
           <p className="px-6 py-8 text-sm text-slate-400 text-center">Loading form layout…</p>
         </Card>
       )}
+
+        </div>{/* /left column */}
+
+        {/* Right column (1/3) — sticky workflow chrome: progress bar,
+            version history, the detailed approval chain, action buttons,
+            admin overrides, attachments. The user can always see the
+            workflow state while scrolling through a long form. */}
+        <div className="lg:col-span-1 space-y-4 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
+
+      {/* Approval progress bar */}
+      {approvalSteps.length > 0 && (
+        <ApprovalProgressBar steps={approvalSteps} />
+      )}
+
+      {/* Version history (only renders when there's more than one version) */}
+      <VersionHistory versions={instance.versions} currentVersion={instance.current_version} />
 
       {/* Attachments uploaded with this submission */}
       {(instance.attachments?.length || 0) > 0 && (
@@ -621,6 +638,9 @@ export default function FormDetail() {
           </div>
         </div>
       )}
+
+        </div>{/* /right column */}
+      </div>{/* /two-column grid */}
 
       {/* Admin action modal */}
       <Modal

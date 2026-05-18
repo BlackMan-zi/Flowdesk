@@ -45,7 +45,7 @@ export default function HodDashboard() {
     .slice(0, 5)
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="max-w-7xl space-y-6">
 
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
