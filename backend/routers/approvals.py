@@ -362,13 +362,17 @@ def approve(
         db, ap, current_user, payload.notes, sig_id, signed_at=payload.signed_at
     )
 
-    # Audit-log inside the request transaction so the action is visible
-    # immediately in /logs even if the post-approval work below fails.
-    audit_service.log_event(
-        db, current_user.organization_id, "STEP_APPROVED",
-        user_id=current_user.id, entity_type="ApprovalInstance", entity_id=ap.id,
-        details={"form_instance_id": form_instance_id, "all_done": all_done}
-    )
+    # Everything past this point is best-effort — approve_step has already
+    # committed. Any failure below is logged but never bubbles up as a 500
+    # because the user already saw the action take effect.
+    try:
+        audit_service.log_event(
+            db, current_user.organization_id, "STEP_APPROVED",
+            user_id=current_user.id, entity_type="ApprovalInstance", entity_id=ap.id,
+            details={"form_instance_id": form_instance_id, "all_done": all_done}
+        )
+    except Exception as e:
+        logger.exception("[APPROVE] audit log failed: %s", e)
 
     # Heavy post-approval work (PDF generation, document shares, emails) was
     # previously inline — WeasyPrint + SMTP can easily take 20-60s, which
@@ -376,25 +380,28 @@ def approve(
     # completes later" UX. Move it to a background task: the response goes
     # out the moment the approval row is committed, and the slow work runs
     # against a fresh session afterward.
-    if all_done:
-        background_tasks.add_task(
-            _finalize_completed_form,
-            form_instance_id,
-            current_user.organization_id,
-            current_user.id,
-        )
-    else:
-        next_step = db.query(ApprovalInstance).filter(
-            ApprovalInstance.form_version_id == ap.form_version_id,
-            ApprovalInstance.status == ApprovalStepStatus.active
-        ).first()
-        background_tasks.add_task(
-            _notify_next_approver,
-            form_instance_id,
-            current_user.organization_id,
-            next_step.approver_user_id if next_step else None,
-            current_user.id,
-        )
+    try:
+        if all_done:
+            background_tasks.add_task(
+                _finalize_completed_form,
+                form_instance_id,
+                current_user.organization_id,
+                current_user.id,
+            )
+        else:
+            next_step = db.query(ApprovalInstance).filter(
+                ApprovalInstance.form_version_id == ap.form_version_id,
+                ApprovalInstance.status == ApprovalStepStatus.active
+            ).first()
+            background_tasks.add_task(
+                _notify_next_approver,
+                form_instance_id,
+                current_user.organization_id,
+                next_step.approver_user_id if next_step else None,
+                current_user.id,
+            )
+    except Exception as e:
+        logger.exception("[APPROVE] background task scheduling failed: %s", e)
 
     return {"message": "Step approved", "all_approvals_complete": all_done}
 
@@ -459,24 +466,42 @@ def reject(
         db, ap, current_user, payload.notes, signed_at=payload.signed_at
     )
 
-    audit_service.log_event(
-        db, current_user.organization_id, "FORM_REJECTED",
-        user_id=current_user.id, entity_type="ApprovalInstance", entity_id=ap.id
-    )
+    # Everything past this point is best-effort — reject_step already
+    # committed. We snapshot the data we need BEFORE the audit-log commit
+    # so any SA expiry / refresh failure doesn't take down the email.
+    try:
+        snapshot = {
+            "creator_email": instance.creator.email if instance.creator else None,
+            "creator_name":  instance.creator.name  if instance.creator else "—",
+            "form_name":     instance.form_definition.name if instance.form_definition else "Form",
+            "reference":     instance.reference_number,
+        }
+    except Exception as e:
+        logger.exception("[REJECT] snapshot read failed: %s", e)
+        snapshot = {"creator_email": None, "creator_name": "—", "form_name": "Form", "reference": ""}
 
-    # Email goes via BackgroundTasks for the same reason as approve: SMTP
-    # latency was bouncing rejection / send-back through the nginx gateway
-    # timeout, surfacing as a 500 even though the form was already rejected.
-    background_tasks.add_task(
-        _send_rejection_notice,
-        instance.creator.email if instance.creator else None,
-        instance.creator.name if instance.creator else "—",
-        instance.form_definition.name if instance.form_definition else "Form",
-        instance.reference_number,
-        current_user.name,
-        payload.notes,
-        instance.id,
-    )
+    try:
+        audit_service.log_event(
+            db, current_user.organization_id, "FORM_REJECTED",
+            user_id=current_user.id, entity_type="ApprovalInstance", entity_id=ap.id
+        )
+    except Exception as e:
+        logger.exception("[REJECT] audit log failed: %s", e)
+
+    try:
+        background_tasks.add_task(
+            _send_rejection_notice,
+            snapshot["creator_email"],
+            snapshot["creator_name"],
+            snapshot["form_name"],
+            snapshot["reference"],
+            current_user.name,
+            payload.notes,
+            form_instance_id,
+        )
+    except Exception as e:
+        logger.exception("[REJECT] email scheduling failed: %s", e)
+
     return {"message": "Form rejected"}
 
 
@@ -496,39 +521,60 @@ def send_back(
         db, ap, current_user, payload.notes, signed_at=payload.signed_at
     )
 
-    # Create new version (so initiator has a fresh draft to edit against).
-    # Wrapped so a failure here doesn't undo the send-back the user just saw
-    # take effect — the form is already in Returned-for-Correction state.
+    # Everything past this point is best-effort: send_back_step has already
+    # committed the form into Returned-for-Correction state. Any failure
+    # below logs server-side but does NOT surface as a 500 — the user saw
+    # the action take effect and shouldn't be told it failed.
+    new_version_created = False
     try:
         from services.form_service import create_new_version_on_correction
         create_new_version_on_correction(db, instance, current_user, payload.notes)
+        new_version_created = True
     except Exception as e:
-        logger.exception("[SEND-BACK] create_new_version failed: %s", e)
-        raise HTTPException(
-            status_code=500,
-            detail="Form was sent back but a new draft version could not be created."
+        logger.exception("[SEND-BACK] create_new_version failed for %s: %s", form_instance_id, e)
+
+    # Snapshot the values BEFORE the audit-log commit refresh — once
+    # log_event commits, the instance's relationship attributes get
+    # expired and any subsequent access re-queries the DB. Extracting now
+    # also means a transient SA error in audit-log won't take down the
+    # email scheduling.
+    try:
+        snapshot = {
+            "creator_email": instance.creator.email if instance.creator else None,
+            "creator_name":  instance.creator.name  if instance.creator else "—",
+            "form_name":     instance.form_definition.name if instance.form_definition else "Form",
+            "reference":     instance.reference_number,
+        }
+    except Exception as e:
+        logger.exception("[SEND-BACK] snapshot read failed: %s", e)
+        snapshot = {"creator_email": None, "creator_name": "—", "form_name": "Form", "reference": ""}
+
+    try:
+        audit_service.log_event(
+            db, current_user.organization_id, "FORM_SENT_BACK",
+            user_id=current_user.id, entity_type="ApprovalInstance", entity_id=ap.id
         )
+    except Exception as e:
+        logger.exception("[SEND-BACK] audit log failed: %s", e)
 
-    audit_service.log_event(
-        db, current_user.organization_id, "FORM_SENT_BACK",
-        user_id=current_user.id, entity_type="ApprovalInstance", entity_id=ap.id
-    )
+    try:
+        background_tasks.add_task(
+            _send_sent_back_notice,
+            snapshot["creator_email"],
+            snapshot["creator_name"],
+            snapshot["form_name"],
+            snapshot["reference"],
+            current_user.name,
+            payload.notes,
+            form_instance_id,
+        )
+    except Exception as e:
+        logger.exception("[SEND-BACK] email scheduling failed: %s", e)
 
-    # Email goes via BackgroundTasks: previously synchronous SMTP was the
-    # likely source of the 500 the user saw on send-back (the action itself
-    # had already committed). Now the response returns the moment the new
-    # version is created.
-    background_tasks.add_task(
-        _send_sent_back_notice,
-        instance.creator.email if instance.creator else None,
-        instance.creator.name if instance.creator else "—",
-        instance.form_definition.name if instance.form_definition else "Form",
-        instance.reference_number,
-        current_user.name,
-        payload.notes,
-        instance.id,
-    )
-    return {"message": "Form sent back for correction"}
+    return {
+        "message": "Form sent back for correction",
+        "new_version_created": new_version_created,
+    }
 
 
 # ── Admin override actions ────────────────────────────────────────────────────
