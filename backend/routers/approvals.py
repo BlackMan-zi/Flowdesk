@@ -10,6 +10,7 @@ from models.user import User, RoleName, UserRole
 from models.form import FormInstance, FormVersion, FormStatus, FormFieldValue
 from models.approval import ApprovalInstance, ApprovalStepStatus, ApprovalTemplateCCRecipient, RoleType
 from models.document import Signature, SignatureType, DocumentShare
+from models.organization import Organization
 from schemas.approval import ApprovalActionRequest, ApprovalInstanceResponse
 from core.security import get_current_active_user
 from services import approval_service, audit_service, document_service
@@ -45,7 +46,10 @@ def _finalize_completed_form(form_instance_id: str, organization_id: str, finish
         # 3. Legacy ReportLab table-style PDF (last-resort fallback)
         from services.pdf_overlay_service import generate_pdf_with_overlay
         from services.pdf_service import generate_form_pdf
-        org_name = instance.organization.name if instance.organization else "FlowDesk"
+        # FormInstance has no `organization` relationship — query the
+        # Organization explicitly (same pattern as pdf_service.generate_form_pdf).
+        org = db.query(Organization).filter(Organization.id == instance.organization_id).first()
+        org_name = org.name if org else "FlowDesk"
 
         # Force-load relationships the renderers walk.
         _ = instance.creator

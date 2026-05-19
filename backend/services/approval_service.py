@@ -195,14 +195,17 @@ def approve_step(
 ) -> bool:
     """Approve the current step; activate next. Returns True if all done.
 
-    Auto-cascades: if the next waiting step resolves to the SAME approver
-    (e.g. the same user holds Manager + SN Manager + HOD, or delegation has
-    routed multiple roles to one person), it is auto-approved with the same
-    signature/notes/signed_at — the approver signs once, the audit trail
-    still records each role's row. Cascade stops at the first step whose
-    approver differs.
+    Auto-cascades only when the next waiting step shares BOTH the acting
+    approver AND the same delegated_from context — i.e. the same person is
+    fulfilling the same underlying responsibility (e.g. one user is both
+    Manager and SN Manager, or two roles were delegated from the same
+    person). The cascade stops as soon as either field diverges: signing
+    one's own step never auto-signs a step that was delegated to you from
+    someone else (and vice-versa), because those represent distinct
+    reviewer responsibilities that the delegate must act on explicitly.
     """
     approver_id = approval_instance.approver_user_id
+    delegated_from_id = approval_instance.delegated_from_user_id
     cascade_signed_at = signed_at or datetime.utcnow()
 
     approval_instance.status = ApprovalStepStatus.approved
@@ -222,9 +225,11 @@ def approve_step(
         if not next_step:
             break
 
-        # If the next step is for the same user, cascade-approve it; otherwise
-        # activate it and hand control back to that user.
-        if approver_id and next_step.approver_user_id == approver_id:
+        # Cascade only when the next step shares the same (approver, delegated_from)
+        # tuple — same person AND same ownership context.
+        same_actor = approver_id and next_step.approver_user_id == approver_id
+        same_origin = next_step.delegated_from_user_id == delegated_from_id
+        if same_actor and same_origin:
             next_step.status = ApprovalStepStatus.approved
             next_step.signed_at = cascade_signed_at
             next_step.notes = notes

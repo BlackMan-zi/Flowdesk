@@ -7,6 +7,7 @@ from models.user import User, RoleName
 from models.document import GeneratedDocument, DocumentShare
 from models.form import FormInstance, FormStatus, FormVersion
 from models.approval import ApprovalInstance, ApprovalStepStatus
+from models.organization import Organization
 from core.security import get_current_active_user
 import os
 
@@ -63,7 +64,8 @@ def download_document(
     try:
         from services.pdf_overlay_service import generate_pdf_with_overlay
         from services.pdf_service import generate_form_pdf
-        org_name = instance.organization.name if hasattr(instance, "organization") and instance.organization else "FlowDesk"
+        org = db.query(Organization).filter(Organization.id == instance.organization_id).first()
+        org_name = org.name if org else "FlowDesk"
         pdf_bytes = generate_pdf_with_overlay(db, instance, org_name) or generate_form_pdf(db, instance)
         if pdf_bytes:
             return Response(
