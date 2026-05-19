@@ -193,27 +193,51 @@ def approve_step(
     signature_id: Optional[str] = None,
     signed_at: Optional[datetime] = None,
 ) -> bool:
-    """Approve the current step; activate next. Returns True if all done."""
+    """Approve the current step; activate next. Returns True if all done.
+
+    Auto-cascades: if the next waiting step resolves to the SAME approver
+    (e.g. the same user holds Manager + SN Manager + HOD, or delegation has
+    routed multiple roles to one person), it is auto-approved with the same
+    signature/notes/signed_at — the approver signs once, the audit trail
+    still records each role's row. Cascade stops at the first step whose
+    approver differs.
+    """
+    approver_id = approval_instance.approver_user_id
+    cascade_signed_at = signed_at or datetime.utcnow()
+
     approval_instance.status = ApprovalStepStatus.approved
-    approval_instance.signed_at = signed_at or datetime.utcnow()
+    approval_instance.signed_at = cascade_signed_at
     approval_instance.notes = notes
     if signature_id:
         approval_instance.signature_id = signature_id
 
     db.flush()
 
-    # Activate next waiting step
-    next_step = db.query(ApprovalInstance).filter(
-        ApprovalInstance.form_version_id == approval_instance.form_version_id,
-        ApprovalInstance.status == ApprovalStepStatus.waiting
-    ).order_by(ApprovalInstance.step_order).first()
+    while True:
+        next_step = db.query(ApprovalInstance).filter(
+            ApprovalInstance.form_version_id == approval_instance.form_version_id,
+            ApprovalInstance.status == ApprovalStepStatus.waiting
+        ).order_by(ApprovalInstance.step_order).first()
 
-    if next_step:
+        if not next_step:
+            break
+
+        # If the next step is for the same user, cascade-approve it; otherwise
+        # activate it and hand control back to that user.
+        if approver_id and next_step.approver_user_id == approver_id:
+            next_step.status = ApprovalStepStatus.approved
+            next_step.signed_at = cascade_signed_at
+            next_step.notes = notes
+            if signature_id:
+                next_step.signature_id = signature_id
+            db.flush()
+            continue
+
         next_step.status = ApprovalStepStatus.active
         db.commit()
-        return False  # Not fully done yet
+        return False
 
-    # All steps approved — mark form completed
+    # No more waiting steps — mark form completed.
     form_version = db.query(FormVersion).filter(
         FormVersion.id == approval_instance.form_version_id
     ).first()
@@ -223,7 +247,7 @@ def approve_step(
         form_instance.completed_at = datetime.utcnow()
 
     db.commit()
-    return True  # All approvals done
+    return True
 
 
 def reject_step(

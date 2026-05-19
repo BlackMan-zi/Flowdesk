@@ -35,6 +35,9 @@ from routers.delegations import router as delegations_router
 from routers.documents import router as documents_router
 from routers.dashboard import router as dashboard_router
 from routers.settings import router as settings_router
+from routers.backup import router as backup_router
+
+from services import scheduler as backup_scheduler
 
 from config import settings
 
@@ -98,6 +101,9 @@ async def lifespan(app: FastAPI):
     os.makedirs(os.path.join(settings.MEDIA_DIR, "signatures"), exist_ok=True)
     os.makedirs(os.path.join(settings.MEDIA_DIR, "pdf_templates"), exist_ok=True)
     os.makedirs(os.path.join(settings.MEDIA_DIR, "branding"), exist_ok=True)
+    os.makedirs(os.path.join(settings.MEDIA_DIR, "backups"), exist_ok=True)
+
+    sched = backup_scheduler.start()
 
     logger.info(f"FlowDesk API started ({settings.ENVIRONMENT} mode)")
     logger.info(f"Database: {settings.DATABASE_URL.split('@')[-1]}")
@@ -105,6 +111,7 @@ async def lifespan(app: FastAPI):
 
     yield
 
+    sched.shutdown(wait=False)
     logger.info("FlowDesk API shutting down")
 
 
@@ -171,6 +178,7 @@ app.include_router(delegations_router)
 app.include_router(documents_router)
 app.include_router(dashboard_router)
 app.include_router(settings_router)
+app.include_router(backup_router)
 
 # frontend/dist is at repo root level, one level up from backend/
 frontend_dist = os.path.join(REPO_ROOT, "frontend", "dist")

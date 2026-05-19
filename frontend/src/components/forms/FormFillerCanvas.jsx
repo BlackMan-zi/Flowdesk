@@ -394,6 +394,7 @@ function FieldCell({
   user, classification, approvalSteps, users, roles,
   referenceNumber, initiatorSignatureData, initiatorSignedAt,
   formDef, accent, disabled,
+  hasAttachments,
 }) {
   const t = uiType(field)
   const required = field.required && !disabled
@@ -626,6 +627,13 @@ function FieldCell({
   }
   if (t === 'file') {
     const list = files?.[field.id] || []
+    // View mode: if the form has zero attachments, hide the entire placed
+    // file field — label and all. Renders the field only when there's
+    // something to point at, so the "Attachment:" header doesn't appear
+    // above an empty placeholder.
+    if (disabled && list.length === 0 && !hasAttachments) {
+      return null
+    }
     return (
       <div className="px-2 py-1">
         {labelEl}
@@ -685,6 +693,7 @@ function SectionBlock({
   section, fields, accent, formDef, classification, approvalSteps, users, roles, user,
   fieldValues, onFieldChange, pendingFiles, onFilesChange, referenceNumber, disabled,
   initiatorSignatureData, initiatorSignedAt,
+  hasAttachments,
   layout = 'grid',
 }) {
   if (!fields.length) return null
@@ -729,6 +738,7 @@ function SectionBlock({
                 formDef={formDef}
                 accent={accent}
                 disabled={disabled}
+                hasAttachments={hasAttachments}
               />
             </div>
           )
@@ -988,6 +998,7 @@ export default function FormFillerCanvas({
             formDef={formDef}
             accent={accent}
             disabled={disabled}
+            hasAttachments={attachments?.length > 0}
           />
         ))}
 
@@ -1026,6 +1037,7 @@ export default function FormFillerCanvas({
                   initiatorSignatureData={initiatorSignatureData}
                   initiatorSignedAt={initiatorSignedAt}
                   disabled={disabled}
+                  hasAttachments={attachments?.length > 0}
                   layout={sectionLayouts[s] || 'grid'}
                 />
               </div>

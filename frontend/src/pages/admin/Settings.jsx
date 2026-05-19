@@ -7,6 +7,9 @@ import {
   deleteHeaderImage, deleteFooterImage,
   fetchHeaderImageObjectUrl, fetchFooterImageObjectUrl,
 } from '../../api/settings'
+import {
+  listBackups, createBackup, downloadBackup, deleteBackup,
+} from '../../api/backup'
 import { Card, CardContent } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
@@ -16,6 +19,7 @@ import { cn } from '../../lib/utils'
 import {
   Upload, Trash2, Image as ImageIcon, Building2, Palette, Shield,
   Plus, X, Save, AlertCircle, Check, Eye,
+  Database, Download, RefreshCw, Clock,
 } from 'lucide-react'
 import LetterheadPage from '../../components/letterhead/LetterheadPage'
 import SampleFormBody from '../../components/letterhead/SampleFormBody'
@@ -278,6 +282,148 @@ function ClassificationLabelsEditor({ labels, onChange }) {
   )
 }
 
+// ── Database backup card ──────────────────────────────────────────────────────
+
+function formatBytes(n) {
+  if (n == null) return '—'
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+  if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`
+  return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`
+}
+
+function formatWhen(iso) {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return iso
+  return d.toLocaleString()
+}
+
+function DatabaseBackupCard() {
+  const qc = useQueryClient()
+
+  const { data: backups = [], isLoading } = useQuery({
+    queryKey: ['db-backups'],
+    queryFn: () => listBackups().then(r => r.data),
+  })
+
+  const createMut = useMutation({
+    mutationFn: createBackup,
+    onSuccess: () => {
+      toast.success('Snapshot created.')
+      qc.invalidateQueries({ queryKey: ['db-backups'] })
+    },
+    onError: (err) => {
+      toast.error(err?.response?.data?.detail || 'Snapshot failed.')
+    },
+  })
+
+  const deleteMut = useMutation({
+    mutationFn: deleteBackup,
+    onSuccess: () => {
+      toast.success('Snapshot deleted.')
+      qc.invalidateQueries({ queryKey: ['db-backups'] })
+    },
+    onError: (err) => {
+      toast.error(err?.response?.data?.detail || 'Delete failed.')
+    },
+  })
+
+  const handleDownload = async (filename) => {
+    try {
+      await downloadBackup(filename)
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || 'Download failed.')
+    }
+  }
+
+  return (
+    <Card>
+      <CardContent className="p-5 space-y-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <Database size={14} className="text-muted-foreground" />
+              Database Backup
+            </h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Take a full snapshot of the database as a single Excel workbook
+              (one sheet per table). Snapshots also run automatically every day at <strong>00:00</strong>.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            onClick={() => createMut.mutate()}
+            disabled={createMut.isPending}
+          >
+            <RefreshCw size={13} className={cn('mr-1.5', createMut.isPending && 'animate-spin')} />
+            {createMut.isPending ? 'Snapshotting…' : 'Create snapshot'}
+          </Button>
+        </div>
+
+        <div className="flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-500/10 border border-emerald-500/20 rounded-md px-2 py-1.5 w-fit">
+          <Clock size={12} />
+          Automatic nightly backup scheduled — runs every day at 00:00 server time.
+        </div>
+
+        {isLoading ? (
+          <div className="h-16 bg-muted rounded animate-pulse" />
+        ) : backups.length === 0 ? (
+          <p className="text-xs text-muted-foreground italic py-4 text-center">
+            No snapshots yet. Click "Create snapshot" or wait for tonight's automatic run.
+          </p>
+        ) : (
+          <div className="border border-border rounded-md overflow-hidden">
+            <table className="w-full text-xs">
+              <thead className="bg-muted/40 text-left">
+                <tr>
+                  <th className="px-3 py-2 font-medium">Filename</th>
+                  <th className="px-3 py-2 font-medium">Created</th>
+                  <th className="px-3 py-2 font-medium">Size</th>
+                  <th className="px-3 py-2 font-medium text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {backups.map(b => (
+                  <tr key={b.filename} className="border-t border-border">
+                    <td className="px-3 py-2 font-mono truncate max-w-[260px]">{b.filename}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{formatWhen(b.created_at)}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{formatBytes(b.file_size)}</td>
+                    <td className="px-3 py-2 text-right whitespace-nowrap">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleDownload(b.filename)}
+                      >
+                        <Download size={12} className="mr-1" />
+                        Download
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-red-600 hover:text-red-700"
+                        onClick={() => {
+                          if (confirm(`Delete snapshot "${b.filename}"? This cannot be undone.`)) {
+                            deleteMut.mutate(b.filename)
+                          }
+                        }}
+                        disabled={deleteMut.isPending}
+                      >
+                        <Trash2 size={12} className="mr-1" />
+                        Delete
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function Settings() {
@@ -483,6 +629,8 @@ export default function Settings() {
       </Card>
 
       <ClassificationLabelsEditor labels={labels} onChange={setLabels} />
+
+      <DatabaseBackupCard />
 
       {/* Letterhead preview — shows what every generated form will look like
           inside the org letterhead frame. Reused later by the fill page

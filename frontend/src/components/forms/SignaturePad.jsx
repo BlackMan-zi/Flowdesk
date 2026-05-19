@@ -167,13 +167,13 @@ export default function SignaturePad({ value, onChange, label, required, disable
         <div className="border border-dashed border-slate-300 rounded bg-white">
           <canvas
             ref={canvasRef}
-            width={400}
-            height={80}
+            width={600}
+            height={140}
             onPointerDown={startDraw}
             onPointerMove={moveDraw}
             onPointerUp={endDraw}
             onPointerLeave={endDraw}
-            className="w-full h-[80px] touch-none cursor-crosshair"
+            className="w-full h-[140px] touch-none cursor-crosshair"
           />
         </div>
       )}
