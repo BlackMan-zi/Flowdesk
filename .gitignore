@@ -1,6 +1,10 @@
 # Claude settings
 .claude/
 
+# Per-machine Docker overrides — server uses committed compose as-is.
+docker-compose.override.yml
+docker-compose.override.yaml
+
 # Python
 __pycache__/
 *.py[cod]
