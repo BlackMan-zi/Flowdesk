@@ -17,7 +17,7 @@ services:
     expose:
       - "5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - flowdesk_pgdata:/var/lib/postgresql/data
       - ./database/init:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
@@ -35,12 +35,12 @@ services:
     expose:
       - "8000"
     env_file:
-      - .env.production
+      - .env
     depends_on:
       db:
         condition: service_healthy
     volumes:
-      - media_data:/app/media
+      - flowdesk_media:/app/media
 
   # ── Nginx + Frontend ────────────────────────────────────────
   # Multi-stage build: compiles React frontend, serves via nginx
@@ -57,8 +57,8 @@ services:
       - api
 
 volumes:
-  postgres_data:
-  media_data:
+  flowdesk_pgdata:
+  flowdesk_media:
 
 # All containers join bsc_network so the outer proxy can reach them
 networks:
