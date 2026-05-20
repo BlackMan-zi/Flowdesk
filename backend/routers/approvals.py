@@ -18,6 +18,22 @@ from services.email_service import (
     send_approval_request_email, send_step_approved_email,
     send_rejection_email, send_sent_back_email, send_completion_email
 )
+from services.event_bus import bus as event_bus
+
+
+def _publish_workflow(org_id: str, action: str, form_instance_id: str, actor_id: str) -> None:
+    """Fire a workflow.changed event so every open browser in the org
+    refetches the affected queries. Best-effort — failures here never
+    fail the request."""
+    try:
+        event_bus.publish(org_id, {
+            "type": "workflow.changed",
+            "action": action,
+            "form_instance_id": form_instance_id,
+            "actor_id": actor_id,
+        })
+    except Exception as e:
+        logger.warning("[EVENT] publish failed: %s", e)
 
 
 def _finalize_completed_form(form_instance_id: str, organization_id: str, finisher_user_id: str) -> None:
@@ -407,6 +423,13 @@ def approve(
     except Exception as e:
         logger.exception("[APPROVE] background task scheduling failed: %s", e)
 
+    _publish_workflow(
+        current_user.organization_id,
+        "completed" if all_done else "approved",
+        form_instance_id,
+        current_user.id,
+    )
+
     return {"message": "Step approved", "all_approvals_complete": all_done}
 
 
@@ -506,6 +529,8 @@ def reject(
     except Exception as e:
         logger.exception("[REJECT] email scheduling failed: %s", e)
 
+    _publish_workflow(current_user.organization_id, "rejected", form_instance_id, current_user.id)
+
     return {"message": "Form rejected"}
 
 
@@ -574,6 +599,8 @@ def send_back(
         )
     except Exception as e:
         logger.exception("[SEND-BACK] email scheduling failed: %s", e)
+
+    _publish_workflow(current_user.organization_id, "sent_back", form_instance_id, current_user.id)
 
     return {
         "message": "Form sent back for correction",
@@ -644,6 +671,8 @@ def admin_cancel(
     except Exception as e:
         print(f"[EMAIL WARNING] {e}")
 
+    _publish_workflow(current_user.organization_id, "admin_cancelled", form_instance_id, current_user.id)
+
     return {"message": "Form cancelled by administrator"}
 
 
@@ -704,6 +733,8 @@ def admin_send_back(
         )
     except Exception as e:
         print(f"[EMAIL WARNING] {e}")
+
+    _publish_workflow(current_user.organization_id, "admin_sent_back", form_instance_id, current_user.id)
 
     return {"message": "Form returned to initiator for correction"}
 
@@ -770,6 +801,8 @@ def reassign_step(
         )
     except Exception as e:
         print(f"[EMAIL WARNING] {e}")
+
+    _publish_workflow(current_user.organization_id, "reassigned", form_instance_id, current_user.id)
 
     return {"message": "Step reassigned", "new_approver": new_approver.name}
 

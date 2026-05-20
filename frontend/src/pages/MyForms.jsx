@@ -263,12 +263,9 @@ export default function MyForms() {
       dateFrom: dateFrom || undefined,
       dateTo:   dateTo   || undefined,
     }).then(r => r.data),
-    // Near-realtime: poll every second so newly-submitted / sent-back /
-    // completed forms appear without F5. `refetchIntervalInBackground:
-    // false` pauses the polling when the tab is hidden so we don't burn
-    // bandwidth on a backgrounded tab.
-    refetchInterval: 1_000,
-    refetchIntervalInBackground: false,
+    // Refetched via the SSE realtime channel (RealtimeContext) on every
+    // workflow event. Window-focus + always-on-mount cover any missed
+    // events while a tab was backgrounded.
     refetchOnMount: 'always',
     refetchOnWindowFocus: true,
     staleTime: 0,

@@ -25,10 +25,25 @@ from core.security import get_current_active_user
 from core.permissions import require_roles
 from services import form_service, approval_service, audit_service
 from services.email_service import send_approval_request_email
-import os, shutil
+from services.event_bus import bus as event_bus
+import os, shutil, logging
 from config import settings
 
 router = APIRouter(prefix="/forms", tags=["Forms"])
+logger = logging.getLogger(__name__)
+
+
+def _publish_workflow(org_id: str, action: str, form_instance_id: str, actor_id: str) -> None:
+    """Fire-and-forget workflow event for SSE subscribers."""
+    try:
+        event_bus.publish(org_id, {
+            "type": "workflow.changed",
+            "action": action,
+            "form_instance_id": form_instance_id,
+            "actor_id": actor_id,
+        })
+    except Exception as e:
+        logger.warning("[EVENT] publish failed: %s", e)
 
 
 # ── FORM DEFINITIONS ──────────────────────────────────────────────────────────
@@ -815,6 +830,7 @@ def submit_form_instance(
         db, current_user.organization_id, "FORM_SUBMITTED",
         user_id=current_user.id, entity_type="FormInstance", entity_id=instance.id
     )
+    _publish_workflow(current_user.organization_id, "submitted", instance.id, current_user.id)
     return {"message": "Form submitted successfully", "status": instance.current_status}
 
 
@@ -892,6 +908,7 @@ def resubmit_form_instance(
         user_id=current_user.id, entity_type="FormInstance", entity_id=instance.id,
         details={"new_version": instance.current_version}
     )
+    _publish_workflow(current_user.organization_id, "resubmitted", instance.id, current_user.id)
     return {"message": "Form resubmitted", "version": instance.current_version}
 
 

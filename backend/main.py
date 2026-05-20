@@ -36,6 +36,7 @@ from routers.documents import router as documents_router
 from routers.dashboard import router as dashboard_router
 from routers.settings import router as settings_router
 from routers.backup import router as backup_router
+from routers.events import router as events_router
 
 from services import scheduler as backup_scheduler
 
@@ -179,6 +180,7 @@ app.include_router(documents_router)
 app.include_router(dashboard_router)
 app.include_router(settings_router)
 app.include_router(backup_router)
+app.include_router(events_router)
 
 # frontend/dist is at repo root level, one level up from backend/
 frontend_dist = os.path.join(REPO_ROOT, "frontend", "dist")
