@@ -78,10 +78,14 @@ function AppRoutes() {
   )
 }
 
+// Match the Vite base path (/flowdesk/ in Docker, / in dev) so the router's
+// routes and navigation live under the same prefix the app is served from.
+const ROUTER_BASENAME = (import.meta.env.BASE_URL || '/').replace(/\/$/, '') || '/'
+
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
+      <BrowserRouter basename={ROUTER_BASENAME}>
         <AppRoutes />
       </BrowserRouter>
     </AuthProvider>
