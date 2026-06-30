@@ -5,7 +5,7 @@ from datetime import datetime
 
 class OrganizationCreate(BaseModel):
     name: str
-    subdomain: str
+    email_domain: Optional[str] = None
     subscription_plan: str = "starter"
 
 
@@ -18,7 +18,7 @@ class OrganizationUpdate(BaseModel):
 class OrganizationResponse(BaseModel):
     id: str
     name: str
-    subdomain: str
+    email_domain: Optional[str] = None
     subscription_plan: str
     is_active: bool
     created_at: datetime

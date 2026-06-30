@@ -24,6 +24,20 @@ def _ensure_email_domain_column(db: Session) -> None:
         db.rollback()  # column already exists or unsupported syntax — ignore
 
 
+def _drop_subdomain_column(db: Session) -> None:
+    """Drop the legacy subdomain column. FlowDesk is single-tenant per
+    deployment now (each org self-hosts), so tenant resolution is by
+    email_domain only. The old column was NOT NULL and would block new
+    org inserts once the model stopped mapping it."""
+    try:
+        db.execute(text(
+            "ALTER TABLE organizations DROP COLUMN IF EXISTS subdomain"
+        ))
+        db.commit()
+    except Exception:
+        db.rollback()  # already dropped or unsupported syntax — ignore
+
+
 def _backfill_bsc(db: Session) -> None:
     """Set email_domain for the BSC org if it's still NULL."""
     db.execute(text(
@@ -44,6 +58,7 @@ def ensure_system_admin(db: Session) -> None:
         accounts and passwords are never overwritten.
     """
     _ensure_email_domain_column(db)
+    _drop_subdomain_column(db)
     _backfill_bsc(db)
 
     admin_email = (settings.SUPER_ADMIN_EMAIL or _DEFAULT_ADMIN_EMAIL).lower().strip()
@@ -60,7 +75,6 @@ def ensure_system_admin(db: Session) -> None:
         org = Organization(
             id=_FLOWDESK_ORG_ID,
             name="FlowDesk",
-            subdomain="flowdesk",
             email_domain=admin_domain,
             subscription_plan="enterprise",
             is_active=True,

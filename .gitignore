@@ -52,6 +52,16 @@ redis_data/
 uploads/
 generated_pdfs/
 
+# Runtime media / uploaded files (never commit user data)
+media/
+backend/media/
+
+# Stray local artifacts
+settings.json
+image.png
+*.csv
+*.xlsx
+
 # Test / coverage
 .coverage
 htmlcov/

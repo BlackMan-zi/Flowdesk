@@ -22,11 +22,12 @@ def create_organization(
     db: Session = Depends(get_db)
 ):
     """Create a new organization (no auth — used during provisioning)."""
-    existing = db.query(Organization).filter(
-        Organization.subdomain == payload.subdomain
-    ).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="Subdomain already taken")
+    if payload.email_domain:
+        existing = db.query(Organization).filter(
+            Organization.email_domain == payload.email_domain
+        ).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Email domain already taken")
 
     org = Organization(**payload.model_dump())
     db.add(org)
