@@ -19,11 +19,11 @@ def _ensure_email_domain_column(db: Session) -> None:
     try:
         db.execute(text(
             "ALTER TABLE organizations "
-            "ADD COLUMN email_domain VARCHAR(255) UNIQUE NULL"
+            "ADD COLUMN IF NOT EXISTS email_domain VARCHAR(255) UNIQUE"
         ))
         db.commit()
     except Exception:
-        db.rollback()  # column already exists — ignore
+        db.rollback()  # column already exists or unsupported syntax — ignore
 
 
 def _backfill_bsc(db: Session) -> None:
