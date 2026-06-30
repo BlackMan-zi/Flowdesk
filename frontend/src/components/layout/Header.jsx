@@ -1,5 +1,5 @@
 import React from 'react'
-import { Menu, LogOut, User } from 'lucide-react'
+import { Menu, LogOut, User, Settings } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Button } from '../ui/Button'
@@ -95,6 +95,10 @@ export default function Header({ onMenuClick }) {
               </span>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => navigate('/settings')}>
+              <Settings className="mr-2 h-4 w-4" />
+              Settings
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={handleLogout} className="text-destructive focus:text-destructive">
               <LogOut className="mr-2 h-4 w-4" />
               Sign out

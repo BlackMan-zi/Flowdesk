@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { listUsers, createUser, updateUser, deactivateUser, listRoles, listDepartments } from '../../api/users'
+import { listUsers, createUser, updateUser, deactivateUser, resetUserPassword, listRoles, listDepartments } from '../../api/users'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import Card from '../../components/ui/Card'
@@ -10,7 +10,44 @@ import Button from '../../components/ui/Button'
 import Modal from '../../components/ui/Modal'
 import Input, { Select } from '../../components/ui/Input'
 import Spinner from '../../components/ui/Spinner'
-import { Search, X, Users, Plus } from 'lucide-react'
+import { Search, X, Users, Plus, Copy, Check, KeyRound } from 'lucide-react'
+
+// One-time temp-password callout shown after create/reset. This is the only
+// time the plain password is visible — it is never stored or re-displayable.
+function TempPasswordModal({ info, onClose }) {
+  const [copied, setCopied] = useState(false)
+  const copy = () => navigator.clipboard?.writeText(info.temp_password)
+    .then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000) })
+
+  return (
+    <Modal open={!!info} onClose={onClose} title="Temporary password" size="sm">
+      <div className="space-y-4">
+        <p className="text-sm text-muted-foreground">{info.name} · {info.email}</p>
+        <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700 px-4 py-3">
+          <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+            Share this with the user — this is your only chance to see it.
+          </p>
+          <div className="mt-2 flex items-center gap-2">
+            <code className="flex-1 font-mono text-base tracking-wider bg-background border border-border rounded-md px-3 py-2 select-all">
+              {info.temp_password}
+            </code>
+            <Button size="sm" variant="outline" onClick={copy}>
+              {copied ? <><Check size={14} /> Copied</> : <><Copy size={14} /> Copy</>}
+            </Button>
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {info.email_sent
+            ? '✓ Also emailed to the user. They must change it on first login.'
+            : 'Email was not sent — share it directly. They must change it on first login.'}
+        </p>
+        <div className="flex justify-end pt-1">
+          <Button onClick={onClose}>Done</Button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
 
 const EMPTY = {
   name: '', email: '', dept_top_id: '', department_id: '',
@@ -24,6 +61,7 @@ export default function AdminUsers() {
   const [form, setForm]           = useState(EMPTY)
   const [error, setError]         = useState('')
   const [search, setSearch]       = useState('')
+  const [tempPwInfo, setTempPwInfo] = useState(null)
 
   const { data: users = [], isLoading } = useQuery({
     queryKey: ['users'],
@@ -96,16 +134,31 @@ export default function AdminUsers() {
       payload.hod_id        = payload.hod_id        || null
       return editing ? updateUser(editing.id, payload) : createUser(payload)
     },
-    onSuccess: () => {
+    onSuccess: (res) => {
       qc.invalidateQueries(['users'])
       setModalOpen(false)
-      toast.success(editing ? 'User updated.' : 'User created — they will be prompted to set a password on first login.')
+      if (editing) {
+        toast.success('User updated.')
+      } else {
+        // create_user returns the one-time temp password — surface it once.
+        setTempPwInfo(res.data)
+        toast.success('User created.')
+      }
     },
     onError: (err) => {
       const msg = err.response?.data?.detail || 'Save failed.'
       setError(msg)
       toast.error(msg)
     }
+  })
+
+  const resetPwMutation = useMutation({
+    mutationFn: (id) => resetUserPassword(id),
+    onSuccess: (res) => {
+      qc.invalidateQueries(['users'])
+      setTempPwInfo(res.data)
+    },
+    onError: (err) => toast.error(err.response?.data?.detail || 'Failed to reset password.')
   })
 
   const deactivateMutation = useMutation({
@@ -164,6 +217,13 @@ export default function AdminUsers() {
     { key: 'actions', label: '', render: r => (
       <div className="flex gap-1">
         <Button size="sm" variant="ghost" onClick={() => openEdit(r)}>Edit</Button>
+        <Button size="sm" variant="ghost"
+          onClick={() => resetPwMutation.mutate(r.id)}
+          loading={resetPwMutation.isPending && resetPwMutation.variables === r.id}
+          title="Generate a new temporary password"
+        >
+          <KeyRound size={13} /> Reset PW
+        </Button>
         {r.status !== 'Not Active' && (
           <Button size="sm" variant="ghost" onClick={() => deactivateMutation.mutate(r.id)}
             className="text-destructive hover:text-destructive/80"
@@ -320,7 +380,7 @@ export default function AdminUsers() {
 
           {!editing && (
             <div className="bg-primary/10 border border-primary/20 rounded-lg px-3 py-2 text-xs text-primary">
-              Initial password = user's email address. They will be required to change it on first login.
+              A one-time temporary password will be generated and shown to you once after creation. Share it with the user — they must change it on first login.
             </div>
           )}
 
@@ -334,6 +394,10 @@ export default function AdminUsers() {
           </div>
         </div>
       </Modal>
+
+      {tempPwInfo && (
+        <TempPasswordModal info={tempPwInfo} onClose={() => setTempPwInfo(null)} />
+      )}
     </div>
   )
 }

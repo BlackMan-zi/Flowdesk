@@ -13,6 +13,7 @@ import ApprovalsInbox from './pages/ApprovalsInbox'
 import ApprovalAction from './pages/ApprovalAction'
 import Delegations from './pages/Delegations'
 import Documents from './pages/Documents'
+import Settings from './pages/Settings'
 import AdminUsers from './pages/admin/Users'
 import AdminDepartments from './pages/admin/Departments'
 import AdminFormDefinitions from './pages/admin/FormDefinitions'
@@ -59,6 +60,7 @@ function AppRoutes() {
         <Route path="approvals/:formInstanceId" element={<ApprovalAction />} />
         <Route path="delegations" element={<Delegations />} />
         <Route path="documents" element={<Documents />} />
+        <Route path="settings" element={<Settings />} />
 
         {/* Admin only — user management */}
         <Route path="admin/users" element={<RequireAdmin><AdminUsers /></RequireAdmin>} />

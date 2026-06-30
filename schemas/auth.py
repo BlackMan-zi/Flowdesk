@@ -5,7 +5,6 @@ from typing import Optional
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
-    org_subdomain: str
 
 
 class TokenResponse(BaseModel):
@@ -13,6 +12,9 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     must_reset_password: bool = False
     mfa_required: bool = False
+    # Short-lived token returned when mfa_required is True; the client exchanges
+    # it plus a TOTP code at /auth/mfa/verify for a real session.
+    mfa_token: Optional[str] = None
 
 
 class PasswordResetRequest(BaseModel):
@@ -27,7 +29,6 @@ class ForcePasswordResetRequest(BaseModel):
 
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
-    org_subdomain: str
 
 
 class MFASetupResponse(BaseModel):
@@ -36,6 +37,12 @@ class MFASetupResponse(BaseModel):
 
 
 class MFAVerifyRequest(BaseModel):
+    totp_code: str
+
+
+class MFALoginRequest(BaseModel):
+    """Sent to /auth/mfa/verify to complete an MFA-gated login."""
+    mfa_token: str
     totp_code: str
 
 

@@ -62,6 +62,17 @@ class UserResponse(BaseModel):
         from_attributes = True
 
 
+class TempPasswordResponse(BaseModel):
+    """Returned to the admin once after create/reset — the plain temp password
+    is shown a single time and never stored."""
+    id: str
+    name: str
+    email: str
+    temp_password: str        # plain — displayed once in the UI, never persisted
+    email_sent: bool          # whether the credentials email also went out
+    must_reset_password: bool = True
+
+
 class UserSummary(BaseModel):
     """Lightweight user representation for nested responses."""
     id: str

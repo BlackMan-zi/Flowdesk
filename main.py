@@ -25,6 +25,8 @@ from routers.documents import router as documents_router
 from routers.dashboard import router as dashboard_router
 
 from config import settings
+from core.bootstrap import ensure_system_admin
+from database import SessionLocal
 
 
 @asynccontextmanager
@@ -37,6 +39,13 @@ async def lifespan(app: FastAPI):
     os.makedirs(os.path.join(settings.MEDIA_DIR, "attachments"), exist_ok=True)
     os.makedirs(os.path.join(settings.MEDIA_DIR, "signatures"), exist_ok=True)
     os.makedirs(os.path.join(settings.MEDIA_DIR, "pdf_templates"), exist_ok=True)
+
+    # Seed built-in system admin
+    db = SessionLocal()
+    try:
+        ensure_system_admin(db)
+    finally:
+        db.close()
 
     print("✅ FlowDesk API started. Database tables created.")
     yield

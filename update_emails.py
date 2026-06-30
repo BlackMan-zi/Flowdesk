@@ -8,7 +8,9 @@ sys.path.insert(0, '/app')
 from sqlalchemy import create_engine, text
 import os
 
-db_url = os.environ.get('DATABASE_URL', 'mysql+pymysql://flowdesk:flowdesk@db:3306/flowdesk')
+db_url = os.environ.get('DATABASE_URL')
+if not db_url:
+    raise SystemExit("DATABASE_URL environment variable is required")
 engine = create_engine(db_url)
 
 # Explicit overrides: DB user name → correct email

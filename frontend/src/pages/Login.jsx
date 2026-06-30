@@ -1,8 +1,8 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { login, getMe } from '../api/auth'
-import { Workflow, Building2, Mail, Lock, ArrowRight, CheckCircle } from 'lucide-react'
+import { login, getMe, verifyMfa } from '../api/auth'
+import { Workflow, Mail, Lock, ArrowRight, CheckCircle, ShieldCheck } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import Input from '../components/ui/Input'
 import { Alert, AlertDescription } from '../components/ui/alert'
@@ -43,11 +43,26 @@ function IconInput({ icon: Icon, label, error, className, ...props }) {
 export default function Login() {
   const { login: authLogin } = useAuth()
   const navigate = useNavigate()
-  const [form, setForm] = useState({ org_subdomain: '', email: '', password: '' })
+  const [stage, setStage] = useState('credentials') // 'credentials' | 'mfa'
+  const [form, setForm] = useState({ email: '', password: '' })
+  const [mfaToken, setMfaToken] = useState('')
+  const [totpCode, setTotpCode] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
   const set = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.value }))
+
+  // Finish login once a real session token is in hand.
+  const completeLogin = async (data) => {
+    if (!data.access_token) {
+      setError('Login failed. No token received.')
+      return
+    }
+    localStorage.setItem('fd_token', data.access_token)
+    const meRes = await getMe()
+    authLogin(data.access_token, { ...meRes.data, must_reset_password: data.must_reset_password })
+    navigate(data.must_reset_password ? '/force-reset-password' : '/')
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -56,19 +71,33 @@ export default function Login() {
     try {
       const { data } = await login(form)
       if (data.mfa_required) {
-        setError('MFA is required. Contact your admin to log in.')
+        setMfaToken(data.mfa_token)
+        setStage('mfa')
         return
       }
-      if (!data.access_token) {
-        setError('Login failed. No token received.')
-        return
-      }
-      localStorage.setItem('fd_token', data.access_token)
-      const meRes = await getMe()
-      authLogin(data.access_token, { ...meRes.data, must_reset_password: data.must_reset_password })
-      navigate(data.must_reset_password ? '/force-reset-password' : '/')
+      await completeLogin(data)
     } catch (err) {
       setError(err.response?.data?.detail || 'Login failed. Check your credentials.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleVerifyMfa = async (e) => {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+    try {
+      const { data } = await verifyMfa({ mfa_token: mfaToken, totp_code: totpCode.trim() })
+      await completeLogin(data)
+    } catch (err) {
+      const detail = err.response?.data?.detail || 'Verification failed.'
+      setError(detail)
+      // Expired pending token → send the user back to re-enter credentials.
+      if (err.response?.status === 401 && /MFA session/i.test(detail)) {
+        setStage('credentials')
+        setTotpCode('')
+      }
     } finally {
       setLoading(false)
     }
@@ -127,61 +156,89 @@ export default function Login() {
           </div>
 
           <div className="mb-8">
-            <h1 className="text-2xl font-bold text-foreground">Welcome back</h1>
-            <p className="text-muted-foreground mt-1 text-sm">Sign in to your workspace to continue</p>
+            <h1 className="text-2xl font-bold text-foreground">
+              {stage === 'mfa' ? 'Two-factor authentication' : 'Welcome back'}
+            </h1>
+            <p className="text-muted-foreground mt-1 text-sm">
+              {stage === 'mfa'
+                ? 'Enter the 6-digit code from your authenticator app'
+                : 'Sign in to your workspace to continue'}
+            </p>
           </div>
 
           <div className="bg-card rounded-xl border border-border shadow-sm p-7">
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <IconInput
-                icon={Building2}
-                label="Organisation"
-                type="text"
-                placeholder="your-company"
-                value={form.org_subdomain}
-                onChange={set('org_subdomain')}
-                required
-                autoFocus
-                autoComplete="organization"
-              />
-              <IconInput
-                icon={Mail}
-                label="Email address"
-                type="email"
-                placeholder="you@company.com"
-                value={form.email}
-                onChange={set('email')}
-                required
-                autoComplete="email"
-              />
-              <IconInput
-                icon={Lock}
-                label="Password"
-                type="password"
-                placeholder="••••••••"
-                value={form.password}
-                onChange={set('password')}
-                required
-                autoComplete="current-password"
-              />
+            {stage === 'credentials' ? (
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <IconInput
+                  icon={Mail}
+                  label="Email address"
+                  type="email"
+                  placeholder="you@bsc.rw"
+                  value={form.email}
+                  onChange={set('email')}
+                  required
+                  autoFocus
+                  autoComplete="email"
+                />
+                <IconInput
+                  icon={Lock}
+                  label="Password"
+                  type="password"
+                  placeholder="••••••••"
+                  value={form.password}
+                  onChange={set('password')}
+                  required
+                  autoComplete="current-password"
+                />
 
-              {error && (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
+                {error && (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
 
-              <Button
-                type="submit"
-                loading={loading}
-                className="w-full mt-2"
-                size="default"
-              >
-                Sign In
-                <ArrowRight size={16} />
-              </Button>
-            </form>
+                <Button type="submit" loading={loading} className="w-full mt-2" size="default">
+                  Sign In
+                  <ArrowRight size={16} />
+                </Button>
+              </form>
+            ) : (
+              <form onSubmit={handleVerifyMfa} className="space-y-4">
+                <IconInput
+                  icon={ShieldCheck}
+                  label="Authenticator code"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  placeholder="123456"
+                  value={totpCode}
+                  onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  required
+                  autoFocus
+                />
+
+                {error && (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
+
+                <Button type="submit" loading={loading} className="w-full mt-2" size="default"
+                  disabled={totpCode.length < 6}>
+                  Verify & Sign In
+                  <ArrowRight size={16} />
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => { setStage('credentials'); setError(''); setTotpCode('') }}
+                  className="w-full text-center text-xs text-muted-foreground hover:text-foreground"
+                >
+                  ← Back to sign in
+                </button>
+              </form>
+            )}
           </div>
 
           <p className="text-center text-xs text-muted-foreground mt-6">

@@ -111,6 +111,24 @@ def send_temp_credentials_email(to_email: str, user_name: str, temp_password: st
     _send_email(to_email, f"Welcome to FlowDesk – Your Account Credentials", _html_wrapper(content))
 
 
+def send_temp_password_reset_email(to_email: str, user_name: str, temp_password: str, admin_name: str):
+    content = f"""
+    <h2>Your password was reset</h2>
+    <p>Hi {user_name}, an administrator ({admin_name}) reset your FlowDesk password.</p>
+    <div class="info-box">
+      <strong>Your new temporary password:</strong><br>
+      Email: <strong>{to_email}</strong><br>
+      Temporary Password: <strong style="font-family: monospace; font-size: 15px;">{temp_password}</strong>
+    </div>
+    <p>Please log in and choose a new password immediately.</p>
+    <a href="{settings.FRONTEND_URL}/login" class="btn">Login to FlowDesk →</a>
+    <p style="margin-top: 16px; font-size: 13px; color: #666;">
+      If you didn't expect this, contact your administrator.
+    </p>
+    """
+    _send_email(to_email, "FlowDesk – Your Password Was Reset", _html_wrapper(content))
+
+
 def send_password_reset_email(to_email: str, user_name: str, reset_token: str):
     reset_url = f"{settings.FRONTEND_URL}/reset-password?token={reset_token}"
     content = f"""

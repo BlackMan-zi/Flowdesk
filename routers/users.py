@@ -4,13 +4,15 @@ from typing import List
 from database import get_db
 from models.user import User, Role, UserRole, UserStatus, RoleName
 from models.organization import Organization
-from schemas.user import UserCreate, UserUpdate, UserResponse, RoleCreate, RoleResponse
+from schemas.user import (
+    UserCreate, UserUpdate, UserResponse, RoleCreate, RoleResponse,
+    TempPasswordResponse,
+)
 from core.security import get_current_active_user
 from core.permissions import require_roles
 from services.auth_service import hash_password, generate_temp_password
-from services.email_service import send_temp_credentials_email
+from services.email_service import send_temp_credentials_email, send_temp_password_reset_email
 from services import audit_service
-import secrets
 
 router = APIRouter(prefix="/users", tags=["Users"])
 roles_router = APIRouter(prefix="/roles", tags=["Roles"])
@@ -49,13 +51,18 @@ def list_roles(
 
 # ── USERS ─────────────────────────────────────────────────────────────────────
 
-@router.post("", response_model=UserResponse)
+@router.post("", response_model=TempPasswordResponse, status_code=201)
 def create_user(
     payload: UserCreate,
     current_user: User = Depends(require_roles(RoleName.admin)),
     db: Session = Depends(get_db)
 ):
-    """Admin creates a user. Initial password = user's email."""
+    """Admin creates a user with a one-time temporary password.
+
+    The plain temp password is returned to the admin once and never stored —
+    only its bcrypt hash is persisted. Email delivery is best-effort so a dead
+    mail server can never block onboarding.
+    """
     # Check email uniqueness within org
     existing = db.query(User).filter(
         User.email == payload.email.lower(),
@@ -64,15 +71,14 @@ def create_user(
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered in this organization")
 
-    # Initial password is the user's own email (they must reset on first login)
-    temp_pw = payload.email.lower()
+    temp_pw = generate_temp_password()
 
     user = User(
         organization_id=current_user.organization_id,
         name=payload.name,
         email=payload.email.lower(),
         password_hash=hash_password(temp_pw),
-        temp_password=temp_pw,
+        temp_password=None,          # never persist the plaintext
         department_id=payload.department_id,
         manager_id=payload.manager_id,
         sn_manager_id=payload.sn_manager_id,
@@ -100,11 +106,13 @@ def create_user(
         Organization.id == current_user.organization_id
     ).first()
 
-    # Send temp credentials
+    # Best-effort: a dead mail server must never block onboarding.
+    email_sent = False
     try:
         send_temp_credentials_email(user.email, user.name, temp_pw, org.name if org else "FlowDesk")
+        email_sent = True
     except Exception as e:
-        print(f"[WARNING] Email send failed: {e}")
+        print(f"[WARNING] Welcome email not sent for {user.email}: {e}")
 
     audit_service.log_event(
         db, current_user.organization_id, "USER_CREATED",
@@ -112,9 +120,54 @@ def create_user(
         details={"created_user_email": user.email}
     )
 
-    # Build response with roles
-    user.roles = [ur.role for ur in user.user_roles if ur.role]
-    return user
+    return TempPasswordResponse(
+        id=user.id, name=user.name, email=user.email,
+        temp_password=temp_pw, email_sent=email_sent,
+    )
+
+
+@router.post("/{user_id}/reset-password", response_model=TempPasswordResponse)
+def reset_user_password(
+    user_id: str,
+    current_user: User = Depends(require_roles(RoleName.admin)),
+    db: Session = Depends(get_db)
+):
+    """Admin resets a user's password to a new one-time temp password.
+
+    Returns the plain temp password once (never stored). Admins reset their own
+    password through the change-password flow, not here.
+    """
+    user = db.query(User).filter(
+        User.id == user_id,
+        User.organization_id == current_user.organization_id
+    ).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.id == current_user.id:
+        raise HTTPException(status_code=400, detail="Use the change-password flow for your own account")
+
+    temp_pw = generate_temp_password()
+    user.password_hash = hash_password(temp_pw)
+    user.temp_password = None
+    user.must_reset_password = True
+    db.commit()
+
+    email_sent = False
+    try:
+        send_temp_password_reset_email(user.email, user.name, temp_pw, current_user.name)
+        email_sent = True
+    except Exception as e:
+        print(f"[WARNING] Reset email not sent for {user.email}: {e}")
+
+    audit_service.log_event(
+        db, current_user.organization_id, "PASSWORD_RESET_BY_ADMIN",
+        user_id=current_user.id, entity_type="User", entity_id=user.id
+    )
+
+    return TempPasswordResponse(
+        id=user.id, name=user.name, email=user.email,
+        temp_password=temp_pw, email_sent=email_sent,
+    )
 
 
 @router.get("", response_model=List[UserResponse])

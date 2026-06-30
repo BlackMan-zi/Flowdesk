@@ -27,6 +27,20 @@ def create_refresh_token(data: dict) -> str:
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
+# Short-lived token issued after a correct password when MFA is required. It is
+# NOT a session token: it carries type="mfa_pending" and is only accepted by the
+# /auth/mfa/verify endpoint — get_current_user rejects it (different type), so
+# knowing only the password never yields a working session.
+MFA_PENDING_EXPIRE_MINUTES = 5
+
+
+def create_mfa_pending_token(data: dict) -> str:
+    to_encode = data.copy()
+    expire = datetime.utcnow() + timedelta(minutes=MFA_PENDING_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire, "type": "mfa_pending"})
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
 def decode_token(token: str) -> dict:
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
@@ -49,6 +63,10 @@ async def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
     payload = decode_token(token)
+    # Only genuine access tokens grant a session — reject refresh / mfa_pending
+    # tokens presented as bearer credentials.
+    if payload.get("type") != "access":
+        raise credentials_exception
     user_id: str = payload.get("sub")
     org_id: str = payload.get("org_id")
     if not user_id or not org_id:

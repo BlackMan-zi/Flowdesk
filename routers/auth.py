@@ -7,14 +7,16 @@ from models.organization import Organization
 from schemas.auth import (
     LoginRequest, TokenResponse, ForgotPasswordRequest,
     ForcePasswordResetRequest, PasswordResetRequest,
-    MFASetupResponse, MFAVerifyRequest
+    MFASetupResponse, MFAVerifyRequest, MFALoginRequest
 )
 from core.security import (
-    create_access_token, create_refresh_token, get_current_active_user
+    create_access_token, create_refresh_token, get_current_active_user,
+    create_mfa_pending_token, decode_token
 )
 from services.auth_service import (
     verify_password, hash_password, generate_reset_token,
-    generate_mfa_secret, get_totp_uri, generate_qr_code_base64, verify_totp
+    generate_mfa_secret, get_totp_uri, generate_qr_code_base64, verify_totp,
+    validate_password_strength
 )
 from services.email_service import send_password_reset_email
 from services import audit_service
@@ -25,13 +27,13 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 @router.post("/login", response_model=TokenResponse)
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
-    # Lookup org
+    email_domain = payload.email.split("@")[-1].lower()
     org = db.query(Organization).filter(
-        Organization.subdomain == payload.org_subdomain,
+        Organization.email_domain == email_domain,
         Organization.is_active == True
     ).first()
     if not org:
-        raise HTTPException(status_code=404, detail="Organization not found")
+        raise HTTPException(status_code=401, detail="Invalid email or password")
 
     # Lookup user
     user = db.query(User).filter(
@@ -46,12 +48,15 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     if user.status == UserStatus.not_active:
         raise HTTPException(status_code=403, detail="Account is deactivated")
 
-    # MFA check
+    # MFA check — password is correct, but a TOTP code is still required.
+    # Hand back a short-lived pending token (not a session) to exchange at
+    # /auth/mfa/verify. No access token is issued here.
     if user.mfa_enabled and user.mfa_secret:
         return TokenResponse(
             access_token="",
             must_reset_password=False,
-            mfa_required=True
+            mfa_required=True,
+            mfa_token=create_mfa_pending_token({"sub": user.id, "org_id": org.id}),
         )
 
     token_data = {"sub": user.id, "org_id": org.id}
@@ -75,12 +80,50 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     )
 
 
-@router.post("/mfa/verify")
-def verify_mfa(payload: MFAVerifyRequest, db: Session = Depends(get_db)):
-    """Verify TOTP code during login (called after /login returns mfa_required=True)."""
-    raise HTTPException(
-        status_code=400,
-        detail="Please supply email/password alongside TOTP for full MFA verification"
+@router.post("/mfa/verify", response_model=TokenResponse)
+def verify_mfa(payload: MFALoginRequest, db: Session = Depends(get_db)):
+    """Complete an MFA-gated login: exchange the pending token + TOTP code for a session.
+
+    Called after /login returns mfa_required=True with an mfa_token.
+    """
+    invalid = HTTPException(status_code=401, detail="Invalid or expired MFA session — sign in again")
+
+    pending = decode_token(payload.mfa_token)
+    if pending.get("type") != "mfa_pending":
+        raise invalid
+    user_id = pending.get("sub")
+    org_id = pending.get("org_id")
+    if not user_id or not org_id:
+        raise invalid
+
+    user = db.query(User).filter(
+        User.id == user_id,
+        User.organization_id == org_id
+    ).first()
+    if not user or not user.mfa_enabled or not user.mfa_secret:
+        raise invalid
+    if user.status == UserStatus.not_active:
+        raise HTTPException(status_code=403, detail="Account is deactivated")
+
+    if not verify_totp(user.mfa_secret, payload.totp_code):
+        raise HTTPException(status_code=401, detail="Invalid authenticator code")
+
+    # First login – activate user
+    if user.status == UserStatus.pending:
+        user.status = UserStatus.active
+
+    user.last_login = datetime.utcnow()
+    db.commit()
+
+    audit_service.log_event(
+        db, org_id, "USER_LOGIN", user_id=user.id,
+        entity_type="User", entity_id=user.id
+    )
+
+    access_token = create_access_token({"sub": user.id, "org_id": org_id})
+    return TokenResponse(
+        access_token=access_token,
+        must_reset_password=user.must_reset_password,
     )
 
 
@@ -94,6 +137,7 @@ def force_reset_password(
     if not verify_password(payload.current_password, current_user.password_hash):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
 
+    validate_password_strength(payload.new_password)
     current_user.password_hash = hash_password(payload.new_password)
     current_user.must_reset_password = False
     current_user.temp_password = None
@@ -108,8 +152,9 @@ def force_reset_password(
 
 @router.post("/forgot-password")
 def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    email_domain = payload.email.split("@")[-1].lower()
     org = db.query(Organization).filter(
-        Organization.subdomain == payload.org_subdomain
+        Organization.email_domain == email_domain
     ).first()
     if not org:
         return {"message": "If that email is registered, a reset link will be sent."}
@@ -148,6 +193,7 @@ def reset_password(payload: PasswordResetRequest, db: Session = Depends(get_db))
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    validate_password_strength(payload.new_password)
     user.password_hash = hash_password(payload.new_password)
     user.must_reset_password = False
     reset_token.used = True

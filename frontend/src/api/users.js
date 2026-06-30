@@ -5,6 +5,7 @@ export const getUser = (id) => client.get(`/users/${id}`)
 export const createUser = (data) => client.post('/users', data)
 export const updateUser = (id, data) => client.patch(`/users/${id}`, data)
 export const deactivateUser = (id) => client.delete(`/users/${id}`)
+export const resetUserPassword = (id) => client.post(`/users/${id}/reset-password`)
 
 export const listRoles = () => client.get('/roles')
 export const createRole = (data) => client.post('/roles', data)
