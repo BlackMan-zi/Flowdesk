@@ -1,18 +1,19 @@
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, Field
 from typing import Optional
 from datetime import datetime
 
 
 class OrganizationCreate(BaseModel):
-    name: str
-    email_domain: Optional[str] = None
-    subscription_plan: str = "starter"
+    name: str = Field(max_length=255)
+    email_domain: Optional[str] = Field(default=None, max_length=255)
+    # subscription_plan is intentionally NOT accepted from the client — it is set
+    # server-side so a caller can't self-provision on a higher billing tier.
 
 
 class OrganizationUpdate(BaseModel):
-    name: Optional[str] = None
-    subscription_plan: Optional[str] = None
+    name: Optional[str] = Field(default=None, max_length=255)
     is_active: Optional[bool] = None
+    # subscription_plan is intentionally NOT tenant-editable (billing concern).
 
 
 class OrganizationResponse(BaseModel):

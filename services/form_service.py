@@ -12,10 +12,18 @@ from typing import List, Optional
 
 def generate_reference_number(db: Session, organization_id: str, code_suffix: str) -> str:
     """Generate reference like FD-LRQ-0001."""
-    # Count existing instances for this org + suffix
+    # Count existing instances for this org + suffix. Escape LIKE wildcards in
+    # the (admin-set) suffix so a stray % / _ can't broaden the match and cause
+    # colliding, non-unique reference numbers.
+    safe_suffix = (
+        (code_suffix or "")
+        .replace("\\", "\\\\")
+        .replace("%", "\\%")
+        .replace("_", "\\_")
+    )
     count = db.query(func.count(FormInstance.id)).filter(
         FormInstance.organization_id == organization_id,
-        FormInstance.reference_number.like(f"%-{code_suffix}-%")
+        FormInstance.reference_number.like(f"%-{safe_suffix}-%", escape="\\")
     ).scalar() or 0
     seq = str(count + 1).zfill(4)
     year = datetime.utcnow().strftime("%Y")

@@ -1,8 +1,13 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from slowapi.errors import RateLimitExceeded
+from slowapi import _rate_limit_exceeded_handler
 import os
+
+from core.ratelimit import limiter
+from core.security import require_password_reset_complete
 
 # Import all models to ensure they register with SQLAlchemy Base
 from database import Base, engine
@@ -52,46 +57,58 @@ async def lifespan(app: FastAPI):
     print("FlowDesk API shutting down.")
 
 
+# Interactive API docs are a full endpoint/schema map — keep them off in prod.
+_docs_enabled = not settings.IS_PRODUCTION
 app = FastAPI(
     title="FlowDesk API",
     description="Multi-Tenant SaaS Approval & Workflow Platform",
     version="1.0.0",
     lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc"
+    docs_url="/docs" if _docs_enabled else None,
+    redoc_url="/redoc" if _docs_enabled else None,
+    openapi_url="/openapi.json" if _docs_enabled else None,
 )
 
-# CORS
+# Rate limiting (throttles auth brute-force). See core/ratelimit.py.
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# CORS — explicit origins only. A wildcard origin with credentials would let any
+# site drive authenticated cross-origin requests, so we never combine the two.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Restrict in production to specific frontend URL
+    allow_origins=settings.allowed_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Register all routers
+# Business routers require a user who has already rotated their starter password.
+# The auth router is exempt so /auth/me and /auth/force-reset-password still work.
+_password_gate = [Depends(require_password_reset_complete)]
+
 app.include_router(auth_router)
-app.include_router(org_router)
-app.include_router(dept_router)
-app.include_router(users_router)
-app.include_router(roles_router)
-app.include_router(forms_router)
-app.include_router(templates_router)
-app.include_router(approvals_router)
-app.include_router(delegations_router)
-app.include_router(documents_router)
-app.include_router(dashboard_router)
+app.include_router(org_router, dependencies=_password_gate)
+app.include_router(dept_router, dependencies=_password_gate)
+app.include_router(users_router, dependencies=_password_gate)
+app.include_router(roles_router, dependencies=_password_gate)
+app.include_router(forms_router, dependencies=_password_gate)
+app.include_router(templates_router, dependencies=_password_gate)
+app.include_router(approvals_router, dependencies=_password_gate)
+app.include_router(delegations_router, dependencies=_password_gate)
+app.include_router(documents_router, dependencies=_password_gate)
+app.include_router(dashboard_router, dependencies=_password_gate)
 
 # Serve frontend static files (built output)
 frontend_dist = os.path.join(os.path.dirname(__file__), "frontend", "dist")
 if os.path.exists(frontend_dist):
     app.mount("/app", StaticFiles(directory=frontend_dist, html=True), name="frontend")
 
-# Serve media files
-media_dir = settings.MEDIA_DIR
-if os.path.exists(media_dir):
-    app.mount("/media", StaticFiles(directory=media_dir), name="media")
+# NOTE: media (generated PDFs, attachments, signatures) is intentionally NOT
+# served as public static files. Serving it directly would bypass per-user
+# authorization and expose signatures/documents to anyone who guesses a path.
+# Documents are downloaded only through the authenticated, org-scoped routes in
+# routers/documents.py and routers/forms.py.
 
 
 @app.get("/")

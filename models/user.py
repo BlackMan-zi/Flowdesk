@@ -1,6 +1,8 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Enum as SAEnum
+from sqlalchemy import (
+    Column, String, Boolean, DateTime, ForeignKey, Enum as SAEnum, UniqueConstraint
+)
 from sqlalchemy.orm import relationship
 from database import Base
 import enum
@@ -62,6 +64,11 @@ class Role(Base):
 
 class User(Base):
     __tablename__ = "users"
+    # One account per email within an organization — enforced at the DB level,
+    # not just in application code, to close create-time race conditions.
+    __table_args__ = (
+        UniqueConstraint("organization_id", "email", name="uq_users_org_email"),
+    )
 
     id = Column(String(36), primary_key=True, default=gen_uuid)
     organization_id = Column(String(36), ForeignKey("organizations.id"), nullable=False)
@@ -79,7 +86,9 @@ class User(Base):
     mfa_enabled = Column(Boolean, default=False)
     mfa_secret = Column(String(100), nullable=True)
     must_reset_password = Column(Boolean, default=True)
-    temp_password = Column(String(255), nullable=True)
+    # Set whenever the password changes; tokens issued before this instant are
+    # rejected (see core.security.get_current_user).
+    password_changed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     last_login = Column(DateTime, nullable=True)

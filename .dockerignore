@@ -5,8 +5,9 @@ __pycache__
 **/__pycache__
 *.pyc
 *.pyo
+# Never bake ANY env file into the image — secrets are provided at runtime via
+# docker-compose `env_file:` / orchestrator secrets, not copied into a layer.
 .env*
-!.env
 node_modules
 frontend/node_modules
 frontend/dist

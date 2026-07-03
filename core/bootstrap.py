@@ -38,6 +38,40 @@ def _drop_subdomain_column(db: Session) -> None:
         db.rollback()  # already dropped or unsupported syntax — ignore
 
 
+def _ensure_user_security_columns(db: Session) -> None:
+    """Idempotently bring an existing `users` table up to the current schema.
+
+    create_all() never alters existing tables, so a deployed database won't have
+    the newer columns unless we add them here. Safe to run on every startup.
+    """
+    # Token-invalidation timestamp — get_current_user reads this on every request.
+    try:
+        db.execute(text(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS password_changed_at TIMESTAMP"
+        ))
+        db.commit()
+    except Exception:
+        db.rollback()
+
+    # Drop the dead plaintext temp-password column if it still exists.
+    try:
+        db.execute(text("ALTER TABLE users DROP COLUMN IF EXISTS temp_password"))
+        db.commit()
+    except Exception:
+        db.rollback()
+
+    # Enforce one account per (org, email) at the DB level. Fails harmlessly if
+    # the constraint already exists or if legacy duplicate rows are present.
+    try:
+        db.execute(text(
+            "ALTER TABLE users ADD CONSTRAINT uq_users_org_email "
+            "UNIQUE (organization_id, email)"
+        ))
+        db.commit()
+    except Exception:
+        db.rollback()
+
+
 def _backfill_bsc(db: Session) -> None:
     """Set email_domain for the BSC org if it's still NULL."""
     db.execute(text(
@@ -59,6 +93,7 @@ def ensure_system_admin(db: Session) -> None:
     """
     _ensure_email_domain_column(db)
     _drop_subdomain_column(db)
+    _ensure_user_security_columns(db)
     _backfill_bsc(db)
 
     admin_email = (settings.SUPER_ADMIN_EMAIL or _DEFAULT_ADMIN_EMAIL).lower().strip()

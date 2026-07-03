@@ -13,6 +13,7 @@ from core.security import (
     create_access_token, create_refresh_token, get_current_active_user,
     create_mfa_pending_token, decode_token
 )
+from core.ratelimit import limiter
 from services.auth_service import (
     verify_password, hash_password, generate_reset_token,
     generate_mfa_secret, get_totp_uri, generate_qr_code_base64, verify_totp,
@@ -26,7 +27,8 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(payload: LoginRequest, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)):
     email_domain = payload.email.split("@")[-1].lower()
     org = db.query(Organization).filter(
         Organization.email_domain == email_domain,
@@ -81,7 +83,8 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/mfa/verify", response_model=TokenResponse)
-def verify_mfa(payload: MFALoginRequest, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def verify_mfa(request: Request, payload: MFALoginRequest, db: Session = Depends(get_db)):
     """Complete an MFA-gated login: exchange the pending token + TOTP code for a session.
 
     Called after /login returns mfa_required=True with an mfa_token.
@@ -128,7 +131,9 @@ def verify_mfa(payload: MFALoginRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/force-reset-password")
+@limiter.limit("10/minute")
 def force_reset_password(
+    request: Request,
     payload: ForcePasswordResetRequest,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
@@ -140,18 +145,24 @@ def force_reset_password(
     validate_password_strength(payload.new_password)
     current_user.password_hash = hash_password(payload.new_password)
     current_user.must_reset_password = False
-    current_user.temp_password = None
+    current_user.password_changed_at = datetime.utcnow()
     db.commit()
 
     audit_service.log_event(
         db, current_user.organization_id, "PASSWORD_CHANGED",
         user_id=current_user.id, entity_type="User", entity_id=current_user.id
     )
-    return {"message": "Password updated successfully"}
+    # Changing the password invalidates the token the client is currently using,
+    # so hand back a fresh one to keep the session alive without a re-login.
+    new_token = create_access_token(
+        {"sub": current_user.id, "org_id": current_user.organization_id}
+    )
+    return {"message": "Password updated successfully", "access_token": new_token}
 
 
 @router.post("/forgot-password")
-def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def forgot_password(request: Request, payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
     email_domain = payload.email.split("@")[-1].lower()
     org = db.query(Organization).filter(
         Organization.email_domain == email_domain
@@ -180,7 +191,8 @@ def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db
 
 
 @router.post("/reset-password")
-def reset_password(payload: PasswordResetRequest, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def reset_password(request: Request, payload: PasswordResetRequest, db: Session = Depends(get_db)):
     reset_token = db.query(PasswordResetToken).filter(
         PasswordResetToken.token == payload.token,
         PasswordResetToken.used == False,
@@ -196,6 +208,7 @@ def reset_password(payload: PasswordResetRequest, db: Session = Depends(get_db))
     validate_password_strength(payload.new_password)
     user.password_hash = hash_password(payload.new_password)
     user.must_reset_password = False
+    user.password_changed_at = datetime.utcnow()
     reset_token.used = True
     db.commit()
 

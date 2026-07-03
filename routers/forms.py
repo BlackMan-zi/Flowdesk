@@ -182,12 +182,25 @@ async def upload_pdf_template(
     if file.content_type not in ("application/pdf", "application/octet-stream"):
         raise HTTPException(status_code=400, detail="Uploaded file must be a PDF")
 
+    # Read with a hard size cap, then verify the real PDF magic bytes — don't
+    # trust the client-declared content type.
+    max_bytes = settings.MAX_UPLOAD_SIZE_BYTES
+    data = file.file.read(max_bytes + 1)
+    if len(data) > max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File exceeds the {settings.MAX_UPLOAD_SIZE_MB} MB limit",
+        )
+    if not data.startswith(b"%PDF-"):
+        raise HTTPException(status_code=400, detail="Uploaded file is not a valid PDF")
+
     pdf_dir = os.path.join(settings.MEDIA_DIR, "pdf_templates", current_user.organization_id)
     os.makedirs(pdf_dir, exist_ok=True)
+    # Stored name is derived from the DB-validated form_def_id, not user input.
     stored_path = os.path.join(pdf_dir, f"{form_def_id}.pdf")
 
     with open(stored_path, "wb") as f:
-        shutil.copyfileobj(file.file, f)
+        f.write(data)
 
     form_def.pdf_template_path = stored_path
     db.commit()
@@ -416,6 +429,19 @@ def get_form_instance(
     ).first()
     if not instance:
         raise HTTPException(status_code=404, detail="Form instance not found")
+
+    # Org membership is not enough — a form's field values can be sensitive.
+    # Allow only the initiator, an assigned approver on any version, or an admin.
+    role_names = [ur.role.name for ur in current_user.user_roles if ur.role]
+    if RoleName.admin not in role_names and instance.created_by != current_user.id:
+        is_approver = db.query(ApprovalInstance.id).join(
+            FormVersion, ApprovalInstance.form_version_id == FormVersion.id
+        ).filter(
+            FormVersion.form_instance_id == instance.id,
+            ApprovalInstance.approver_user_id == current_user.id,
+        ).first()
+        if not is_approver:
+            raise HTTPException(status_code=404, detail="Form instance not found")
     return instance
 
 
@@ -433,6 +459,10 @@ def submit_form_instance(
     ).first()
     if not instance:
         raise HTTPException(status_code=404, detail="Form instance not found or not yours")
+
+    # An initiator must never be an approver on their own form (self-approval).
+    if payload.selected_approver_ids and current_user.id in payload.selected_approver_ids.values():
+        raise HTTPException(status_code=400, detail="You cannot select yourself as an approver of your own form")
 
     try:
         instance = form_service.submit_form(
@@ -499,6 +529,10 @@ def resubmit_form_instance(
     if instance.current_status != FormStatus.returned_for_correction:
         raise HTTPException(status_code=400, detail="Form is not in correction state")
 
+    # An initiator must never be an approver on their own form (self-approval).
+    if payload.selected_approver_ids and current_user.id in payload.selected_approver_ids.values():
+        raise HTTPException(status_code=400, detail="You cannot select yourself as an approver of your own form")
+
     # Submit with field value updates
     try:
         instance = form_service.submit_form(
@@ -560,22 +594,53 @@ async def upload_attachment(
     from models.form import FormAttachment
     import uuid
 
+    # Validate the file type from an allowlist. The client filename is used ONLY
+    # for display metadata — never for the on-disk path, so a name like
+    # "../../etc/passwd" cannot traverse out of the attachments directory.
+    original_name = os.path.basename(file.filename or "").strip() or "file"
+    ext = os.path.splitext(original_name)[1].lower()
+    allowed_exts = {
+        ".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp",
+        ".doc", ".docx", ".xls", ".xlsx", ".csv", ".txt",
+    }
+    if ext not in allowed_exts:
+        raise HTTPException(status_code=400, detail="Unsupported file type")
+
     after_submission = instance.current_status != FormStatus.draft
 
     attach_dir = os.path.join(settings.MEDIA_DIR, "attachments", current_user.organization_id)
     os.makedirs(attach_dir, exist_ok=True)
-    stored_name = f"{uuid.uuid4()}_{file.filename}"
+    # Server-generated name = random UUID + validated extension only.
+    stored_name = f"{uuid.uuid4().hex}{ext}"
     file_path = os.path.join(attach_dir, stored_name)
 
-    with open(file_path, "wb") as f:
-        shutil.copyfileobj(file.file, f)
+    # Stream to disk with a hard size cap so a huge upload can't exhaust the disk.
+    max_bytes = settings.MAX_UPLOAD_SIZE_BYTES
+    written = 0
+    try:
+        with open(file_path, "wb") as f:
+            while True:
+                chunk = file.file.read(1024 * 1024)
+                if not chunk:
+                    break
+                written += len(chunk)
+                if written > max_bytes:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"File exceeds the {settings.MAX_UPLOAD_SIZE_MB} MB limit",
+                    )
+                f.write(chunk)
+    except HTTPException:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        raise
 
     attachment = FormAttachment(
         organization_id=current_user.organization_id,
         form_instance_id=instance.id,
-        original_filename=file.filename,
+        original_filename=original_name,
         stored_filename=stored_name,
-        file_size=os.path.getsize(file_path),
+        file_size=written,
         content_type=file.content_type,
         uploaded_by=current_user.id,
         uploaded_after_submission=after_submission
@@ -587,12 +652,12 @@ async def upload_attachment(
         db, current_user.organization_id,
         "ATTACHMENT_ADDED_AFTER_SUBMISSION" if after_submission else "ATTACHMENT_UPLOADED",
         user_id=current_user.id, entity_type="FormInstance", entity_id=instance.id,
-        details={"filename": file.filename, "after_submission": after_submission}
+        details={"filename": original_name, "after_submission": after_submission}
     )
 
     return {
         "message": "Attachment uploaded",
-        "filename": file.filename,
+        "filename": original_name,
         "uploaded_after_submission": after_submission
     }
 

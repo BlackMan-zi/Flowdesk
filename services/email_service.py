@@ -1,3 +1,4 @@
+import html
 import smtplib
 import ssl
 from email.mime.multipart import MIMEMultipart
@@ -8,6 +9,20 @@ from typing import Optional, List
 from config import settings
 
 
+def esc(value) -> str:
+    """HTML-escape a value before it goes into an email body. All user-supplied
+    text (names, notes, form names) MUST pass through this — otherwise an
+    initiator/approver can inject markup or phishing links into mails delivered
+    to managers and executives."""
+    return html.escape("" if value is None else str(value))
+
+
+def _clean_header(value: str) -> str:
+    """Strip CR/LF so a stray newline in a recipient/subject/filename can't
+    inject extra SMTP headers (e.g. an unwanted Bcc)."""
+    return str(value or "").replace("\r", " ").replace("\n", " ").strip()
+
+
 def _send_email(
     to_email: str,
     subject: str,
@@ -15,6 +30,9 @@ def _send_email(
     attachments: Optional[List[dict]] = None
 ):
     """Send email via Microsoft Exchange Online (or any SMTP with STARTTLS)."""
+    to_email = _clean_header(to_email)
+    subject = _clean_header(subject)
+
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"] = settings.SMTP_FROM
@@ -29,7 +47,7 @@ def _send_email(
             encoders.encode_base64(part)
             part.add_header(
                 "Content-Disposition",
-                f'attachment; filename="{att["filename"]}"'
+                f'attachment; filename="{_clean_header(att["filename"])}"'
             )
             msg_mixed = MIMEMultipart("mixed")
             msg_mixed["Subject"] = msg["Subject"]
@@ -50,8 +68,8 @@ def _send_email(
             server.login(settings.SMTP_USER, settings.SMTP_PASS)
             server.sendmail(settings.SMTP_FROM, to_email, msg.as_string())
     except Exception as e:
-        # Log but don't crash the app if email fails
-        print(f"[EMAIL ERROR] Failed to send to {to_email}: {e}")
+        # Log the failure type but not the recipient address (PII in stdout logs).
+        print(f"[EMAIL ERROR] Failed to send message: {type(e).__name__}")
 
 
 def _html_wrapper(content: str) -> str:
@@ -95,12 +113,12 @@ def _html_wrapper(content: str) -> str:
 
 def send_temp_credentials_email(to_email: str, user_name: str, temp_password: str, org_name: str):
     content = f"""
-    <h2>Welcome to FlowDesk, {user_name}!</h2>
-    <p>Your account has been created for <strong>{org_name}</strong>.</p>
+    <h2>Welcome to FlowDesk, {esc(user_name)}!</h2>
+    <p>Your account has been created for <strong>{esc(org_name)}</strong>.</p>
     <div class="info-box">
       <strong>Your temporary credentials:</strong><br>
-      Email: <strong>{to_email}</strong><br>
-      Temporary Password: <strong style="font-family: monospace; font-size: 15px;">{temp_password}</strong>
+      Email: <strong>{esc(to_email)}</strong><br>
+      Temporary Password: <strong style="font-family: monospace; font-size: 15px;">{esc(temp_password)}</strong>
     </div>
     <p>Please log in and change your password immediately. Your account will only be fully activated after your first login.</p>
     <a href="{settings.FRONTEND_URL}/login" class="btn">Login to FlowDesk →</a>
@@ -114,11 +132,11 @@ def send_temp_credentials_email(to_email: str, user_name: str, temp_password: st
 def send_temp_password_reset_email(to_email: str, user_name: str, temp_password: str, admin_name: str):
     content = f"""
     <h2>Your password was reset</h2>
-    <p>Hi {user_name}, an administrator ({admin_name}) reset your FlowDesk password.</p>
+    <p>Hi {esc(user_name)}, an administrator ({esc(admin_name)}) reset your FlowDesk password.</p>
     <div class="info-box">
       <strong>Your new temporary password:</strong><br>
-      Email: <strong>{to_email}</strong><br>
-      Temporary Password: <strong style="font-family: monospace; font-size: 15px;">{temp_password}</strong>
+      Email: <strong>{esc(to_email)}</strong><br>
+      Temporary Password: <strong style="font-family: monospace; font-size: 15px;">{esc(temp_password)}</strong>
     </div>
     <p>Please log in and choose a new password immediately.</p>
     <a href="{settings.FRONTEND_URL}/login" class="btn">Login to FlowDesk →</a>
@@ -133,7 +151,7 @@ def send_password_reset_email(to_email: str, user_name: str, reset_token: str):
     reset_url = f"{settings.FRONTEND_URL}/reset-password?token={reset_token}"
     content = f"""
     <h2>Password Reset Request</h2>
-    <p>Hi {user_name}, we received a request to reset your FlowDesk password.</p>
+    <p>Hi {esc(user_name)}, we received a request to reset your FlowDesk password.</p>
     <a href="{reset_url}" class="btn">Reset My Password →</a>
     <p style="margin-top: 16px; font-size: 13px; color: #666;">
       This link expires in 1 hour. If you didn't request this, please ignore this email.
@@ -154,13 +172,13 @@ def send_approval_request_email(
     url = f"{settings.FRONTEND_URL}/approvals/{form_instance_id}"
     content = f"""
     <h2>Approval Required</h2>
-    <p>Hi {approver_name}, a form requires your approval.</p>
+    <p>Hi {esc(approver_name)}, a form requires your approval.</p>
     <div class="info-box">
       <span class="badge">PENDING YOUR APPROVAL</span><br><br>
-      <strong>Form:</strong> {form_name}<br>
-      <strong>Reference:</strong> {reference_number}<br>
-      <strong>Submitted by:</strong> {initiator_name}<br>
-      <strong>Your Step:</strong> {step_label}
+      <strong>Form:</strong> {esc(form_name)}<br>
+      <strong>Reference:</strong> {esc(reference_number)}<br>
+      <strong>Submitted by:</strong> {esc(initiator_name)}<br>
+      <strong>Your Step:</strong> {esc(step_label)}
     </div>
     <a href="{url}" class="btn">Review &amp; Approve →</a>
     """
@@ -182,18 +200,18 @@ def send_step_approved_email(
 ):
     url = f"{settings.FRONTEND_URL}/forms/{form_instance_id}"
     next_info = (
-        f"<p>The form has moved to the next approver: <strong>{next_approver}</strong>.</p>"
+        f"<p>The form has moved to the next approver: <strong>{esc(next_approver)}</strong>.</p>"
         if next_approver
         else "<p>All approvals are complete. The final document is being generated.</p>"
     )
     content = f"""
     <h2>Approval Step Completed</h2>
-    <p>Hi {initiator_name},</p>
+    <p>Hi {esc(initiator_name)},</p>
     <div class="info-box">
       <span class="badge">STEP APPROVED</span><br><br>
-      <strong>Form:</strong> {form_name}<br>
-      <strong>Reference:</strong> {reference_number}<br>
-      <strong>Approved by:</strong> {approved_by}
+      <strong>Form:</strong> {esc(form_name)}<br>
+      <strong>Reference:</strong> {esc(reference_number)}<br>
+      <strong>Approved by:</strong> {esc(approved_by)}
     </div>
     {next_info}
     <a href="{url}" class="btn">View Form Status →</a>
@@ -217,14 +235,14 @@ def send_sent_back_email(
     url = f"{settings.FRONTEND_URL}/forms/{form_instance_id}/edit"
     content = f"""
     <h2>Form Returned for Correction</h2>
-    <p>Hi {initiator_name}, your form has been returned for correction.</p>
+    <p>Hi {esc(initiator_name)}, your form has been returned for correction.</p>
     <div class="info-box">
       <span class="badge" style="background:#fff3cd; color:#856404;">CORRECTION REQUIRED</span><br><br>
-      <strong>Form:</strong> {form_name}<br>
-      <strong>Reference:</strong> {reference_number}<br>
-      <strong>Returned by:</strong> {sent_back_by}<br>
+      <strong>Form:</strong> {esc(form_name)}<br>
+      <strong>Reference:</strong> {esc(reference_number)}<br>
+      <strong>Returned by:</strong> {esc(sent_back_by)}<br>
       <strong>Correction Notes:</strong><br>
-      <em>"{correction_notes}"</em>
+      <em>"{esc(correction_notes)}"</em>
     </div>
     <p>Please make the necessary corrections and resubmit.</p>
     <a href="{url}" class="btn">Make Corrections →</a>
@@ -248,14 +266,14 @@ def send_rejection_email(
     url = f"{settings.FRONTEND_URL}/forms/{form_instance_id}"
     content = f"""
     <h2>Form Rejected</h2>
-    <p>Hi {initiator_name}, unfortunately your form has been rejected.</p>
+    <p>Hi {esc(initiator_name)}, unfortunately your form has been rejected.</p>
     <div class="info-box">
       <span class="badge" style="background:#fde8e8; color:#c00;">REJECTED</span><br><br>
-      <strong>Form:</strong> {form_name}<br>
-      <strong>Reference:</strong> {reference_number}<br>
-      <strong>Rejected by:</strong> {rejected_by}<br>
+      <strong>Form:</strong> {esc(form_name)}<br>
+      <strong>Reference:</strong> {esc(reference_number)}<br>
+      <strong>Rejected by:</strong> {esc(rejected_by)}<br>
       <strong>Reason:</strong><br>
-      <em>"{rejection_notes}"</em>
+      <em>"{esc(rejection_notes)}"</em>
     </div>
     <a href="{url}" class="btn">View Details →</a>
     """
@@ -277,11 +295,11 @@ def send_completion_email(
     url = f"{settings.FRONTEND_URL}/forms/{form_instance_id}"
     content = f"""
     <h2>Form Fully Approved &amp; Completed</h2>
-    <p>Hi {initiator_name}, your form has been fully approved!</p>
+    <p>Hi {esc(initiator_name)}, your form has been fully approved!</p>
     <div class="info-box">
       <span class="badge" style="background:#d4edda; color:#155724;">COMPLETED</span><br><br>
-      <strong>Form:</strong> {form_name}<br>
-      <strong>Reference:</strong> {reference_number}
+      <strong>Form:</strong> {esc(form_name)}<br>
+      <strong>Reference:</strong> {esc(reference_number)}
     </div>
     <p>The signed PDF document is attached to this email. You can also download it from the portal.</p>
     <a href="{url}" class="btn">View on FlowDesk →</a>
@@ -310,14 +328,14 @@ def send_resubmission_notification_email(
     url = f"{settings.FRONTEND_URL}/approvals/{form_instance_id}"
     content = f"""
     <h2>Form Resubmitted for Approval</h2>
-    <p>Hi {approver_name}, a corrected form has been resubmitted.</p>
+    <p>Hi {esc(approver_name)}, a corrected form has been resubmitted.</p>
     <div class="info-box">
-      <span class="badge">VERSION {version_number} – RESUBMITTED</span><br><br>
-      <strong>Form:</strong> {form_name}<br>
-      <strong>Reference:</strong> {reference_number}<br>
-      <strong>Submitted by:</strong> {initiator_name}<br>
+      <span class="badge">VERSION {esc(version_number)} – RESUBMITTED</span><br><br>
+      <strong>Form:</strong> {esc(form_name)}<br>
+      <strong>Reference:</strong> {esc(reference_number)}<br>
+      <strong>Submitted by:</strong> {esc(initiator_name)}<br>
       <strong>Changes Made:</strong><br>
-      <em>"{change_summary}"</em>
+      <em>"{esc(change_summary)}"</em>
     </div>
     <a href="{url}" class="btn">Review Corrections →</a>
     """

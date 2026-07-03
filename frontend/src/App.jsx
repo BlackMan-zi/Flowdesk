@@ -42,7 +42,8 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
-      <Route path="/force-reset-password" element={<ForcePasswordReset />} />
+      {/* Only reachable by a logged-in user (who still owes a password reset). */}
+      <Route path="/force-reset-password" element={user ? <ForcePasswordReset /> : <Navigate to="/login" replace />} />
 
       {/* Full-screen routes — no AppLayout wrapper */}
       <Route

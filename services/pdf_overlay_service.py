@@ -29,6 +29,26 @@ from sqlalchemy.orm import Session
 from models.form import FormInstance, FormFieldValue, FormField, FieldType
 
 
+# Signature images come from client-submitted base64. Bound both the raw byte
+# size and the pixel count so a crafted "decompression bomb" (a tiny file that
+# expands to an enormous bitmap) can't exhaust memory during PDF generation.
+_MAX_SIGNATURE_BYTES = 5 * 1024 * 1024      # 5 MB of decoded bytes
+_MAX_SIGNATURE_PIXELS = 8_000_000            # ~8 MP
+PILImage.MAX_IMAGE_PIXELS = _MAX_SIGNATURE_PIXELS
+
+
+def _safe_signature_reader(b64_value: str) -> ImageReader:
+    """Decode + validate a base64 signature, returning a reportlab ImageReader.
+    Raises ValueError if the image is missing, too large, or too many pixels."""
+    img_bytes = base64.b64decode((b64_value or "").split(",")[-1])
+    if not img_bytes or len(img_bytes) > _MAX_SIGNATURE_BYTES:
+        raise ValueError("signature image too large")
+    with PILImage.open(io.BytesIO(img_bytes)) as im:
+        if (im.width * im.height) > _MAX_SIGNATURE_PIXELS:
+            raise ValueError("signature image has too many pixels")
+    return ImageReader(io.BytesIO(img_bytes))
+
+
 BRAND_BLUE = colors.HexColor("#1a3d6b")
 BRAND_LIGHT = colors.HexColor("#e8f0fe")
 BRAND_LINE = colors.HexColor("#d0dff5")
@@ -67,8 +87,7 @@ def _draw_text(c, value: str, x, y, w, h, font_size=None):
 def _draw_signature(c, value: str, x, y, w, h):
     """Render a base64 PNG signature into the field box."""
     try:
-        img_bytes = base64.b64decode(value.split(",")[-1])
-        img_reader = ImageReader(io.BytesIO(img_bytes))
+        img_reader = _safe_signature_reader(value)
         c.drawImage(img_reader, x, y, width=w, height=h,
                     preserveAspectRatio=True, mask="auto")
     except Exception:
@@ -288,8 +307,7 @@ def _build_audit_page(
                     ]]
                     if sig and sig.signature_data:
                         try:
-                            img_data = base64.b64decode(sig.signature_data.split(",")[-1])
-                            row.append([ImageReader(io.BytesIO(img_data)), "", ""])
+                            row.append([_safe_signature_reader(sig.signature_data), "", ""])
                         except Exception:
                             row.append([Paragraph("—", small_st), "", ""])
                     st = Table(row, colWidths=[5*cm, 5*cm, 7*cm])

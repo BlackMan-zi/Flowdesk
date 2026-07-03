@@ -34,6 +34,19 @@ def download_document(
     if not doc:
         raise HTTPException(status_code=404, detail="No generated document found for this form")
 
+    # Authorization: org membership alone is NOT enough (that would let any
+    # colleague pull any signed document). Require admin, or an explicit
+    # DocumentShare granting this user access — the same rule as list_documents.
+    role_names = [ur.role.name for ur in current_user.user_roles if ur.role]
+    if RoleName.admin not in role_names:
+        has_share = db.query(DocumentShare).filter(
+            DocumentShare.document_id == doc.id,
+            DocumentShare.user_id == current_user.id,
+            DocumentShare.organization_id == current_user.organization_id,
+        ).first()
+        if not has_share:
+            raise HTTPException(status_code=404, detail="No generated document found for this form")
+
     if not os.path.exists(doc.file_path):
         raise HTTPException(status_code=404, detail="Document file not found on server")
 

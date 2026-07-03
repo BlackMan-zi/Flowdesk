@@ -1,3 +1,4 @@
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
@@ -78,7 +79,6 @@ def create_user(
         name=payload.name,
         email=payload.email.lower(),
         password_hash=hash_password(temp_pw),
-        temp_password=None,          # never persist the plaintext
         department_id=payload.department_id,
         manager_id=payload.manager_id,
         sn_manager_id=payload.sn_manager_id,
@@ -148,8 +148,10 @@ def reset_user_password(
 
     temp_pw = generate_temp_password()
     user.password_hash = hash_password(temp_pw)
-    user.temp_password = None
     user.must_reset_password = True
+    # Invalidate the target user's existing sessions — an admin reset should
+    # immediately lock out anyone holding an old token for this account.
+    user.password_changed_at = datetime.utcnow()
     db.commit()
 
     email_sent = False
@@ -189,7 +191,12 @@ def get_user(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    # Users can view themselves; admins can view anyone in org
+    # Users can view themselves; admins can view anyone in org. Without this,
+    # any user could enumerate the whole org directory and role assignments.
+    role_names = [ur.role.name for ur in current_user.user_roles if ur.role]
+    if user_id != current_user.id and RoleName.admin not in role_names:
+        raise HTTPException(status_code=403, detail="Access denied")
+
     user = db.query(User).filter(
         User.id == user_id,
         User.organization_id == current_user.organization_id

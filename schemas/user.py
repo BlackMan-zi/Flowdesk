@@ -1,13 +1,13 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, List
 from datetime import datetime
 from models.user import UserStatus, RoleCategory
 
 
 class RoleCreate(BaseModel):
-    name: str
+    name: str = Field(max_length=100)
     role_category: RoleCategory
-    description: Optional[str] = None
+    description: Optional[str] = Field(default=None, max_length=500)
 
 
 class RoleResponse(BaseModel):
@@ -22,7 +22,7 @@ class RoleResponse(BaseModel):
 
 
 class UserCreate(BaseModel):
-    name: str
+    name: str = Field(max_length=255)
     email: EmailStr
     department_id: Optional[str] = None
     manager_id: Optional[str] = None
@@ -32,7 +32,7 @@ class UserCreate(BaseModel):
 
 
 class UserUpdate(BaseModel):
-    name: Optional[str] = None
+    name: Optional[str] = Field(default=None, max_length=255)
     email: Optional[EmailStr] = None
     department_id: Optional[str] = None
     manager_id: Optional[str] = None

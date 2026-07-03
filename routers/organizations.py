@@ -19,9 +19,12 @@ router = APIRouter(prefix="/organizations", tags=["Organizations"])
 @router.post("", response_model=OrganizationResponse)
 def create_organization(
     payload: OrganizationCreate,
+    current_user: User = Depends(require_roles(RoleName.admin)),
     db: Session = Depends(get_db)
 ):
-    """Create a new organization (no auth — used during provisioning)."""
+    """Create a new organization. Admin-only — previously unauthenticated, which
+    let anyone provision unlimited orgs on any plan. The subscription plan is set
+    server-side, never taken from the client."""
     if payload.email_domain:
         existing = db.query(Organization).filter(
             Organization.email_domain == payload.email_domain
@@ -29,10 +32,19 @@ def create_organization(
         if existing:
             raise HTTPException(status_code=400, detail="Email domain already taken")
 
-    org = Organization(**payload.model_dump())
+    org = Organization(
+        name=payload.name,
+        email_domain=payload.email_domain,
+        subscription_plan="starter",
+    )
     db.add(org)
     db.commit()
     db.refresh(org)
+
+    audit_service.log_event(
+        db, current_user.organization_id, "ORGANIZATION_CREATED",
+        user_id=current_user.id, entity_type="Organization", entity_id=org.id
+    )
     return org
 
 
