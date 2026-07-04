@@ -1,0 +1,18 @@
+.git
+.gitignore
+*.md
+__pycache__
+**/__pycache__
+*.pyc
+*.pyo
+# Never let any env file enter a build context — even though the Dockerfiles
+# use targeted COPY (not `COPY . .`) today, this is defense-in-depth against
+# a future refactor accidentally baking secrets into an image layer.
+.env*
+!.env.example
+.venv
+node_modules
+frontend/node_modules
+frontend/dist
+docker-compose*.yml
+.claude

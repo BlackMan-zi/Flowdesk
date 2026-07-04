@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from jose import JWTError, jwt
+import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
@@ -13,25 +13,33 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + (
+    now = datetime.now(timezone.utc)
+    expire = now + (
         expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     )
-    to_encode.update({"exp": expire, "type": "access"})
+    # iat lets us invalidate tokens issued before a password change (see
+    # get_current_user's password_changed_at check below).
+    to_encode.update({"exp": expire, "iat": now, "type": "access"})
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
 def create_refresh_token(data: dict) -> str:
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
-    to_encode.update({"exp": expire, "type": "refresh"})
+    now = datetime.now(timezone.utc)
+    expire = now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    to_encode.update({"exp": expire, "iat": now, "type": "refresh"})
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
 def decode_token(token: str) -> dict:
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        # Pin the algorithm explicitly — never trust the token header's "alg",
+        # which is what algorithm-confusion attacks abuse.
+        payload = jwt.decode(
+            token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
+        )
         return payload
-    except JWTError:
+    except jwt.PyJWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
@@ -49,6 +57,10 @@ async def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
     payload = decode_token(token)
+    # Only genuine access tokens grant a session — reject refresh tokens
+    # presented as bearer credentials.
+    if payload.get("type") != "access":
+        raise credentials_exception
     user_id: str = payload.get("sub")
     org_id: str = payload.get("org_id")
     if not user_id or not org_id:
@@ -60,6 +72,25 @@ async def get_current_user(
     ).first()
     if not user:
         raise credentials_exception
+
+    # Invalidate any token minted before the user's most recent password
+    # change, so a stolen/old token stops working the moment the password is
+    # rotated. Tokens issued before this field existed have no iat/timestamp
+    # to compare, so they are naturally exempt until the user's next reset.
+    if user.password_changed_at is not None:
+        iat = payload.get("iat")
+        if iat is None:
+            raise credentials_exception
+        iat_dt = datetime.fromtimestamp(int(iat), tz=timezone.utc)
+        pwd_changed = user.password_changed_at
+        if pwd_changed.tzinfo is None:
+            pwd_changed = pwd_changed.replace(tzinfo=timezone.utc)
+        # Compare at whole-second granularity (JWT iat is integer seconds): a
+        # token minted in an earlier second than the password change is
+        # rejected, while a token freshly issued in the same second (e.g. the
+        # one force-reset-password hands back) stays valid.
+        if iat_dt < pwd_changed.replace(microsecond=0):
+            raise credentials_exception
     return user
 
 
@@ -70,5 +101,20 @@ async def get_current_active_user(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User account is deactivated"
+        )
+    return current_user
+
+
+async def require_password_reset_complete(
+    current_user: User = Depends(get_current_active_user)
+) -> User:
+    """Gate for business endpoints: a user who still owes a forced password
+    change may authenticate (to hit /auth/me and /auth/force-reset-password)
+    but cannot touch application data until they rotate the starter
+    password."""
+    if current_user.must_reset_password:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Password reset required before continuing",
         )
     return current_user

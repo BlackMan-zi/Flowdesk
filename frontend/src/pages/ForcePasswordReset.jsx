@@ -30,7 +30,10 @@ export default function ForcePasswordReset() {
     }
     setLoading(true)
     try {
-      await forceResetPassword({ current_password: form.current_password, new_password: form.new_password })
+      const res = await forceResetPassword({ current_password: form.current_password, new_password: form.new_password })
+      // The password change invalidates our current token; swap in the fresh
+      // one the server hands back so the follow-up request stays authenticated.
+      if (res.data?.access_token) localStorage.setItem('fd_token', res.data.access_token)
       const { data } = await getMe()
       updateUser({ ...data, must_reset_password: false })
       navigate('/')

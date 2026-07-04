@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "http://localhost:3000"
     MEDIA_DIR: str = os.path.join(os.path.dirname(os.path.dirname(__file__)), "media")
 
+    # Uploads — hard limit enforced server-side (nginx also caps at the edge).
+    MAX_UPLOAD_SIZE_MB: int = 20
+
     # Security
     REQUIRE_HTTPS: bool = True
     ENVIRONMENT: str = "development"  # development, staging, production
@@ -62,6 +65,10 @@ class Settings(BaseSettings):
     class Config:
         env_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
         env_file_encoding = "utf-8"
+
+    @property
+    def MAX_UPLOAD_SIZE_BYTES(self) -> int:
+        return self.MAX_UPLOAD_SIZE_MB * 1024 * 1024
 
 
 try:

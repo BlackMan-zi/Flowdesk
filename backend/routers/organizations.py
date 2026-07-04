@@ -19,19 +19,32 @@ router = APIRouter(prefix="/organizations", tags=["Organizations"])
 @router.post("", response_model=OrganizationResponse)
 def create_organization(
     payload: OrganizationCreate,
+    current_user: User = Depends(require_roles(RoleName.admin)),
     db: Session = Depends(get_db)
 ):
-    """Create a new organization (no auth — used during provisioning)."""
+    """Create a new organization. Admin-only — this used to have no auth at
+    all, letting any anonymous caller self-provision unlimited organizations
+    on any billing tier. Bootstrap/seeding goes through direct DB scripts
+    (seed_bsc_users.py etc.), not this endpoint, so gating it is safe."""
     existing = db.query(Organization).filter(
         Organization.subdomain == payload.subdomain
     ).first()
     if existing:
         raise HTTPException(status_code=400, detail="Subdomain already taken")
 
-    org = Organization(**payload.model_dump())
+    org = Organization(
+        name=payload.name,
+        subdomain=payload.subdomain,
+        subscription_plan="starter",
+    )
     db.add(org)
     db.commit()
     db.refresh(org)
+
+    audit_service.log_event(
+        db, current_user.organization_id, "ORGANIZATION_CREATED",
+        user_id=current_user.id, entity_type="Organization", entity_id=org.id
+    )
     return org
 
 

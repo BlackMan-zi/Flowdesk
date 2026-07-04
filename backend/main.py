@@ -1,15 +1,16 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 import os
 import logging
 from datetime import datetime, timezone
+
+from core.ratelimit import limiter
+from core.security import require_password_reset_complete
 
 logging.basicConfig(
     level=logging.INFO,
@@ -41,8 +42,6 @@ from routers.events import router as events_router
 from services import scheduler as backup_scheduler
 
 from config import settings
-
-limiter = Limiter(key_func=get_remote_address)
 
 # Root of the repo (one level up from backend/)
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -116,13 +115,16 @@ async def lifespan(app: FastAPI):
     logger.info("FlowDesk API shutting down")
 
 
+# Interactive API docs are a full endpoint/schema map — keep them off in prod.
+_docs_enabled = settings.ENVIRONMENT != "production"
 app = FastAPI(
     title="FlowDesk API",
     description="Multi-Tenant SaaS Approval & Workflow Platform",
     version="1.0.0",
     lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc"
+    docs_url="/docs" if _docs_enabled else None,
+    redoc_url="/redoc" if _docs_enabled else None,
+    openapi_url="/openapi.json" if _docs_enabled else None,
 )
 
 app.state.limiter = limiter
@@ -141,12 +143,17 @@ app.add_middleware(
 
 @app.exception_handler(RateLimitExceeded)
 async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    # exc.headers can be None depending on slowapi version / limit type — a
+    # bare .get() on that crashes into a 500 instead of a clean 429. This was
+    # previously dormant because no endpoint enforced a limit low enough to
+    # trigger it in practice; wiring up per-endpoint auth rate limits exposed it.
+    retry_after = (exc.headers or {}).get("Retry-After", "60")
     return JSONResponse(
         status_code=429,
         content={
             "error": "Rate limit exceeded",
             "detail": str(exc.detail),
-            "retry_after": exc.headers.get("Retry-After", "60")
+            "retry_after": retry_after
         }
     )
 
@@ -167,20 +174,25 @@ async def global_exception_handler(request: Request, exc: Exception):
         )
 
 
+# Business routers require a user who has already rotated their starter
+# password. The auth router is exempt so /auth/me and
+# /auth/force-reset-password still work for a user who owes a reset.
+_password_gate = [Depends(require_password_reset_complete)]
+
 app.include_router(auth_router)
-app.include_router(org_router)
-app.include_router(dept_router)
-app.include_router(users_router)
-app.include_router(roles_router)
-app.include_router(forms_router)
-app.include_router(templates_router)
-app.include_router(approvals_router)
-app.include_router(delegations_router)
-app.include_router(documents_router)
-app.include_router(dashboard_router)
-app.include_router(settings_router)
-app.include_router(backup_router)
-app.include_router(events_router)
+app.include_router(org_router, dependencies=_password_gate)
+app.include_router(dept_router, dependencies=_password_gate)
+app.include_router(users_router, dependencies=_password_gate)
+app.include_router(roles_router, dependencies=_password_gate)
+app.include_router(forms_router, dependencies=_password_gate)
+app.include_router(templates_router, dependencies=_password_gate)
+app.include_router(approvals_router, dependencies=_password_gate)
+app.include_router(delegations_router, dependencies=_password_gate)
+app.include_router(documents_router, dependencies=_password_gate)
+app.include_router(dashboard_router, dependencies=_password_gate)
+app.include_router(settings_router, dependencies=_password_gate)
+app.include_router(backup_router, dependencies=_password_gate)
+app.include_router(events_router, dependencies=_password_gate)
 
 # frontend/dist is at repo root level, one level up from backend/
 frontend_dist = os.path.join(REPO_ROOT, "frontend", "dist")
@@ -188,9 +200,11 @@ if os.path.exists(frontend_dist):
     app.mount("/app", StaticFiles(directory=frontend_dist, html=True), name="frontend")
     logger.info(f"Frontend mounted at /app from {frontend_dist}")
 
-if os.path.exists(settings.MEDIA_DIR):
-    app.mount("/media", StaticFiles(directory=settings.MEDIA_DIR), name="media")
-    logger.info(f"Media files mounted at /media from {settings.MEDIA_DIR}")
+# NOTE: media (generated PDFs, attachments, signatures) is intentionally NOT
+# served as public static files. Serving it directly would bypass per-user
+# authorization and expose signatures/documents to anyone who guesses a path.
+# Documents are downloaded only through the authenticated, authorized routes
+# in routers/documents.py and routers/forms.py.
 
 
 @app.get("/")
@@ -200,8 +214,8 @@ def root(request: Request):
         "message": "FlowDesk API is running",
         "version": "1.0.0",
         "environment": settings.ENVIRONMENT,
-        "docs": "/docs",
-        "redoc": "/redoc"
+        "docs": "/docs" if _docs_enabled else None,
+        "redoc": "/redoc" if _docs_enabled else None,
     }
 
 
