@@ -1,10 +1,19 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
+
+# Caps input length so an enormous string can't be fed into bcrypt as a
+# CPU-exhaustion vector. Deliberately NOT setting min_length here: that would
+# make FastAPI reject short passwords with a Pydantic-shaped 422 error (a
+# list under "detail"), but the frontend renders `detail` as a plain string
+# (see ForcePasswordReset.jsx and friends) — the real minimum-length +
+# complexity gate is services.auth_service.validate_password_strength, which
+# raises the plain-string 400 the frontend already knows how to display.
+NewPassword = Field(max_length=128)
 
 
 class LoginRequest(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(max_length=128)
     # Organisation is auto-detected from the email domain (e.g. @bsc.rw → BSC Rwanda)
 
 
@@ -16,13 +25,13 @@ class TokenResponse(BaseModel):
 
 
 class PasswordResetRequest(BaseModel):
-    token: str
-    new_password: str
+    token: str = Field(max_length=512)
+    new_password: str = NewPassword
 
 
 class ForcePasswordResetRequest(BaseModel):
-    current_password: str
-    new_password: str
+    current_password: str = Field(max_length=128)
+    new_password: str = NewPassword
 
 
 class ForgotPasswordRequest(BaseModel):
@@ -36,7 +45,7 @@ class MFASetupResponse(BaseModel):
 
 
 class MFAVerifyRequest(BaseModel):
-    totp_code: str
+    totp_code: str = Field(pattern=r"^\d{6}$")
 
 
 class RefreshTokenRequest(BaseModel):

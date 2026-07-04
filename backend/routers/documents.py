@@ -36,6 +36,28 @@ def download_document(
     if not instance:
         raise HTTPException(status_code=404, detail="Form instance not found")
 
+    # Authorization: org membership alone is NOT enough — that would let any
+    # colleague pull any signed document. Require admin, the initiator, an
+    # approver on the final version, or an explicit DocumentShare grant.
+    role_names = [ur.role.name for ur in current_user.user_roles if ur.role]
+    if RoleName.admin not in role_names and instance.created_by != current_user.id:
+        is_approver = db.query(ApprovalInstance.id).join(
+            FormVersion, ApprovalInstance.form_version_id == FormVersion.id
+        ).filter(
+            FormVersion.form_instance_id == instance.id,
+            ApprovalInstance.approver_user_id == current_user.id,
+        ).first()
+        has_share = db.query(DocumentShare).filter(
+            DocumentShare.organization_id == current_user.organization_id,
+            DocumentShare.user_id == current_user.id,
+        ).join(
+            GeneratedDocument, GeneratedDocument.id == DocumentShare.document_id
+        ).filter(
+            GeneratedDocument.form_instance_id == instance.id,
+        ).first()
+        if not is_approver and not has_share:
+            raise HTTPException(status_code=404, detail="Form instance not found")
+
     if instance.current_status not in (FormStatus.approved, FormStatus.completed):
         raise HTTPException(
             status_code=400,

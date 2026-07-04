@@ -53,14 +53,24 @@ def _get_styles():
     }
 
 
+_MAX_SIGNATURE_BYTES = 5 * 1024 * 1024  # decoded signature image cap (5 MB)
+
+
 def _signature_image(sig: Signature, width=4*cm, height=1.8*cm):
     """Return a ReportLab Image from base64 signature data."""
     try:
         if sig.signature_data:
             data = base64.b64decode(sig.signature_data.split(",")[-1])
+            if len(data) > _MAX_SIGNATURE_BYTES:
+                raise ValueError("signature too large")
             return Image(io.BytesIO(data), width=width, height=height)
         elif sig.file_path and os.path.exists(sig.file_path):
-            return Image(sig.file_path, width=width, height=height)
+            # Only read files that live under the media directory — never an
+            # arbitrary path that happened to land in the DB.
+            media_root = os.path.realpath(settings.MEDIA_DIR)
+            real = os.path.realpath(sig.file_path)
+            if os.path.commonpath([real, media_root]) == media_root:
+                return Image(sig.file_path, width=width, height=height)
     except Exception:
         pass
     return Paragraph("[Signature unavailable]", getSampleStyleSheet()["Normal"])
@@ -259,8 +269,16 @@ def save_generated_document(
     media_dir = os.path.join(settings.MEDIA_DIR, "documents", organization_id)
     os.makedirs(media_dir, exist_ok=True)
 
-    filename = f"{form_instance.reference_number.replace('/', '-')}_final.pdf"
+    # Sanitize the reference number to a safe filename token — it derives from
+    # an admin-set code suffix, so restrict it to a strict allowlist to
+    # prevent any "../" path traversal out of the documents directory.
+    import re
+    safe_ref = re.sub(r"[^A-Za-z0-9._-]", "_", form_instance.reference_number or "document")
+    filename = f"{safe_ref}_final.pdf"
     file_path = os.path.join(media_dir, filename)
+    # Belt and braces: confirm the resolved path stays inside media_dir.
+    if os.path.commonpath([os.path.realpath(file_path), os.path.realpath(media_dir)]) != os.path.realpath(media_dir):
+        raise ValueError("Invalid document path")
 
     with open(file_path, "wb") as f:
         f.write(pdf_bytes)

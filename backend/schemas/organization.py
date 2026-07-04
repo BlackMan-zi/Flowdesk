@@ -24,12 +24,13 @@ def _normalize_labels(value) -> Optional[List[dict]]:
 class OrganizationCreate(BaseModel):
     name: str
     subdomain: str
-    subscription_plan: str = "starter"
+    # subscription_plan is intentionally NOT accepted from the client — it is
+    # set server-side so a caller can't self-provision on a higher tier.
 
 
 class OrganizationUpdate(BaseModel):
     name: Optional[str] = None
-    subscription_plan: Optional[str] = None
+    # subscription_plan is intentionally NOT tenant-editable (billing concern).
     is_active: Optional[bool] = None
     letterhead_accent: Optional[str] = None
     classification_labels: Optional[List[Union[ClassificationLabel, str]]] = None

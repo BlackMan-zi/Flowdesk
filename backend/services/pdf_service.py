@@ -155,7 +155,12 @@ def _render_value(field, value: Optional[str]) -> str:
     if ft == 'signature':
         v = value.strip()
         if v.startswith('data:image/'):
-            return f'<img class="sig-img" src="{v}" alt="signature">'
+            # _e() only neuters &<>"' — a legitimate base64 data URI never
+            # contains those, so this is a no-op for real signatures. It
+            # closes an HTML/attribute-injection path if signature_data (a
+            # client-supplied field on the approve payload) is ever set to
+            # something other than a real image data URI.
+            return f'<img class="sig-img" src="{_e(v)}" alt="signature">'
         if v.startswith('type:'):
             return f'<span class="sig-text">{_e(v[5:])}</span>'
         return _e(v)

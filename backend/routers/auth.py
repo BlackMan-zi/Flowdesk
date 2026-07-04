@@ -12,9 +12,11 @@ from schemas.auth import (
 from core.security import (
     create_access_token, create_refresh_token, get_current_active_user
 )
+from core.ratelimit import limiter
 from services.auth_service import (
     verify_password, hash_password, generate_reset_token,
-    generate_mfa_secret, get_totp_uri, generate_qr_code_base64, verify_totp
+    generate_mfa_secret, get_totp_uri, generate_qr_code_base64, verify_totp,
+    validate_password_strength
 )
 from services.email_service import send_password_reset_email
 from services import audit_service
@@ -24,7 +26,8 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(payload: LoginRequest, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)):
     email_lower = payload.email.lower()
 
     # Auto-detect organisation from email domain (e.g. william@bsc.rw → email_domain='bsc.rw')
@@ -91,7 +94,9 @@ def verify_mfa(payload: MFAVerifyRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/force-reset-password")
+@limiter.limit("10/minute")
 def force_reset_password(
+    request: Request,
     payload: ForcePasswordResetRequest,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
@@ -100,20 +105,32 @@ def force_reset_password(
     if not verify_password(payload.current_password, current_user.password_hash):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
 
+    is_valid, error_msg = validate_password_strength(payload.new_password)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=error_msg)
+
     current_user.password_hash = hash_password(payload.new_password)
     current_user.must_reset_password = False
     current_user.temp_password = None
+    current_user.password_changed_at = datetime.utcnow()
     db.commit()
 
     audit_service.log_event(
         db, current_user.organization_id, "PASSWORD_CHANGED",
         user_id=current_user.id, entity_type="User", entity_id=current_user.id
     )
-    return {"message": "Password updated successfully"}
+    # Changing the password invalidates the token the client is currently
+    # using (see core.security.get_current_user), so hand back a fresh one to
+    # keep the session alive without forcing a re-login.
+    new_token = create_access_token(
+        {"sub": current_user.id, "org_id": current_user.organization_id}
+    )
+    return {"message": "Password updated successfully", "access_token": new_token}
 
 
 @router.post("/forgot-password")
-def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def forgot_password(request: Request, payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
     email_lower = payload.email.lower()
     email_domain = email_lower.split('@')[-1]
     org = db.query(Organization).filter(
@@ -144,7 +161,8 @@ def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db
 
 
 @router.post("/reset-password")
-def reset_password(payload: PasswordResetRequest, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def reset_password(request: Request, payload: PasswordResetRequest, db: Session = Depends(get_db)):
     reset_token = db.query(PasswordResetToken).filter(
         PasswordResetToken.token == payload.token,
         PasswordResetToken.used == False,
@@ -157,8 +175,13 @@ def reset_password(payload: PasswordResetRequest, db: Session = Depends(get_db))
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    is_valid, error_msg = validate_password_strength(payload.new_password)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=error_msg)
+
     user.password_hash = hash_password(payload.new_password)
     user.must_reset_password = False
+    user.password_changed_at = datetime.utcnow()
     reset_token.used = True
     db.commit()
 

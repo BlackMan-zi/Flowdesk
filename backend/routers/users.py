@@ -236,7 +236,12 @@ def get_user(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    # Users can view themselves; admins can view anyone in org
+    # Users can view themselves; admins can view anyone in org. Without this
+    # check, any user could enumerate the whole org directory + role list.
+    role_names = [ur.role.name for ur in current_user.user_roles if ur.role]
+    if user_id != current_user.id and RoleName.admin not in role_names:
+        raise HTTPException(status_code=403, detail="Access denied")
+
     user = db.query(User).filter(
         User.id == user_id,
         User.organization_id == current_user.organization_id

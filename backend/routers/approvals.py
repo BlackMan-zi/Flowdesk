@@ -7,7 +7,7 @@ from database import get_db, SessionLocal
 
 logger = logging.getLogger(__name__)
 from models.user import User, RoleName, UserRole
-from models.form import FormInstance, FormVersion, FormStatus, FormFieldValue
+from models.form import FormInstance, FormVersion, FormStatus, FormFieldValue, FormField
 from models.approval import ApprovalInstance, ApprovalStepStatus, ApprovalTemplateCCRecipient, RoleType
 from models.document import Signature, SignatureType, DocumentShare
 from models.organization import Organization
@@ -348,9 +348,26 @@ def approve(
     ap = _get_active_approval_for_user(db, form_instance_id, current_user)
     instance = ap.form_version.form_instance
 
+    # Defense in depth: never let the initiator approve their own form, even
+    # if a template mistakenly assigned them a step.
+    if instance.created_by == current_user.id:
+        raise HTTPException(status_code=403, detail="You cannot approve your own form")
+
     # Save approver-filled field values
     if payload.field_values:
+        # Only accept field IDs that actually belong to this form definition —
+        # otherwise an approver could inject values for arbitrary field rows.
+        valid_field_ids = {
+            fid for (fid,) in db.query(FormField.id).filter(
+                FormField.form_definition_id == instance.form_definition_id
+            ).all()
+        }
         for fv_input in payload.field_values:
+            if fv_input.form_field_id not in valid_field_ids:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid form field for this form",
+                )
             existing = db.query(FormFieldValue).filter(
                 FormFieldValue.form_version_id == ap.form_version_id,
                 FormFieldValue.form_field_id == fv_input.form_field_id

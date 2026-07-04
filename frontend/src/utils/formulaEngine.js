@@ -15,6 +15,13 @@
  * @param {Object} fieldsByName - { [fieldName]: fieldObject }  (fieldObject has .id)
  * @returns {string} formatted result, or '' on error
  */
+// Escape regex metacharacters so a field name / column key with characters
+// like . * ( ) can't corrupt the pattern, throw, or cause catastrophic
+// backtracking.
+function escapeRegExp(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
 export function evaluateFormula(formula, values, fieldsByName) {
   if (!formula) return ''
   try {
@@ -44,7 +51,7 @@ export function evaluateFormula(formula, values, fieldsByName) {
     for (const name of names) {
       const field = fieldsByName[name]
       const val = parseFloat(values[field.id]) || 0
-      expr = expr.replace(new RegExp(`\\b${name}\\b`, 'g'), String(val))
+      expr = expr.replace(new RegExp(`\\b${escapeRegExp(name)}\\b`, 'g'), String(val))
     }
 
     // 3. Safety check — only numbers and operators allowed after substitution
@@ -129,7 +136,7 @@ export function evaluateRowFormula(formula, rowValues) {
     const keys = Object.keys(rowValues).sort((a, b) => b.length - a.length)
     for (const key of keys) {
       const val = parseFloat(rowValues[key]) || 0
-      expr = expr.replace(new RegExp(`\\b${key}\\b`, 'g'), String(val))
+      expr = expr.replace(new RegExp(`\\b${escapeRegExp(key)}\\b`, 'g'), String(val))
     }
     if (/[^0-9+\-*/.()%\s]/.test(expr)) return ''
     // eslint-disable-next-line no-new-func

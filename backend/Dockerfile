@@ -24,6 +24,19 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/ .
 COPY database/migrations/ ./migrations/
 
+# Create an unprivileged user WITH a real home directory — WeasyPrint's
+# fontconfig dependency needs a writable cache dir (normally ~/.cache), and a
+# homeless system user makes every render fail with "Fontconfig error: No
+# writable cache directories". The entrypoint fixes the media-volume
+# ownership (which may be a pre-existing root-owned named volume) as root,
+# then drops to this user — so the actual app process never runs as root.
+RUN adduser --system --group --home /home/appuser appuser \
+    && mkdir -p /app/media /home/appuser/.cache/fontconfig \
+    && chown -R appuser:appuser /app /home/appuser \
+    && chmod +x /app/docker-entrypoint.sh
+ENV HOME=/home/appuser
+
 EXPOSE 8000
 
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
