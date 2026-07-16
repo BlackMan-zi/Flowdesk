@@ -2,7 +2,7 @@
 -- FlowDesk Database Seed: Organizations & Departments
 -- Version: 2.0
 -- Updated: 2026-04-16
--- Description: Two organisations — demo (admin only) + BSC Rwanda (all staff)
+-- Description: Two organisations: demo (admin only) + BSC Rwanda (all staff)
 -- ============================================================
 
 -- ── Organizations ────────────────────────────────────────────

@@ -6,9 +6,9 @@
 -- represents a backdated event can be dated to when the event actually
 -- happened, not when it was typed in).
 --
---   form_instances.initiator_signature_data — same encoding as
+--   form_instances.initiator_signature_data: same encoding as
 --     SignaturePad's value: "type:<name>" or "data:image/png;base64,...".
---   form_instances.initiator_signed_at — the date the initiator chose;
+--   form_instances.initiator_signed_at: the date the initiator chose;
 --     defaults to submitted_at on the frontend but admin can override.
 --
 -- Portable across Postgres (>=13) and MySQL (>=8.0.29).

@@ -101,7 +101,7 @@ function TableFieldInput({ field, value, onChange }) {
 
 function FieldOverlay({ field, value, onChange, allValues, fieldsByName }) {
   const fontSize = field.validation_rules?.font_size || 11
-  // Sharp edges, thin border — focused state changes color only, no extra ring layer
+  // Sharp edges, thin border: focused state changes color only, no extra ring layer
   const inputCls = `
     w-full h-full bg-white/90 border border-slate-400/60
     px-1 outline-none focus:bg-white focus:border-brand-500
@@ -580,7 +580,7 @@ export default function PDFFormFill({ formDef, values, onChange, currentUser }) 
         const doc = await pdfjsLib.getDocument(blobUrl).promise
         setPageTemplates(prev => ({ ...prev, [pageNum]: { doc, pageCount: doc.numPages } }))
       } catch {
-        // No template for this page — blank canvas will be used
+        // No template for this page, so a blank canvas will be used
       } finally {
         if (pageNum === 1) setPdfLoadAttempted(true)
       }
@@ -594,7 +594,7 @@ export default function PDFFormFill({ formDef, values, onChange, currentUser }) 
     return () => blobUrls.forEach(u => URL.revokeObjectURL(u))
   }, [formDef?.id])
 
-  // Auto-fill fields on mount — resolve all data-bound sources from current user context
+  // Auto-fill fields on mount: resolve all data-bound sources from current user context
   useEffect(() => {
     if (!formDef?.fields || !currentUser) return
 
@@ -630,7 +630,7 @@ export default function PDFFormFill({ formDef, values, onChange, currentUser }) 
                    : step.hierarchy_level === 'hod'        ? currentUser.hod_name
                    : null
         if (name) sourceValues[`approver.step_${n}.name`] = name
-        // Signature and date are filled at approval time — leave them blank
+        // Signature and date are filled at approval time, so leave them blank
       }
       // For 'SpecificUser' / 'Functional' / 'Executive': approver is resolved at submission
       // time by the backend; names are not pre-filled here
@@ -638,7 +638,7 @@ export default function PDFFormFill({ formDef, values, onChange, currentUser }) 
 
     formDef.fields.filter(f => f.auto_filled && f.auto_fill_source).forEach(f => {
       const val = sourceValues[f.auto_fill_source]
-      // Only set if we have a non-empty value — empty means the user doesn't have this
+      // Only set if we have a non-empty value: empty means the user doesn't have this
       // data (e.g. no unit), so the field stays blank without breaking the layout
       if (val != null && val !== '') {
         onChange(f.id, val)

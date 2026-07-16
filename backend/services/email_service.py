@@ -11,7 +11,7 @@ from config import settings
 
 def esc(value) -> str:
     """HTML-escape a value before it goes into an email body. All user-supplied
-    text (names, notes, form names) MUST pass through this — otherwise an
+    text (names, notes, form names) MUST pass through this, otherwise an
     initiator/approver can inject markup or phishing links into mails
     delivered to managers and executives."""
     return html.escape("" if value is None else str(value))
@@ -28,8 +28,9 @@ def _send_email(
     subject: str,
     html_body: str,
     attachments: Optional[List[dict]] = None
-):
-    """Send email via Microsoft Exchange Online (or any SMTP with STARTTLS)."""
+) -> bool:
+    """Send email via Microsoft Exchange Online (or any SMTP with STARTTLS).
+    Returns True on success, False on failure (never raises)."""
     to_email = _clean_header(to_email)
     subject = _clean_header(subject)
 
@@ -67,9 +68,11 @@ def _send_email(
                 server.ehlo()
             server.login(settings.SMTP_USER, settings.SMTP_PASS)
             server.sendmail(settings.SMTP_FROM, to_email, msg.as_string())
+            return True
     except Exception as e:
         # Log the failure type but not the recipient address (PII in stdout).
         print(f"[EMAIL ERROR] Failed to send message: {type(e).__name__}")
+        return False
 
 
 def _html_wrapper(content: str) -> str:
@@ -129,17 +132,22 @@ def send_temp_credentials_email(to_email: str, user_name: str, temp_password: st
     _send_email(to_email, f"Welcome to FlowDesk – Your Account Credentials", _html_wrapper(content))
 
 
-def send_password_reset_email(to_email: str, user_name: str, reset_token: str):
-    reset_url = f"{settings.FRONTEND_URL}/reset-password?token={reset_token}"
+def send_password_reset_code_email(to_email: str, user_name: str, temp_password: str) -> bool:
     content = f"""
-    <h2>Password Reset Request</h2>
+    <h2>Password Reset Requested</h2>
     <p>Hi {esc(user_name)}, we received a request to reset your FlowDesk password.</p>
-    <a href="{reset_url}" class="btn">Reset My Password →</a>
+    <div class="info-box">
+      <strong>Your temporary password:</strong><br>
+      <strong style="font-family: monospace; font-size: 15px;">{esc(temp_password)}</strong>
+    </div>
+    <p>Sign in with this temporary password below, you'll be asked to choose a new one right after.</p>
+    <a href="{settings.FRONTEND_URL}/login" class="btn">Login to FlowDesk →</a>
     <p style="margin-top: 16px; font-size: 13px; color: #666;">
-      This link expires in 1 hour. If you didn't request this, please ignore this email.
+      If you didn't request this, your account has not been compromised, but please
+      contact your administrator so they can look into it.
     </p>
     """
-    _send_email(to_email, "FlowDesk – Password Reset Request", _html_wrapper(content))
+    return _send_email(to_email, "FlowDesk – Password Reset Requested", _html_wrapper(content))
 
 
 def send_approval_request_email(

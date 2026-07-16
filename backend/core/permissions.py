@@ -40,7 +40,7 @@ def require_admin():
 
 
 def require_admin_or_manager():
-    """Admin or Report Manager — user management and reports."""
+    """Admin or Report Manager: user management and reports."""
     return require_roles(RoleName.admin, RoleName.report_manager)
 
 

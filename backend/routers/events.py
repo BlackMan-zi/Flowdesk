@@ -1,4 +1,4 @@
-"""Server-Sent Events stream — replaces 1-second polling on
+"""Server-Sent Events stream, replacing 1-second polling on
 My Forms / Approvals / Documents / Dashboard.
 
 Every connected browser opens GET /events/stream?token=<jwt>. The api
@@ -8,7 +8,7 @@ React Query caches on receipt; React Query then refetches just the
 queries that page actually uses.
 
 EventSource can't send Authorization headers, so the access token
-travels in the query string — same JWT, same expiry, same secret.
+travels in the query string, using the same JWT, same expiry, same secret.
 """
 
 import asyncio
@@ -42,7 +42,7 @@ async def _event_stream(org_id: str, request: Request):
             try:
                 event = await asyncio.to_thread(q.get, True, KEEPALIVE_SECONDS)
             except queue.Empty:
-                # Comment-only line — keeps the connection alive through
+                # Comment-only line, keeps the connection alive through
                 # idle-timeout-aware proxies without surfacing as an event.
                 yield ": keepalive\n\n"
                 continue
@@ -58,7 +58,7 @@ async def stream(
     token: str = Query(..., description="Bearer JWT (same as Authorization header)"),
     db: Session = Depends(get_db),
 ):
-    """SSE endpoint. Frontend opens via EventSource — no custom headers
+    """SSE endpoint. Frontend opens via EventSource: no custom headers
     available there, hence ?token=…"""
     try:
         payload = decode_token(token)

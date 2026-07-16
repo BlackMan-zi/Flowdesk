@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-BSC Rwanda — Users, Departments & Units seeding script.
+BSC Rwanda: Users, Departments & Units seeding script.
 Run inside the API container:
   docker exec flowdesk-api-1 python3 /app/seed_bsc_users.py
 """
@@ -57,7 +57,7 @@ USERS = [
     # ── Technical ─────────────────────────────────────────────────────────────
     ("Philip",              "Mudenge",             "Technical",  None,                          "Senior Manager"),   # TX + Access + Planning Projects
     ("Robert",              "Nkeramugaba",         "Technical",  None,                          "Senior Manager"),   # Cloud + Noc + IP Core
-    # — Managers —
+    # Managers
     ("Yves",                "Ishema",              "Technical",  "Access",                      "Manager"),
     ("Jean Claude",         "Karemera",            "Technical",  "TX",                          "Manager"),
     ("Joan",                "Mukantagara",         "Technical",  "Planning Projects",           "Manager"),
@@ -66,7 +66,7 @@ USERS = [
     ("Ingrid",              "Iradukunda",          "Technical",  "IP Core",                     "Manager"),
     ("Denis",               "Rukundo",             "Technical",  "IP Core",                     "Manager"),
     ("Yves",                "Nkaka",               "Technical",  "Security",                    "Manager"),
-    # — Access Officers —
+    # Access Officers
     ("Julien",              "Amahirwe",            "Technical",  "Access",                      "Officer"),
     ("Alexis",              "Habarimana",          "Technical",  "Access",                      "Officer"),
     ("Mechack",             "Iradukunda",          "Technical",  "Access",                      "Officer"),
@@ -82,10 +82,10 @@ USERS = [
     ("Emmanuel",            "Tuganimana",          "Technical",  "Access",                      "Officer"),
     ("Osee",                "Tuyihimbaze",         "Technical",  "Access",                      "Officer"),
     ("Frank",               "Rutaganira",          "Technical",  "Access",                      "Officer"),
-    # — Cloud Officers —
+    # Cloud Officers
     ("Patrick",             "Muragwa",             "Technical",  "Cloud",                       "Officer"),
     ("Patrick",             "Sengabo",             "Technical",  "Cloud",                       "Officer"),
-    # — Noc Officers —
+    # Noc Officers
     ("Stella Marlyne",      "Igihozo",             "Technical",  "Noc",                         "Officer"),
     ("Materne",             "Kalingungu",          "Technical",  "Noc",                         "Officer"),
     ("Amza",                "Mbaraga",             "Technical",  "Noc",                         "Officer"),
@@ -93,31 +93,31 @@ USERS = [
     ("Jean de Dieu",        "Ndahayo",             "Technical",  "Noc",                         "Officer"),
     ("Desire",              "Rutaganira",          "Technical",  "Noc",                         "Officer"),
     ("Brendah",             "Umutoniwase",         "Technical",  "Noc",                         "Officer"),
-    # — IP Core Officers —
+    # IP Core Officers
     ("Jessica",             "Kankundiye",          "Technical",  "IP Core",                     "Officer"),
     ("Elie",                "Nshimiye",            "Technical",  "IP Core",                     "Officer"),
-    # — TX Officers —
+    # TX Officers
     ("Joseph",              "Muhire",              "Technical",  "TX",                          "Officer"),
     ("Ernest",              "Nkurunziza",          "Technical",  "TX",                          "Officer"),
     ("Gady",                "Mutangana",           "Technical",  "TX",                          "Officer"),
-    # — Planning Projects Officers —
+    # Planning Projects Officers
     ("Willy",               "Nyarwaya",            "Technical",  "Planning Projects",           "Officer"),
-    # — Security Officers —
+    # Security Officers
     ("Alain",               "Mugisha",             "Technical",  "Security",                    "Officer"),
     ("Joyeuse",             "Tuyishime",           "Technical",  "Security",                    "Officer"),
     ("Mireille",            "Ukeye",               "Technical",  "Security",                    "Officer"),
 
     # ── Commercial ────────────────────────────────────────────────────────────
     ("Patrick",             "Mugisha",             "Commercial", "Sales",                       "Senior Manager"),
-    # — Managers —
+    # Managers
     ("Omer",                "Banza",               "Commercial", "Business Expansion",          "Manager"),
     ("Duncan",              "Mugisha",             "Commercial", "Marketing",                   "Manager"),
     ("Alphonsine",          "Mukamana",            "Commercial", "Sales",                       "Manager"),
     ("Jean de Dieu",        "Tuyishime",           "Commercial", "Product Development",         "Manager"),
-    # — Marketing Officers —
+    # Marketing Officers
     ("Raissa",              "Atete",               "Commercial", "Marketing",                   "Officer"),
     ("Sheilla",             "Bazizane",            "Commercial", "Marketing",                   "Officer"),
-    # — Sales Officers —
+    # Sales Officers
     ("Richard",             "Buntu",               "Commercial", "Sales",                       "Officer"),
     ("Moses",               "Gahigi",              "Commercial", "Sales",                       "Officer"),
     ("Nadia",               "Gasana",              "Commercial", "Sales",                       "Officer"),
@@ -128,36 +128,36 @@ USERS = [
     ("Thamar",              "Niyitegeka",          "Commercial", "Sales",                       "Officer"),
     ("Chris Marie",         "Ngabonziza",          "Commercial", "Sales",                       "Officer"),
     ("Justin",              "Shyaka",              "Commercial", "Sales",                       "Officer"),
-    # — Product Development Officers —
+    # Product Development Officers
     ("Justine",             "Mudahogora",          "Commercial", "Product Development",         "Officer"),
 
     # ── Corporate ─────────────────────────────────────────────────────────────
     ("Justin",              "Munyampeta",          "Corporate",  "Supply Chain",                "Manager"),
     ("Noella",              "Uwamariya",           "Corporate",  "Admin & HR",                  "Manager"),
     ("Nadege",              "Umutoniwase",         "Corporate",  "HR",                          "Manager"),
-    # — Supply Chain Officers —
+    # Supply Chain Officers
     ("Papias",              "Bahizi",              "Corporate",  "Supply Chain",                "Officer"),
     ("Alain",               "Iyakaremye",          "Corporate",  "Supply Chain",                "Officer"),
     ("Keneth",              "Murinda",             "Corporate",  "Supply Chain",                "Officer"),
     ("Evelyne",             "Mutunge",             "Corporate",  "Supply Chain",                "Officer"),
     ("Henriette",           "Uwera",               "Corporate",  "Supply Chain",                "Officer"),
-    # — Admin & HR Officers —
+    # Admin & HR Officers
     ("Grace",               "Batamuliza",          "Corporate",  "Admin & HR",                  "Officer"),
     ("Didas",               "Mugisha",             "Corporate",  "Admin & HR",                  "Officer"),
     ("Christophe",          "Niyimubona",          "Corporate",  "Admin & HR",                  "Officer"),
     ("Jean Marie",          "Rukundo",             "Corporate",  "Admin & HR",                  "Officer"),
-    # — HR Officers —
+    # HR Officers
     ("William",             "Manzi",               "Corporate",  "HR",                          "Officer"),
 
     # ── Finance ───────────────────────────────────────────────────────────────
     ("Felicien",            "Batitonda",           "Finance",    None,                          "Senior Manager"),  # Accounting + Recovery
     ("Daniel",              "Muyoboke",            "Finance",    "Accounting",                  "Manager"),
     ("Vianney",             "Mugabo",              "Finance",    "Recovery",                    "Manager"),
-    # — Accounting Officers —
+    # Accounting Officers
     ("Damascene",           "Ngororano",           "Finance",    "Accounting",                  "Officer"),
     ("Pacifique",           "Nkurunziza",          "Finance",    "Accounting",                  "Officer"),
     ("Cynthia",             "Umulisa",             "Finance",    "Accounting",                  "Officer"),
-    # — Recovery Officers —
+    # Recovery Officers
     ("John",                "Katungi",             "Finance",    "Recovery",                    "Officer"),
     ("Julienne",            "Kayitesi",            "Finance",    "Recovery",                    "Officer"),
     ("Jonas",               "Mihigo",              "Finance",    "Recovery",                    "Officer"),
@@ -287,8 +287,8 @@ def main():
     # ── 1. Ensure roles exist ─────────────────────────────────────────────────
     print("Step 1: Creating roles...")
     role_defs = [
-        (RoleName.admin,         RoleCategory.system,    "System Administrator — full access"),
-        (RoleName.standard_user, RoleCategory.system,    "Standard user — can submit forms"),
+        (RoleName.admin,         RoleCategory.system,    "System Administrator: full access"),
+        (RoleName.standard_user, RoleCategory.system,    "Standard user: can submit forms"),
         (RoleName.observer,      RoleCategory.system,    "Read-only observer"),
         (RoleName.manager,       RoleCategory.hierarchy, "Unit Manager"),
         (RoleName.sn_manager,    RoleCategory.hierarchy, "Senior Manager"),

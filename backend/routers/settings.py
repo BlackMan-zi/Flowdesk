@@ -2,7 +2,7 @@
 Organization-level settings & branding.
 
 The header/footer images uploaded here are reused as letterhead on every
-form's exported PDF — so admins only design their letterhead once. Phase A
+form's exported PDF, so admins only design their letterhead once. Phase A
 of the form-architecture redesign.
 """
 import os
@@ -25,7 +25,7 @@ router = APIRouter(prefix="/settings", tags=["Settings"])
 MAX_IMAGE_BYTES = 8 * 1024 * 1024  # 8 MB
 
 # Accept any browser-displayable image format. We refuse SVG by default to
-# avoid script injection — admins who really need vector logos can switch to
+# avoid script injection; admins who really need vector logos can switch to
 # a rasterised export. PDFs are not accepted as letterhead images.
 _ALLOWED_EXTS = {"png", "jpg", "jpeg", "webp", "gif", "bmp", "tiff", "tif", "ico", "avif"}
 
@@ -54,7 +54,7 @@ def _save_image(file: UploadFile, dest_path: str) -> None:
     if ct and not ct.startswith("image/"):
         raise HTTPException(status_code=400, detail="Uploaded file must be an image.")
     if ct == "image/svg+xml":
-        raise HTTPException(status_code=400, detail="SVG uploads are not supported — please export to PNG.")
+        raise HTTPException(status_code=400, detail="SVG uploads are not supported, please export to PNG.")
     # Stream to disk, enforce size limit
     total = 0
     with open(dest_path, "wb") as out:

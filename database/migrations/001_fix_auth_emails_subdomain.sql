@@ -1,5 +1,5 @@
 -- ============================================================
--- Migration 001: Fix authentication — update org subdomain
+-- Migration 001: Fix authentication, update org subdomain
 --                and user email domains
 -- Date: 2026-04-16
 -- Run this against the live FlowDesk database once.
@@ -17,6 +17,6 @@ SET email = REPLACE(email, '@bsc.demo', '@bsc.rw')
 WHERE organization_id = 'org-bsc-001'
   AND email LIKE '%@bsc.demo';
 
--- 3. Verify — run these SELECTs to confirm:
+-- 3. Verify: run these SELECTs to confirm:
 -- SELECT id, subdomain FROM organizations WHERE id = 'org-bsc-001';
 -- SELECT id, name, email FROM users WHERE organization_id = 'org-bsc-001' ORDER BY name;

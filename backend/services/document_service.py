@@ -65,7 +65,7 @@ def _signature_image(sig: Signature, width=4*cm, height=1.8*cm):
                 raise ValueError("signature too large")
             return Image(io.BytesIO(data), width=width, height=height)
         elif sig.file_path and os.path.exists(sig.file_path):
-            # Only read files that live under the media directory — never an
+            # Only read files that live under the media directory, never an
             # arbitrary path that happened to land in the DB.
             media_root = os.path.realpath(settings.MEDIA_DIR)
             real = os.path.realpath(sig.file_path)
@@ -96,7 +96,7 @@ def generate_final_pdf(
 
     # ── HEADER ──────────────────────────────────────────────────────────────
     elements.append(Paragraph(f"{organization_name}", styles["title"]))
-    elements.append(Paragraph("FlowDesk — Workflow & Approval Platform", styles["subtitle"]))
+    elements.append(Paragraph("FlowDesk: Workflow & Approval Platform", styles["subtitle"]))
     elements.append(HRFlowable(width="100%", thickness=2, color=BRAND_BLUE, spaceAfter=8))
 
     form_def = form_instance.form_definition
@@ -269,7 +269,7 @@ def save_generated_document(
     media_dir = os.path.join(settings.MEDIA_DIR, "documents", organization_id)
     os.makedirs(media_dir, exist_ok=True)
 
-    # Sanitize the reference number to a safe filename token — it derives from
+    # Sanitize the reference number to a safe filename token: it derives from
     # an admin-set code suffix, so restrict it to a strict allowlist to
     # prevent any "../" path traversal out of the documents directory.
     import re

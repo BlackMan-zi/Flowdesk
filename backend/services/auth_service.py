@@ -1,5 +1,4 @@
 import secrets
-import string
 import re
 import bcrypt
 import pyotp
@@ -24,14 +23,14 @@ def validate_password_strength(password: str) -> tuple[bool, str]:
     Returns: (is_valid, error_message)
     
     Requirements:
-    - At least 12 characters
+    - At least 8 characters
     - At least one uppercase letter
     - At least one lowercase letter
     - At least one digit
     - At least one special character (!@#$%^&*)
     """
-    if len(password) < 12:
-        return False, "Password must be at least 12 characters long"
+    if len(password) < 8:
+        return False, "Password must be at least 8 characters long"
     
     if not re.search(r"[A-Z]", password):
         return False, "Password must contain at least one uppercase letter"
@@ -48,16 +47,14 @@ def validate_password_strength(password: str) -> tuple[bool, str]:
     return True, ""
 
 
-def generate_temp_password(length: int = 12) -> str:
-    """Generate a secure temporary password."""
-    alphabet = string.ascii_letters + string.digits + "!@#$%"
-    while True:
-        password = ''.join(secrets.choice(alphabet) for _ in range(length))
-        # Ensure it has at least one of each character type
-        if (any(c.islower() for c in password)
-                and any(c.isupper() for c in password)
-                and any(c.isdigit() for c in password)):
-            return password
+_READABLE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"  # omits 0/O/1/I/L to avoid transcription errors
+
+
+def generate_temp_password(length: int = 10) -> str:
+    """Generate a human-readable temporary password/code (CSPRNG). This is
+    only ever hashed and set directly as password_hash, never run through
+    validate_password_strength, so no character-class mix is required."""
+    return ''.join(secrets.choice(_READABLE_ALPHABET) for _ in range(length))
 
 
 def generate_mfa_secret() -> str:
@@ -82,7 +79,3 @@ def generate_qr_code_base64(uri: str) -> str:
 def verify_totp(secret: str, code: str) -> bool:
     totp = pyotp.TOTP(secret)
     return totp.verify(code, valid_window=1)
-
-
-def generate_reset_token() -> str:
-    return secrets.token_urlsafe(32)

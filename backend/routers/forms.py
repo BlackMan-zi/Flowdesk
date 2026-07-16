@@ -258,7 +258,7 @@ async def upload_pdf_template(
     if file.content_type not in ("application/pdf", "application/octet-stream"):
         raise HTTPException(status_code=400, detail="Uploaded file must be a PDF")
 
-    # Read with a hard size cap, then verify the real PDF magic bytes — don't
+    # Read with a hard size cap, then verify the real PDF magic bytes; don't
     # trust the client-declared content type.
     max_bytes = settings.MAX_UPLOAD_SIZE_BYTES
     data = file.file.read(max_bytes + 1)
@@ -514,17 +514,17 @@ def list_form_instances(
 ):
     """List form instances for the dashboard / My Forms views.
 
-    `scope=mine` (default) — only forms the current user initiated. Non-admins
+    `scope=mine` (default): only forms the current user initiated. Non-admins
     are always pinned to this scope regardless of what they pass.
-    `scope=org` — every form in the organization. Admin-only; non-admins
+    `scope=org`: every form in the organization. Admin-only; non-admins
     asking for `org` are silently downgraded to `mine`.
 
     Optional filters:
-    - `status` — exact FormStatus value (e.g. `Pending`, `Approved`).
-    - `date_from` / `date_to` — ISO date strings (yyyy-MM-dd). Filters on
+    - `status`: exact FormStatus value (e.g. `Pending`, `Approved`).
+    - `date_from` / `date_to`: ISO date strings (yyyy-MM-dd). Filters on
       submitted_at when present, otherwise created_at, so drafts also
       respect the range.
-    - `search` — whitespace-split tokens; every token must appear in the
+    - `search`: whitespace-split tokens; every token must appear in the
       concatenation of reference_number + form_name + initiator name/email.
     """
     role_names = [ur.role.name for ur in current_user.user_roles if ur.role]
@@ -665,7 +665,7 @@ def get_form_instance(
     if not instance:
         raise HTTPException(status_code=404, detail="Form instance not found")
 
-    # Org membership is not enough — a form's field values can be sensitive.
+    # Org membership is not enough: a form's field values can be sensitive.
     # Allow only the initiator, an assigned approver on any version, or admin.
     role_names = [ur.role.name for ur in current_user.user_roles if ur.role]
     if RoleName.admin not in role_names and instance.created_by != current_user.id:
@@ -817,7 +817,7 @@ def submit_form_instance(
     if payload.selected_approver_ids and current_user.id in payload.selected_approver_ids.values():
         raise HTTPException(status_code=400, detail="You cannot select yourself as an approver of your own form")
 
-    # Initiator must sign at submit time. Backdating is allowed -- the chosen
+    # Initiator must sign at submit time. Backdating is allowed; the chosen
     # date is captured on instance.initiator_signed_at.
     if not payload.initiator_signature_data:
         raise HTTPException(
@@ -956,7 +956,7 @@ def resubmit_form_instance(
                 payload.selected_approver_ids
             )
         except ValueError as e:
-            # Approver-resolution failure (missing manager / HOD / etc.) — the
+            # Approver-resolution failure (missing manager / HOD / etc.); the
             # form is now stuck "submitted" with no chain. Surface as 400 so
             # the user sees the actual reason instead of a generic 500.
             raise HTTPException(status_code=400, detail=str(e))
@@ -1002,7 +1002,7 @@ async def upload_attachment(
     import uuid
 
     # Validate the file type from an allowlist. The client filename is used
-    # ONLY for display metadata — never for the on-disk path, so a name like
+    # ONLY for display metadata, never for the on-disk path, so a name like
     # "../../etc/passwd" cannot traverse out of the attachments directory.
     original_name = os.path.basename(file.filename or "").strip() or "file"
     ext = os.path.splitext(original_name)[1].lower()
@@ -1184,7 +1184,7 @@ def update_template(
         #   - new in payload (no matching order) → INSERT
         #   - existing not in payload → DELETE if no approval_instance
         #       references it; otherwise leave the row alone so the audit
-        #       trail keeps working (the orphaned step is harmless — it's no
+        #       trail keeps working (the orphaned step is harmless: it's no
         #       longer in the template's active step set for new instances).
         existing_by_order = {
             row.step_order: row for row in db.query(ApprovalTemplateStep).filter(

@@ -239,7 +239,7 @@ function StepCard({ step, index, isEditing, onToggleEdit, onUpdate, onDelete, on
 
   return (
     <div className="border border-slate-200 rounded-lg overflow-hidden">
-      {/* Header — click to toggle editor */}
+      {/* Header: click to toggle editor */}
       <div
         className="flex items-center gap-2 px-2.5 py-2 bg-slate-50 hover:bg-slate-100 cursor-pointer select-none transition-colors"
         onClick={onToggleEdit}
@@ -258,7 +258,7 @@ function StepCard({ step, index, isEditing, onToggleEdit, onUpdate, onDelete, on
         </div>
       </div>
 
-      {/* Editor — shown when isEditing */}
+      {/* Editor: shown when isEditing */}
       {isEditing && (
         <div className="p-2.5 space-y-2.5 border-t border-slate-200 bg-white">
           {/* Label */}
@@ -327,7 +327,7 @@ function StepCard({ step, index, isEditing, onToggleEdit, onUpdate, onDelete, on
                 placeholder="Search roles…"
               />
               {roleItems.length === 0 && (
-                <p className="text-[10px] text-amber-600 mt-0.5">No roles loaded — check admin permissions.</p>
+                <p className="text-[10px] text-amber-600 mt-0.5">No roles loaded. Check admin permissions.</p>
               )}
             </label>
           )}
@@ -549,7 +549,7 @@ function FieldProperties({ field, onChange, onDelete, formCodeSuffix, locked, on
         )}
       </div>
 
-      {/* Type — hidden when bound (source drives the field behaviour) */}
+      {/* Type: hidden when bound (source drives the field behaviour) */}
       {!field.auto_filled && (
         <label className="block">
           <span className="font-medium text-slate-600 block mb-1">Type</span>
@@ -598,10 +598,10 @@ function FieldProperties({ field, onChange, onDelete, formCodeSuffix, locked, on
             <span className="text-slate-600 block mb-0.5">Digit padding</span>
             <select value={rules.ref_padding ?? 4} onChange={e => setRule('ref_padding', Number(e.target.value))}
               className="w-full border border-slate-200 rounded px-2 py-1 focus:outline-none">
-              <option value={3}>3 digits — PR-001</option>
-              <option value={4}>4 digits — PR-0001</option>
-              <option value={5}>5 digits — PR-00001</option>
-              <option value={6}>6 digits — PR-000001</option>
+              <option value={3}>3 digits: PR-001</option>
+              <option value={4}>4 digits: PR-0001</option>
+              <option value={5}>5 digits: PR-00001</option>
+              <option value={6}>6 digits: PR-000001</option>
             </select>
           </label>
           <p className="text-xs text-amber-700 bg-amber-100 rounded px-2 py-1">
@@ -851,14 +851,14 @@ function AlignmentBar({ count, onAlign, onDeselect, alignMode, onAlignModeChange
 
         <div className="w-px h-4 bg-amber-200 mx-1 flex-shrink-0" />
 
-        {/* Horizontal alignment — Vertical icons = left/center/right */}
+        {/* Horizontal alignment: Vertical icons = left/center/right */}
         <AlignBtn Icon={AlignStartVertical}     title="Align left edges"             onClick={() => onAlign('left')} />
         <AlignBtn Icon={AlignCenterVertical}    title="Align horizontal centers"     onClick={() => onAlign('centerH')} />
         <AlignBtn Icon={AlignEndVertical}       title="Align right edges"            onClick={() => onAlign('right')} />
 
         <div className="w-px h-4 bg-amber-200 mx-1 flex-shrink-0" />
 
-        {/* Vertical alignment — Horizontal icons = top/middle/bottom */}
+        {/* Vertical alignment: Horizontal icons = top/middle/bottom */}
         <AlignBtn Icon={AlignStartHorizontal}   title="Align top edges"              onClick={() => onAlign('top')} />
         <AlignBtn Icon={AlignCenterHorizontal}  title="Align vertical centers"       onClick={() => onAlign('middleV')} />
         <AlignBtn Icon={AlignEndHorizontal}     title="Align bottom edges"           onClick={() => onAlign('bottom')} />
@@ -940,7 +940,7 @@ function PageNav({ numPages, currentPage, onChangePage, fields, onAddPage, onDel
             <button
               key={page}
               onClick={() => onChangePage(page)}
-              title={hasTemplate ? `Page ${page} — has PDF template` : `Page ${page} — blank canvas`}
+              title={hasTemplate ? `Page ${page}: has PDF template` : `Page ${page}: blank canvas`}
               className={cn(
                 'flex-shrink-0 flex flex-col items-center justify-center rounded-lg border-2 px-2.5 py-1.5 transition-all text-xs',
                 isActive
@@ -1019,7 +1019,7 @@ function ZoomControl({ zoom, onZoom }) {
 
 // ── Data-binding source catalogue ────────────────────────────────────────────
 
-// Static sources (submitter + initiator) — always present
+// Static sources (submitter + initiator): always present
 const STATIC_BIND_SOURCES = [
   {
     group: 'Submitter Info', icon: User,
@@ -1041,7 +1041,7 @@ const STATIC_BIND_SOURCES = [
   },
 ]
 
-// Legacy preview labels — for fields bound to old hierarchy keys (kept for backward compat display)
+// Legacy preview labels: for fields bound to old hierarchy keys (kept for backward compat display)
 const LEGACY_PREVIEW = {
   'approver.line_manager.name':      'Mgr Name',
   'approver.line_manager.signature': 'Mgr Sig',
@@ -1193,7 +1193,7 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
   const basePdfWidth = availableWidth ? Math.min(availableWidth - 64, BASE_MAX) : BASE_MAX
   const pdfWidth = Math.round(basePdfWidth * zoom / 100)
 
-  // Load PDF templates on mount — page 1 first, then check for page-specific templates
+  // Load PDF templates on mount: page 1 first, then check for page-specific templates
   useEffect(() => {
     if (!formDef?.id) return
     const blobUrls = []
@@ -1209,7 +1209,7 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
           setNumPages(prev => Math.max(prev, doc.numPages))
         }
       } catch {
-        // No template for this page — that's fine
+        // No template for this page, that's fine
       }
     }
 
@@ -1255,7 +1255,7 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
       setUploading(false)
       return
     }
-    // Upload succeeded — now try to load PDF.js preview (non-fatal if it fails)
+    // Upload succeeded, now try to load PDF.js preview (non-fatal if it fails)
     try {
       const url = URL.createObjectURL(file)
       const doc = await pdfjsLib.getDocument(url).promise
@@ -1265,7 +1265,7 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
         setNumPages(prev => Math.max(prev, pc))
       }
     } catch {
-      // Preview failed but file is saved — reload from server
+      // Preview failed but file is saved, reload from server
       try {
         const blob = await import('../../api/forms').then(m => m.getPdfTemplateBlobPage(formDef.id, currentPage)).then(r => r.data)
         const url = URL.createObjectURL(blob)
@@ -1274,7 +1274,7 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
         setPageTemplates(prev => ({ ...prev, [currentPage]: { doc, pageCount: pc } }))
         if (currentPage === 1) setNumPages(prev => Math.max(prev, pc))
       } catch {
-        // Preview unavailable — canvas stays blank but file is saved
+        // Preview unavailable, canvas stays blank but file is saved
       }
     }
     setUploading(false)
@@ -1313,7 +1313,7 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
       await onSave(payload, approvalSteps)
       toast.success('Layout saved')
     } catch {
-      toast.error('Save failed — please try again')
+      toast.error('Save failed. Please try again.')
     } finally {
       setSaving(false)
     }
@@ -1336,7 +1336,7 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
       setDrawDrag({ startX: x, startY: y, currentX: x, currentY: y })
       return
     }
-    // Click on empty canvas — deselect all unless Shift held
+    // Click on empty canvas: deselect all unless Shift held
     if (!e.shiftKey) setSelectedIds([])
   }, [pendingType, getRelativePos])
 
@@ -1713,7 +1713,7 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
           <ChevronLeft size={16} /> Back
         </button>
         <div className="w-px h-5 bg-slate-200 flex-shrink-0" />
-        <p className="text-sm font-semibold text-slate-800 truncate flex-1 min-w-0">{formDef?.name} — Layout Designer</p>
+        <p className="text-sm font-semibold text-slate-800 truncate flex-1 min-w-0">{formDef?.name}: Layout Designer</p>
 
         {/* Zoom */}
         <ZoomControl zoom={zoom} onZoom={setZoom} />
@@ -1721,7 +1721,7 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
         {/* Smart guides toggle */}
         <button
           onClick={() => setShowGuides(p => !p)}
-          title={showGuides ? 'Smart guides & snapping ON — click to disable' : 'Smart guides & snapping OFF — click to enable'}
+          title={showGuides ? 'Smart guides & snapping ON: click to disable' : 'Smart guides & snapping OFF: click to enable'}
           className={cn(
             'flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border transition-colors flex-shrink-0',
             showGuides ? 'bg-amber-50 text-amber-700 border-amber-300' : 'text-slate-400 border-slate-200 hover:bg-slate-50'
@@ -1771,7 +1771,7 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
         pageTemplates={pageTemplates}
       />
 
-      {/* ── Alignment toolbar — only visible when ≥2 fields selected ── */}
+      {/* ── Alignment toolbar: only visible when ≥2 fields selected ── */}
       <AlignmentBar
         count={selectedIds.filter(id => pageFields.some(f => f.id === id)).length}
         onAlign={alignFields}
@@ -1882,7 +1882,7 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
             </div>
           ) : null}
 
-          {/* Canvas — shown always when PDF exists, or as blank canvas */}
+          {/* Canvas: shown always when PDF exists, or as blank canvas */}
           {/* White margin wrapper ensures edge content is never flush against the shadow/border */}
           {(pdfDoc || true) && (
             <div className="shadow-xl self-start rounded-sm" style={{ background: 'white', padding: '8px' }}>
@@ -1921,7 +1921,7 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
                   )
                 })()}
 
-                {/* Blank page grid — shown when no template exists for this page */}
+                {/* Blank page grid: shown when no template exists for this page */}
                 {(!pdfDoc || (!pageTemplates[currentPage] && currentPage > pdfPageCount)) && (
                   <div
                     style={{ width: pdfWidth, minHeight: Math.round(pdfWidth * 1.414) }}
@@ -2016,7 +2016,7 @@ export default function PDFFormBuilder({ formDef, initialFields = [], onSave, on
                       {isPinned && (
                         <div style={{ position: 'absolute', top: -7, left: -7, zIndex: 12 }}
                           className="w-4 h-4 rounded-full bg-amber-400 border border-amber-600 flex items-center justify-center shadow-sm"
-                          title="Reference field — others align to this">
+                          title="Reference field: others align to this">
                           <Pin size={8} className="text-white" />
                         </div>
                       )}

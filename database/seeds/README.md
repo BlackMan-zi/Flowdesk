@@ -1,4 +1,4 @@
-# FlowDesk — Database Seeds
+# FlowDesk: Database Seeds
 
 Idempotent seed data for the FlowDesk approval workflow platform.
 All scripts use `ON DUPLICATE KEY UPDATE` and are safe to re-run.

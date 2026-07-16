@@ -7,8 +7,13 @@ const SUBPATH = window.location.pathname.startsWith('/flowdesk') ? '/flowdesk' :
 const client = axios.create({ baseURL: SUBPATH + '/api' })
 
 client.interceptors.request.use(cfg => {
-  const token = localStorage.getItem('fd_token')
-  if (token) cfg.headers.Authorization = `Bearer ${token}`
+  // Don't clobber an explicitly-set Authorization header — the MFA
+  // enrollment/verification calls authenticate with a short-lived
+  // mfa_pending token, not the normal session token.
+  if (!cfg.headers.Authorization) {
+    const token = localStorage.getItem('fd_token')
+    if (token) cfg.headers.Authorization = `Bearer ${token}`
+  }
   return cfg
 })
 

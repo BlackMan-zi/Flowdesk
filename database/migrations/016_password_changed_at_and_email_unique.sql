@@ -7,7 +7,7 @@
 -- The unique constraint closes a create-time race: email uniqueness was only
 -- checked in application code, which two concurrent inserts can both pass.
 -- Wrapped in a DO block because Postgres has no
--- "ADD CONSTRAINT IF NOT EXISTS" — and if a live database already holds
+-- "ADD CONSTRAINT IF NOT EXISTS", and if a live database already holds
 -- duplicate (organization_id, email) rows, this constraint would fail; the
 -- app's migration runner catches that per-file and logs a warning rather
 -- than crashing startup, so it is safe to ship even if it can't apply yet.

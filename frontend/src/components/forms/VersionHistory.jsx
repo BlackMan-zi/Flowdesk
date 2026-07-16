@@ -5,8 +5,8 @@ import { cn } from '@/lib/utils'
 
 // Shared between ApprovalAction, FormDetail, and SubmitForm. Renders the
 // version timeline for a form instance: each version's number, creation
-// date, the submitter's change notes, and — if a step on that version
-// was sent back — the approver's correction note in an orange callout.
+// date, the submitter's change notes, and (if a step on that version
+// was sent back) the approver's correction note in an orange callout.
 //
 // Returns null when the form only has a single version (no history to
 // show), so callers can drop it in unconditionally.
@@ -116,7 +116,7 @@ export function CorrectionNoteBanner({ versions, currentVersion }) {
             <p className="text-xs text-orange-800 dark:text-orange-400 mt-1 italic">"{lastSentBack.notes}"</p>
           )}
           <p className="text-[11px] text-orange-700 dark:text-orange-500 mt-1.5">
-            Apply the requested changes below, then sign and submit again — the workflow restarts from step 1.
+            Apply the requested changes below, then sign and submit again: the workflow restarts from step 1.
           </p>
         </div>
       </div>

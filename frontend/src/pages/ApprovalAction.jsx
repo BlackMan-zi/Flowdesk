@@ -107,7 +107,7 @@ function ApproverFields({ fields, fieldValues, myHierarchyLevel, onChange }) {
     <Card>
       <CardHeader
         title="Fields to Complete"
-        subtitle="These fields are assigned to you — fill them before approving"
+        subtitle="These fields are assigned to you. Fill them before approving"
       />
       <div className="p-5 space-y-4">
         {myFields.map(field => {
@@ -228,7 +228,7 @@ export default function ApprovalAction() {
   // paths because the backend may have committed the action even when it
   // returns a 500 (e.g. send-back succeeds but a downstream non-essential
   // step fails). The user has had cases where the form was correctly
-  // sent back but the inbox still showed it until manual refresh —
+  // sent back but the inbox still showed it until manual refresh, so
   // invalidating on error closes that gap.
   const invalidateAfterAction = () => {
     qc.invalidateQueries({ queryKey: ['approvals'] })
@@ -275,7 +275,7 @@ export default function ApprovalAction() {
       navigate('/approvals')
     },
     onError: (err) => {
-      // The action MAY have committed even when the request 500s — the
+      // The action MAY have committed even when the request 500s: the
       // backend now logs & swallows downstream failures but older
       // versions could have left the form correctly transitioned and
       // still returned an error. Invalidate so the inbox / dashboard
@@ -345,7 +345,7 @@ export default function ApprovalAction() {
   return (
     <div className="max-w-7xl space-y-5">
 
-      {/* Back + title — full width across the layout */}
+      {/* Back + title: full width across the layout */}
       <div className="flex items-center gap-3">
         <button
           onClick={() => navigate('/approvals')}
@@ -361,7 +361,7 @@ export default function ApprovalAction() {
             <Badge label={instance.current_status} />
             {instance.current_version > 1 && (
               <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded font-medium">
-                v{instance.current_version} — revised
+                v{instance.current_version} (revised)
               </span>
             )}
           </div>
@@ -378,12 +378,12 @@ export default function ApprovalAction() {
           scroll the form. Stacks vertically on narrow screens. */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 lg:items-start">
 
-        {/* Left column (2/3) — the document the approver is reviewing,
+        {/* Left column (2/3): the document the approver is reviewing,
             plus the approver-only fields and the decision panel.
             min-w-0 lets the inner grid shrink properly inside the parent. */}
         <div className="lg:col-span-2 space-y-5 min-w-0">
 
-          {/* Form document — full WYSIWYG canvas with letterhead, sections,
+          {/* Form document: full WYSIWYG canvas with letterhead, sections,
               tables rendered as tables, etc. Read-only; the approver fills
               any assigned fields in the "Fields to Complete" panel below. */}
           {effectiveFormDef ? (
@@ -419,7 +419,7 @@ export default function ApprovalAction() {
 
         </div>{/* /left column (form + attachments) */}
 
-        {/* Right column (1/3) — sticky workflow + decision. Holds chain,
+        {/* Right column (1/3): sticky workflow + decision. Holds chain,
             version history, approver-fill fields, and the Approve / Reject
             / Send Back panel, so everything the approver needs to act on
             stays in view while they scroll the form on the left. */}
@@ -443,7 +443,7 @@ export default function ApprovalAction() {
           {/* Version history (collapses when a form has only one version) */}
           <VersionHistory versions={instance.versions} currentVersion={instance.current_version} />
 
-          {/* Approver-assigned fields — part of the decision flow, so they
+          {/* Approver-assigned fields: part of the decision flow, so they
               live with the action panel on the right. Only render when the
               current user has an active step on this form. */}
           {isPending && myStep && (
@@ -470,7 +470,7 @@ export default function ApprovalAction() {
               </div>
             )}
 
-            {/* Signature (typed or drawn) + signed-on date — mirrors the
+            {/* Signature (typed or drawn) + signed-on date: mirrors the
                 initiator's submit experience for consistency. */}
             <SignaturePad
               value={signature}
@@ -483,7 +483,7 @@ export default function ApprovalAction() {
               <label className="text-sm font-medium text-foreground flex items-center gap-1.5">
                 <Calendar size={14} className="text-muted-foreground" />
                 Signed on <span className="text-destructive">*</span>
-                <span className="text-xs text-muted-foreground font-normal ml-1">— defaults to today; pick a different date if you signed earlier</span>
+                <span className="text-xs text-muted-foreground font-normal ml-1">(defaults to today; pick a different date if you signed earlier)</span>
               </label>
               <input
                 type="date"
@@ -501,7 +501,7 @@ export default function ApprovalAction() {
               </div>
             )}
 
-            {/* Action buttons. Approve fires straight from the button — the
+            {/* Action buttons. Approve fires straight from the button; the
                 signature pad above is its own confirmation. Reject and Send
                 Back drop into a confirm panel since they require notes. */}
             {!action && (
@@ -525,7 +525,7 @@ export default function ApprovalAction() {
                   'bg-red-50 text-red-800 border border-red-200 dark:bg-red-900/20 dark:text-red-300 dark:border-red-800': action === 'reject',
                   'bg-orange-50 text-orange-800 border border-orange-200 dark:bg-orange-900/20 dark:text-orange-300 dark:border-orange-800': action === 'send_back',
                 })}>
-                  {action === 'reject'    && <><X size={15} /> Rejecting this request — permanent, no appeal</>}
+                  {action === 'reject'    && <><X size={15} /> Rejecting this request: permanent, no appeal</>}
                   {action === 'send_back' && <><RotateCcw size={15} /> Returning to submitter from step 1</>}
                 </div>
 
@@ -560,13 +560,13 @@ export default function ApprovalAction() {
         </Card>
       )}
 
-          {/* No active step — view only. Lives inside the right column
+          {/* No active step: view only. Lives inside the right column
               so it appears in the same place as the decision panel
               would have, just with a different message. */}
           {!isPending && (
             <div className="text-center py-8 bg-card rounded-xl border border-border">
               <p className="text-sm text-muted-foreground">
-                This form is <strong className="text-foreground">{instance.current_status}</strong> — no action required.
+                This form is <strong className="text-foreground">{instance.current_status}</strong>. No action required.
               </p>
             </div>
           )}

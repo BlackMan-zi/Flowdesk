@@ -241,7 +241,7 @@ export default function ApprovalsInbox({ initialTab = 'pending' }) {
                   {qSearch ? 'No matches found' : 'Queue is clear'}
                 </p>
                 <p className="text-sm text-muted-foreground mt-1">
-                  {qSearch ? 'Try a different search term.' : "No pending approvals right now — you're all caught up."}
+                  {qSearch ? 'Try a different search term.' : "No pending approvals right now, you're all caught up."}
                 </p>
               </CardContent>
             </Card>

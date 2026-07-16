@@ -1,5 +1,5 @@
 """
-Seed script — creates demo org + BSC Rwanda org with all users and roles.
+Seed script: creates demo org + BSC Rwanda org with all users and roles.
 Run inside the container: python seed_demo.py
 Password defaults to FlowDesk@2024 or override with SEED_PASSWORD env var.
 """
@@ -24,7 +24,7 @@ db = SessionLocal()
 
 # ── Guard: skip if already seeded ────────────────────────────────────────────
 if db.query(Organization).count() > 0:
-    print("Already seeded — skipping.")
+    print("Already seeded, skipping.")
     db.close()
     exit(0)
 

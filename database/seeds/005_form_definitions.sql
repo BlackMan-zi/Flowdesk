@@ -13,7 +13,7 @@ INSERT INTO form_definitions (
   (
     'form-def-leave', 'org-bsc-001',
     'Leave Request Form', 'LEAVE',
-    'Employee leave request — annual, sick, or other leave types',
+    'Employee leave request: annual, sick, or other leave types',
     'all_users', 1, 0,
     'usr-ceo-001', NOW()
   ),
@@ -27,7 +27,7 @@ INSERT INTO form_definitions (
   (
     'form-def-travel', 'org-bsc-001',
     'Travel Authorisation', 'TRAVEL',
-    'Request for official travel — local or international',
+    'Request for official travel, local or international',
     'all_users', 1, 0,
     'usr-ceo-001', NOW()
   ),

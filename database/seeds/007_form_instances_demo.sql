@@ -13,7 +13,7 @@
 -- ============================================================
 
 -- ─────────────────────────────────────────────────────────────
--- SECTION 1 — COMPLETED FORMS
+-- SECTION 1: COMPLETED FORMS
 -- ─────────────────────────────────────────────────────────────
 
 -- ── fi-leave-001 · Leave Request · Completed ──────────────────
@@ -126,13 +126,13 @@ INSERT INTO form_versions (
 ) ON DUPLICATE KEY UPDATE status = VALUES(status);
 
 INSERT INTO form_field_values (id, form_version_id, form_field_id, value) VALUES
-  (UUID(), 'fv-purchase-001-v1', 'ff-proc-01', 'Network Switch — Cisco Catalyst 9300 24-port PoE+'),
+  (UUID(), 'fv-purchase-001-v1', 'ff-proc-01', 'Network Switch, Cisco Catalyst 9300 24-port PoE+'),
   (UUID(), 'fv-purchase-001-v1', 'ff-proc-02', '2'),
   (UUID(), 'fv-purchase-001-v1', 'ff-proc-03', '8500000'),
   (UUID(), 'fv-purchase-001-v1', 'ff-proc-04', 'Syscom Rwanda'),
   (UUID(), 'fv-purchase-001-v1', 'ff-proc-05', 'Replacement of end-of-life switching infrastructure in NOC'),
   (UUID(), 'fv-purchase-001-v1', 'ff-proc-06', 'TECH-CAPEX-2026'),
-  (UUID(), 'fv-purchase-001-v1', 'ff-proc-07', 'Budget verified — within Q1 CAPEX allocation. Approved.')
+  (UUID(), 'fv-purchase-001-v1', 'ff-proc-07', 'Budget verified, within Q1 CAPEX allocation. Approved.')
 ON DUPLICATE KEY UPDATE value = VALUES(value);
 
 INSERT INTO approval_instances (
@@ -181,7 +181,7 @@ INSERT INTO form_field_values (id, form_version_id, form_field_id, value) VALUES
   (UUID(), 'fv-expense-001-v1', 'ff-exp-01', '2026-03-12'),
   (UUID(), 'fv-expense-001-v1', 'ff-exp-02', 'Transportation'),
   (UUID(), 'fv-expense-001-v1', 'ff-exp-03', '45000'),
-  (UUID(), 'fv-expense-001-v1', 'ff-exp-04', 'Taxi to client site visit — Kigali Industrial Park'),
+  (UUID(), 'fv-expense-001-v1', 'ff-exp-04', 'Taxi to client site visit, Kigali Industrial Park'),
   (UUID(), 'fv-expense-001-v1', 'ff-exp-06', 'FIN-OPEX-TRANS-001')
 ON DUPLICATE KEY UPDATE value = VALUES(value);
 
@@ -202,7 +202,7 @@ INSERT INTO approval_instances (
 
 
 -- ─────────────────────────────────────────────────────────────
--- SECTION 2 — IN-PROGRESS / PENDING FORMS
+-- SECTION 2: IN-PROGRESS / PENDING FORMS
 -- ─────────────────────────────────────────────────────────────
 
 -- ── fi-travel-001 · Travel Authorisation · Pending (step 2) ──
@@ -272,7 +272,7 @@ INSERT INTO form_versions (
 ) ON DUPLICATE KEY UPDATE status = VALUES(status);
 
 INSERT INTO form_field_values (id, form_version_id, form_field_id, value) VALUES
-  (UUID(), 'fv-purchase-002-v1', 'ff-proc-01', 'Uninterruptible Power Supply (UPS) — APC Smart-UPS 3000VA'),
+  (UUID(), 'fv-purchase-002-v1', 'ff-proc-01', 'Uninterruptible Power Supply (UPS), APC Smart-UPS 3000VA'),
   (UUID(), 'fv-purchase-002-v1', 'ff-proc-02', '1'),
   (UUID(), 'fv-purchase-002-v1', 'ff-proc-03', '2200000'),
   (UUID(), 'fv-purchase-002-v1', 'ff-proc-04', 'PowerTech Rwanda'),
@@ -336,7 +336,7 @@ INSERT INTO approval_instances (
 
 
 -- ─────────────────────────────────────────────────────────────
--- SECTION 3 — RETURNED FOR CORRECTION
+-- SECTION 3: RETURNED FOR CORRECTION
 -- ─────────────────────────────────────────────────────────────
 
 -- ── fi-expense-002 · Expense Claim · Returned for Correction ──
@@ -362,7 +362,7 @@ INSERT INTO form_versions (
   ),
   (
     'fv-expense-002-v2', 'fi-expense-002', 2, 'usr-tech-009',
-    'Draft', 'Resubmission — corrected amount and added receipt reference',
+    'Draft', 'Resubmission: corrected amount and added receipt reference',
     '2026-04-11 10:00:00'
   )
 ON DUPLICATE KEY UPDATE status = VALUES(status);
@@ -388,7 +388,7 @@ INSERT INTO approval_instances (
 
 
 -- ─────────────────────────────────────────────────────────────
--- SECTION 4 — REJECTED FORMS
+-- SECTION 4: REJECTED FORMS
 -- ─────────────────────────────────────────────────────────────
 
 -- ── fi-purchase-003 · Purchase Requisition · Rejected ─────────
@@ -412,7 +412,7 @@ INSERT INTO form_versions (
 ) ON DUPLICATE KEY UPDATE status = VALUES(status);
 
 INSERT INTO form_field_values (id, form_version_id, form_field_id, value) VALUES
-  (UUID(), 'fv-purchase-003-v1', 'ff-proc-01', 'Standing desks — ergonomic sit/stand — 5 units'),
+  (UUID(), 'fv-purchase-003-v1', 'ff-proc-01', 'Standing desks, ergonomic sit/stand, 5 units'),
   (UUID(), 'fv-purchase-003-v1', 'ff-proc-02', '5'),
   (UUID(), 'fv-purchase-003-v1', 'ff-proc-03', '3500000'),
   (UUID(), 'fv-purchase-003-v1', 'ff-proc-04', 'Office Furniture Direct'),
@@ -430,12 +430,12 @@ INSERT INTO approval_instances (
   (UUID(), 'org-bsc-001', 'fv-purchase-003-v1', 'step-proc-03',
    3, 'Supply Chain Review', 'usr-corp-001',
    'Rejected',
-   'Non-essential CAPEX — deferred to Q3 budget review. Insufficient budget allocation in Q1.',
+   'Non-essential CAPEX: deferred to Q3 budget review. Insufficient budget allocation in Q1.',
    '2026-03-27 15:00:00', '2026-03-25 14:00:00', '2026-03-27 15:00:00');
 
 
 -- ─────────────────────────────────────────────────────────────
--- SECTION 5 — DRAFT FORMS
+-- SECTION 5: DRAFT FORMS
 -- ─────────────────────────────────────────────────────────────
 
 -- ── fi-leave-003 · Leave Request · Draft ──────────────────────
@@ -487,7 +487,7 @@ INSERT INTO form_versions (
 
 
 -- ─────────────────────────────────────────────────────────────
--- SECTION 6 — AUDIT LOGS
+-- SECTION 6: AUDIT LOGS
 -- ─────────────────────────────────────────────────────────────
 
 INSERT INTO audit_logs (
@@ -520,7 +520,7 @@ INSERT INTO audit_logs (
    '{"reference": "BSC-LEAVE-2026-001"}',
    '10.0.0.5', '2026-03-12 14:00:00'),
 
-  -- Purchase 001 — rejection at step 3
+  -- Purchase 001: rejection at step 3
   (UUID(), 'org-bsc-001', 'usr-ceo-007', 'FORM_CREATED',
    'FormInstance', 'fi-purchase-003',
    '{"form_def": "Purchase Requisition", "reference": "BSC-PROC-2026-003"}',
@@ -534,7 +534,7 @@ INSERT INTO audit_logs (
    '{"step": 3, "step_label": "Supply Chain Review", "reference": "BSC-PROC-2026-003", "reason": "Non-essential CAPEX deferred to Q3"}',
    '10.0.1.30', '2026-03-27 15:00:00'),
 
-  -- Expense 002 — returned for correction
+  -- Expense 002: returned for correction
   (UUID(), 'org-bsc-001', 'usr-tech-009', 'FORM_SUBMITTED',
    'FormInstance', 'fi-expense-002',
    '{"reference": "BSC-EXP-2026-002"}',

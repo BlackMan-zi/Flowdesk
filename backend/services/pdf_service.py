@@ -10,7 +10,7 @@ Produces a single PDF containing:
   - PDF attachments appended at the end via pypdf
 
 Office docs (xlsx, docx, etc.) are listed by name at the end of the form
-body but not yet inlined as pages — that requires LibreOffice headless,
+body but not yet inlined as pages. That requires LibreOffice headless,
 which we'd add in a follow-up.
 
 WeasyPrint renders the form to PDF bytes; pypdf concatenates appended PDFs.
@@ -106,7 +106,7 @@ def _render_value(field, value: Optional[str]) -> str:
     ft = field.field_type
     afs = field.auto_fill_source
 
-    # System blocks — handled inline based on auto_fill_source. Reference and
+    # System blocks: handled inline based on auto_fill_source. Reference and
     # date show as text; static text rendered as a paragraph; classification
     # shown as a coloured chip; approval_block is rendered separately (we
     # always append the approval history table at the bottom).
@@ -115,7 +115,7 @@ def _render_value(field, value: Optional[str]) -> str:
     if afs == 'submission_date':
         return _e(value or '')
     if afs == 'form_classification':
-        # Skip — the title block renders the classification pill at the top
+        # Skip: the title block renders the classification pill at the top
         # right of the document so it appears even when the placed block is
         # in a hidden/late section. See the {classification_pill_html} block.
         return ''
@@ -123,7 +123,7 @@ def _render_value(field, value: Optional[str]) -> str:
         # Reference is rendered by the page header chrome, not as a field.
         return ''
     if afs == 'approval_block':
-        # Skip — full Approval History table is rendered after sections.
+        # Skip: full Approval History table is rendered after sections.
         return ''
 
     if not value:
@@ -155,7 +155,7 @@ def _render_value(field, value: Optional[str]) -> str:
     if ft == 'signature':
         v = value.strip()
         if v.startswith('data:image/'):
-            # _e() only neuters &<>"' — a legitimate base64 data URI never
+            # _e() only neuters &<>"'; a legitimate base64 data URI never
             # contains those, so this is a no-op for real signatures. It
             # closes an HTML/attribute-injection path if signature_data (a
             # client-supplied field on the approve payload) is ever set to
@@ -176,7 +176,7 @@ def _render_value(field, value: Optional[str]) -> str:
 
 class _SnapshotField:
     """Lightweight stand-in for an SA FormField, built from a JSON snapshot
-    dict. Read-only — used only for PDF rendering."""
+    dict. Read-only: used only for PDF rendering."""
     def __init__(self, d: dict):
         self.__dict__.update(d)
         # field_type is a string in the snapshot; preserve that. The renderer
@@ -381,7 +381,7 @@ def generate_form_pdf(db: Session, instance: FormInstance) -> bytes:
     other_atts_html = ''
     if other_atts:
         items = ''.join(
-            f'<li>{_e(a.original_filename)} <span class="att-meta">— {_e(a.content_type or "file")}</span></li>'
+            f'<li>{_e(a.original_filename)} <span class="att-meta">({_e(a.content_type or "file")})</span></li>'
             for a in other_atts
         )
         other_atts_html = (
@@ -510,7 +510,7 @@ def generate_form_pdf(db: Session, instance: FormInstance) -> bytes:
             try:
                 for page in PdfReader(path).pages:
                     writer.add_page(page)
-            except Exception as e:  # pragma: no cover — best-effort append
+            except Exception as e:  # pragma: no cover (best-effort append)
                 print(f"[pdf_service] Skipping bad PDF attachment '{att.original_filename}': {e}")
         output = BytesIO()
         writer.write(output)

@@ -130,7 +130,7 @@ def return_delegation(
     if delegation.original_approver_id != current_user.id and RoleName.admin not in role_names:
         raise HTTPException(status_code=403, detail="Not authorized to return this delegation")
 
-    # Transfer delegated steps back — scoped to this role if role_id is set
+    # Transfer delegated steps back, scoped to this role if role_id is set
     from models.approval import ApprovalTemplateStep
     step_filter = [
         ApprovalInstance.organization_id == delegation.organization_id,

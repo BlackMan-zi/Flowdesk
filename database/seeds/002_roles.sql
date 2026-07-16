@@ -8,15 +8,15 @@
 INSERT INTO roles (id, organization_id, name, role_category, description, is_active, created_at)
 VALUES
   -- System roles
-  ('role-admin',        'org-bsc-001', 'Admin',          'System',    'System Administrator — full access',       1, NOW()),
-  ('role-standard',     'org-bsc-001', 'Standard User',  'System',    'Regular employee — submit forms',          1, NOW()),
+  ('role-admin',        'org-bsc-001', 'Admin',          'System',    'System Administrator, full access',        1, NOW()),
+  ('role-standard',     'org-bsc-001', 'Standard User',  'System',    'Regular employee, submit forms',           1, NOW()),
   ('role-observer',     'org-bsc-001', 'Observer',       'System',    'Read-only document access',                1, NOW()),
   ('role-report-mgr',   'org-bsc-001', 'Report Manager', 'Functional','Manages department reports and users',     1, NOW()),
 
   -- Hierarchy roles
-  ('role-manager',      'org-bsc-001', 'Manager',        'Hierarchy', 'Unit/Team Manager — first approval step',  1, NOW()),
-  ('role-sn-manager',   'org-bsc-001', 'SN Manager',     'Hierarchy', 'Senior Manager — second approval step',   1, NOW()),
-  ('role-hod',          'org-bsc-001', 'HOD',            'Hierarchy', 'Head of Department — senior approval',    1, NOW()),
+  ('role-manager',      'org-bsc-001', 'Manager',        'Hierarchy', 'Unit/Team Manager, first approval step',   1, NOW()),
+  ('role-sn-manager',   'org-bsc-001', 'SN Manager',     'Hierarchy', 'Senior Manager, second approval step',     1, NOW()),
+  ('role-hod',          'org-bsc-001', 'HOD',            'Hierarchy', 'Head of Department, senior approval',      1, NOW()),
 
   -- Functional roles
   ('role-hr',           'org-bsc-001', 'HR',             'Functional','Human Resources approver',                 1, NOW()),

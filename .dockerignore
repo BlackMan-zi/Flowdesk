@@ -5,7 +5,7 @@ __pycache__
 **/__pycache__
 *.pyc
 *.pyo
-# Never let any env file enter a build context — even though the Dockerfiles
+# Never let any env file enter a build context, even though the Dockerfiles
 # use targeted COPY (not `COPY . .`) today, this is defense-in-depth against
 # a future refactor accidentally baking secrets into an image layer.
 .env*

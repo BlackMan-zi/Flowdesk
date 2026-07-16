@@ -22,7 +22,7 @@ def create_organization(
     current_user: User = Depends(require_roles(RoleName.admin)),
     db: Session = Depends(get_db)
 ):
-    """Create a new organization. Admin-only — this used to have no auth at
+    """Create a new organization. Admin-only: this used to have no auth at
     all, letting any anonymous caller self-provision unlimited organizations
     on any billing tier. Bootstrap/seeding goes through direct DB scripts
     (seed_bsc_users.py etc.), not this endpoint, so gating it is safe."""

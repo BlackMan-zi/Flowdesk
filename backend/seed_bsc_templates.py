@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-BSC Rwanda — Form Definitions & Approval Templates seed.
+BSC Rwanda: Form Definitions & Approval Templates seed.
 
 Creates the 10 canonical forms (one per request type) plus their approval
-templates. Replaces the old "duplicate per unit" model — same form, different
+templates. Replaces the old "duplicate per unit" model: same form, different
 chain depending on who initiates (resolved via Hierarchy/Functional/Executive
 steps at submission time).
 
@@ -51,7 +51,7 @@ REQUIRED_ROLES = [
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Forms — (name, code_suffix, description, initiator_role_names)
+# Forms: (name, code_suffix, description, initiator_role_names)
 # Empty initiator list = open to all users.
 # ─────────────────────────────────────────────────────────────────────────────
 FORMS = [
@@ -69,7 +69,7 @@ FORMS = [
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Templates — keyed by form code_suffix.
+# Templates, keyed by form code_suffix.
 # Each step is (step_order, label, role_type, target)
 #   role_type ∈ {"Hierarchy", "Functional", "Executive"}
 #   target = "manager" | "sn_manager" | "hod" for Hierarchy
@@ -182,7 +182,7 @@ def main():
         print("ERROR: No BSC organisation found.")
         return
 
-    # Pick an admin user as created_by — needed for FormDefinition.created_by
+    # Pick an admin user as created_by (needed for FormDefinition.created_by)
     admin_user = (
         db.query(User)
         .join(UserRole, UserRole.user_id == User.id)
@@ -197,7 +197,7 @@ def main():
         return
 
     print(f"\n{'='*70}")
-    print(f"  FlowDesk Template Seed — {org.name}")
+    print(f"  FlowDesk Template Seed: {org.name}")
     print(f"  Acting as: {admin_user.name}")
     print(f"{'='*70}\n")
 
@@ -229,7 +229,7 @@ def main():
             FormDefinition.is_active == True
         ).first()
         if existing:
-            print(f"  · {suffix}  exists — {existing.name}")
+            print(f"  · {suffix}  exists: {existing.name}")
             form_by_suffix[suffix] = existing
             continue
         f = FormDefinition(
@@ -266,7 +266,7 @@ def main():
                 ApprovalTemplate.id == form_def.approval_template_id
             ).first()
             if existing_tpl:
-                print(f"  · {suffix}  template exists — {existing_tpl.name}")
+                print(f"  · {suffix}  template exists: {existing_tpl.name}")
                 continue
 
         tpl = ApprovalTemplate(

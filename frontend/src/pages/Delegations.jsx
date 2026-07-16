@@ -162,7 +162,7 @@ export default function Delegations() {
             )}
           </Select>
           <p className="text-xs text-muted-foreground -mt-2">
-            "All" covers every form you'd sign during this period — your functional roles and your hierarchy position (manager / SN manager / HOD).
+            "All" covers every form you'd sign during this period: your functional roles and your hierarchy position (manager / SN manager / HOD).
           </p>
 
           <div>

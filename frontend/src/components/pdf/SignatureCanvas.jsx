@@ -4,7 +4,7 @@ import Button from '../ui/Button'
 import { Pen, Type, RotateCcw, Check } from 'lucide-react'
 
 /**
- * Signature capture — draw or type.
+ * Signature capture: draw or type.
  * Calls onCapture(dataURL) when the user confirms, or onCapture(null) if cleared.
  */
 export default function SignatureCanvas({ onCapture, onCancel }) {

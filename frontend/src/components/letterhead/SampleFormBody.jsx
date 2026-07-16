@@ -2,7 +2,7 @@ import React from 'react'
 
 /**
  * Illustrative body content for the letterhead preview. Mimics what a real
- * filled-in form will look like inside the frame — title, ref number,
+ * filled-in form will look like inside the frame: title, ref number,
  * a few labelled fields, and a signature row. Used purely for visualisation;
  * Phase C/D will replace this with the real schema-driven renderer.
  */

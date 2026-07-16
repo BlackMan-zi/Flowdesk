@@ -5,7 +5,7 @@ from typing import Optional
 # CPU-exhaustion vector. Deliberately NOT setting min_length here: that would
 # make FastAPI reject short passwords with a Pydantic-shaped 422 error (a
 # list under "detail"), but the frontend renders `detail` as a plain string
-# (see ForcePasswordReset.jsx and friends) — the real minimum-length +
+# (see ForcePasswordReset.jsx and friends); the real minimum-length +
 # complexity gate is services.auth_service.validate_password_strength, which
 # raises the plain-string 400 the frontend already knows how to display.
 NewPassword = Field(max_length=128)
@@ -22,11 +22,8 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     must_reset_password: bool = False
     mfa_required: bool = False
-
-
-class PasswordResetRequest(BaseModel):
-    token: str = Field(max_length=512)
-    new_password: str = NewPassword
+    mfa_pending_token: Optional[str] = None
+    mfa_enrolled: Optional[bool] = None
 
 
 class ForcePasswordResetRequest(BaseModel):

@@ -67,7 +67,7 @@ function PendingCard({ item, onReview }) {
               isUrgent ? 'text-red-600' : isWarning ? 'text-orange-600' : 'text-muted-foreground'
             }`}>
               {item.days_waiting === 0 ? 'Received today' : `${item.days_waiting}d waiting`}
-              {isUrgent ? ' — overdue' : ''}
+              {isUrgent ? ' (overdue)' : ''}
             </span>
           )}
           {item.delegated_from && (
@@ -149,7 +149,7 @@ export default function ApproverDashboard() {
               <p className="text-sm text-muted-foreground mt-0.5">
                 {pending.length > 0
                   ? 'Review and decide to keep workflows moving'
-                  : "You're all caught up — nothing pending"}
+                  : "You're all caught up, nothing pending"}
               </p>
               {(urgentCount > 0 || warningCount > 0) && (
                 <div className="flex items-center gap-2 mt-2">

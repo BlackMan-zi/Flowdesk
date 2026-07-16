@@ -1,5 +1,5 @@
 """
-Background scheduler — runs the nightly database backup at 00:00 server time.
+Background scheduler that runs the nightly database backup at 00:00 server time.
 
 Started/stopped by the FastAPI lifespan hook in main.py. The job calls the
 same `_run_backup` that the admin button on Organization Settings calls, so

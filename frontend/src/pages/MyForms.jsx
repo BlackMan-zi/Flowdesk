@@ -242,7 +242,7 @@ export default function MyForms() {
   const [activeTab, setActiveTab] = useState(
     initialTab && VALID_TAB_KEYS.has(initialTab) ? initialTab : 'Pending'
   )
-  // View mode — admins can flip between their own forms ('mine') and the
+  // View mode: admins can flip between their own forms ('mine') and the
   // org-wide list ('org'). Non-admins are locked to 'mine'. ?scope=org in
   // the URL opens the All Users view directly from dashboard cards.
   const initialScope = isAdmin && searchParams.get('scope') === 'org' ? 'org' : 'mine'
@@ -327,7 +327,7 @@ export default function MyForms() {
         },
       },
     ]
-    // Initiator column only appears in the org-wide admin view — there's no
+    // Initiator column only appears in the org-wide admin view: there's no
     // point showing the same name on every row in the "My Forms" view.
     if (viewMode === 'org') {
       cols.push({
@@ -413,7 +413,7 @@ export default function MyForms() {
     setPagination(p => ({ ...p, pageIndex: 0 }))
     // Keep the URL in sync so the tab survives refresh / back-button.
     // For the merged "Completed,Approved" tab, surface the cleaner
-    // "Completed" alias in the URL — it normalises back on read.
+    // "Completed" alias in the URL, and it normalises back on read.
     const urlValue = key === 'Completed,Approved' ? 'Completed' : key
     const next = new URLSearchParams(searchParams)
     if (urlValue && urlValue !== 'Pending') next.set('status', urlValue)
@@ -554,7 +554,7 @@ export default function MyForms() {
           </div>
 
           {/* Date range. Filters server-side on submitted_at (or created_at
-              for drafts). Shown for everyone — admins on the org view get
+              for drafts). Shown for everyone: admins on the org view get
               the most use out of it but initiators with long histories
               benefit too. */}
           <div className="flex items-center gap-1.5">

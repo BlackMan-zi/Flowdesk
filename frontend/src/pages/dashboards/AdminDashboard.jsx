@@ -214,7 +214,7 @@ export default function AdminDashboard() {
       )}
 
       {/* KPI Cards. Every card deep-links into the org-wide My Forms view
-          (scope=org) with the matching status filter — so the number on
+          (scope=org) with the matching status filter, so the number on
           the card always agrees with the rows the user sees after the
           click. */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

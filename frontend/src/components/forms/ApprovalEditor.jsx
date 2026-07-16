@@ -215,7 +215,7 @@ function StepCard({ step, index, isEditing, onToggleEdit, onUpdate, onDelete, on
               className="rounded accent-primary w-3 h-3 flex-shrink-0"
             />
             <span className="text-[10px] text-muted-foreground">
-              <strong>Required</strong> — sign-off must be obtained (uncheck to make optional)
+              <strong>Required</strong>: sign-off must be obtained (uncheck to make optional)
             </span>
           </label>
           <label className="flex items-center gap-2 cursor-pointer pt-0.5">
@@ -331,7 +331,7 @@ export default function ApprovalEditor({ steps, onChange, users, roles }) {
   )
 }
 
-// Adapter — turns local step shape into the API payload shape.
+// Adapter: turns local step shape into the API payload shape.
 export function stepsToApiPayload(steps) {
   return steps.map((s, idx) => ({
     step_order: idx + 1,
@@ -349,7 +349,7 @@ export function stepsToApiPayload(steps) {
   }))
 }
 
-// Adapter — turns the API step shape into local steps for the editor.
+// Adapter: turns the API step shape into local steps for the editor.
 export function stepsFromApi(apiSteps = [], roles = [], users = []) {
   return apiSteps.map((s, idx) => {
     const source_type =

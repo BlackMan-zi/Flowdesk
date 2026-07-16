@@ -197,7 +197,7 @@ export default function InitiatorDashboard() {
 
       {/* KPI cards + donut */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {/* Stats — each card deep-links into the matching My Forms tab. */}
+        {/* Stats: each card deep-links into the matching My Forms tab. */}
         <div className="grid grid-cols-2 gap-3">
           {[
             { label: 'In Progress', value: summary.pending,   icon: Clock,        colorClass: 'bg-amber-50 dark:bg-amber-950 text-amber-600',   accent: 'bg-amber-400',  tab: 'Pending' },

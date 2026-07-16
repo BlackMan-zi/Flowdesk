@@ -64,7 +64,7 @@ class Role(Base):
 
 class User(Base):
     __tablename__ = "users"
-    # One account per email within an organization — enforced at the DB level,
+    # One account per email within an organization, enforced at the DB level,
     # not just in application code, to close create-time race conditions.
     __table_args__ = (
         UniqueConstraint("organization_id", "email", name="uq_users_org_email"),
@@ -83,6 +83,12 @@ class User(Base):
     hod_id = Column(String(36), ForeignKey("users.id"), nullable=True)
 
     status = Column(SAEnum(UserStatus), default=UserStatus.pending)
+    # mfa_required: admin-set intent ("this account must pass TOTP to log in").
+    # mfa_enabled: system-set only, flips true the instant a code first
+    # verifies ("enrollment is confirmed"). Login gates on mfa_required alone
+    # so toggling it always changes behavior, and enrollment always has a
+    # reachable path via the mfa_pending token issued at login.
+    mfa_required = Column(Boolean, default=False, nullable=False)
     mfa_enabled = Column(Boolean, default=False)
     mfa_secret = Column(String(100), nullable=True)
     must_reset_password = Column(Boolean, default=True)

@@ -23,7 +23,7 @@ from services.event_bus import bus as event_bus
 
 def _publish_workflow(org_id: str, action: str, form_instance_id: str, actor_id: str) -> None:
     """Fire a workflow.changed event so every open browser in the org
-    refetches the affected queries. Best-effort — failures here never
+    refetches the affected queries. Best-effort: failures here never
     fail the request."""
     try:
         event_bus.publish(org_id, {
@@ -41,7 +41,7 @@ def _finalize_completed_form(form_instance_id: str, organization_id: str, finish
     shares, and send completion emails. Runs AFTER the HTTP response is sent
     so the approver isn't blocked by 10s+ WeasyPrint renders or SMTP latency.
 
-    Owns its own DB session — the request-scoped one is already closed by the
+    Owns its own DB session, since the request-scoped one is already closed by the
     time this fires. Swallows all exceptions: the approval itself was already
     committed in the request handler, so anything that fails here is a
     notification / artefact issue, not a workflow-correctness issue. Errors
@@ -56,13 +56,13 @@ def _finalize_completed_form(form_instance_id: str, organization_id: str, finish
             logger.warning("[FINALIZE] FormInstance %s not found", form_instance_id)
             return
 
-        # Generate PDF — preference order:
+        # Generate PDF, preference order:
         # 1. Overlay onto a custom PDF template (only when admin uploaded one)
         # 2. Styled letterhead WYSIWYG (pdf_service.generate_form_pdf)
         # 3. Legacy ReportLab table-style PDF (last-resort fallback)
         from services.pdf_overlay_service import generate_pdf_with_overlay
         from services.pdf_service import generate_form_pdf
-        # FormInstance has no `organization` relationship — query the
+        # FormInstance has no `organization` relationship, so query the
         # Organization explicitly (same pattern as pdf_service.generate_form_pdf).
         org = db.query(Organization).filter(Organization.id == instance.organization_id).first()
         org_name = org.name if org else "FlowDesk"
@@ -205,7 +205,7 @@ def _notify_next_approver(
     next_approver_user_id: Optional[str], finisher_user_id: str
 ) -> None:
     """Background task: email the next approver + status email to the
-    initiator. Same rationale as _finalize_completed_form — keep SMTP
+    initiator. Same rationale as _finalize_completed_form: keep SMTP
     latency off the request path."""
     db = SessionLocal()
     try:
@@ -355,7 +355,7 @@ def approve(
 
     # Save approver-filled field values
     if payload.field_values:
-        # Only accept field IDs that actually belong to this form definition —
+        # Only accept field IDs that actually belong to this form definition,
         # otherwise an approver could inject values for arbitrary field rows.
         valid_field_ids = {
             fid for (fid,) in db.query(FormField.id).filter(
@@ -399,7 +399,7 @@ def approve(
         db, ap, current_user, payload.notes, sig_id, signed_at=payload.signed_at
     )
 
-    # Everything past this point is best-effort — approve_step has already
+    # Everything past this point is best-effort: approve_step has already
     # committed. Any failure below is logged but never bubbles up as a 500
     # because the user already saw the action take effect.
     try:
@@ -412,7 +412,7 @@ def approve(
         logger.exception("[APPROVE] audit log failed: %s", e)
 
     # Heavy post-approval work (PDF generation, document shares, emails) was
-    # previously inline — WeasyPrint + SMTP can easily take 20-60s, which
+    # previously inline: WeasyPrint + SMTP can easily take 20-60s, which
     # pushed nginx into a gateway timeout and surfaced as a "500 then doc
     # completes later" UX. Move it to a background task: the response goes
     # out the moment the approval row is committed, and the slow work runs
@@ -455,7 +455,7 @@ def _send_rejection_notice(
     reference_number: str, rejected_by: str, notes: str, form_instance_id: str
 ) -> None:
     """Background task: rejection email. Owns its own session implicitly via
-    nothing (pure SMTP call) — kept signature explicit so the request handler
+    nothing (pure SMTP call); kept signature explicit so the request handler
     can hand off without re-reading rows after commit."""
     if not creator_email:
         return
@@ -510,7 +510,7 @@ def reject(
         db, ap, current_user, payload.notes, signed_at=payload.signed_at
     )
 
-    # Everything past this point is best-effort — reject_step already
+    # Everything past this point is best-effort: reject_step already
     # committed. We snapshot the data we need BEFORE the audit-log commit
     # so any SA expiry / refresh failure doesn't take down the email.
     try:
@@ -569,7 +569,7 @@ def send_back(
 
     # Everything past this point is best-effort: send_back_step has already
     # committed the form into Returned-for-Correction state. Any failure
-    # below logs server-side but does NOT surface as a 500 — the user saw
+    # below logs server-side but does NOT surface as a 500: the user saw
     # the action take effect and shouldn't be told it failed.
     new_version_created = False
     try:
@@ -579,7 +579,7 @@ def send_back(
     except Exception as e:
         logger.exception("[SEND-BACK] create_new_version failed for %s: %s", form_instance_id, e)
 
-    # Snapshot the values BEFORE the audit-log commit refresh — once
+    # Snapshot the values BEFORE the audit-log commit refresh: once
     # log_event commits, the instance's relationship attributes get
     # expired and any subsequent access re-queries the DB. Extracting now
     # also means a transient SA error in audit-log won't take down the

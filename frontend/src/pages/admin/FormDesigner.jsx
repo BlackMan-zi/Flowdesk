@@ -57,7 +57,7 @@ const WIDTH_OPTIONS = [
 ]
 
 // System block types → API representation.
-// System blocks aren't real input fields — they're rendered specially based on
+// System blocks aren't real input fields: they're rendered specially based on
 // auto_fill_source. We store them as text/date with a known auto_fill_source so
 // existing approval/instance code keeps working without schema migrations on
 // the FieldType enum.
@@ -146,7 +146,7 @@ function buildSampleContext(fields) {
   return ctx
 }
 
-// ── Calculation editor — formula input + live preview + reference helpers ────
+// ── Calculation editor: formula input + live preview + reference helpers ────
 
 function CalculationEditor({ field, allFields, onChange }) {
   const formula = field.calculation_formula || ''
@@ -163,7 +163,7 @@ function CalculationEditor({ field, allFields, onChange }) {
       <label className="text-xs font-medium text-foreground">
         Formula
         <span className="ml-1 text-[10px] text-muted-foreground font-normal">
-          — e.g. <code>qty * unit_price</code> or <code>SUM(items.total)</code>
+          e.g. <code>qty * unit_price</code> or <code>SUM(items.total)</code>
         </span>
       </label>
       <Input
@@ -390,7 +390,7 @@ function PropertiesPanel({ field, fields = [], sections, onChange }) {
         </div>
       )}
 
-      {/* Free position toggle — Word-style drag-anywhere */}
+      {/* Free position toggle: Word-style drag-anywhere */}
       <div className="pt-2 border-t border-border space-y-2">
         <label className="flex items-start gap-2 text-xs text-foreground cursor-pointer">
           <input
@@ -481,7 +481,7 @@ function PropertiesPanel({ field, fields = [], sections, onChange }) {
         </Alert>
       )}
 
-      {/* Table columns — full editor with width, formula, show-total */}
+      {/* Table columns: full editor with width, formula, show-total */}
       {field.field_type === 'table' && (
         <div className="space-y-2">
           <label className="text-xs font-medium text-foreground">Columns</label>
@@ -543,7 +543,7 @@ function PropertiesPanel({ field, fields = [], sections, onChange }) {
                     <label className="text-[10px] text-muted-foreground">
                       Total formula
                       <span className="ml-1 text-muted-foreground/70">
-                        — defaults to <code>SUM({columnLetter(idx)})</code>. Use ranges like <code>{columnLetter(idx)}2:{columnLetter(idx)}5</code>, or any expression.
+                        Defaults to <code>SUM({columnLetter(idx)})</code>. Use ranges like <code>{columnLetter(idx)}2:{columnLetter(idx)}5</code>, or any expression.
                       </span>
                     </label>
                     <Input
@@ -562,7 +562,7 @@ function PropertiesPanel({ field, fields = [], sections, onChange }) {
                   <div>
                     <label className="text-[10px] text-muted-foreground">
                       Per-row formula
-                      <span className="ml-1 text-muted-foreground/70">— other columns by name, e.g. <code>qty * unit_cost</code></span>
+                      <span className="ml-1 text-muted-foreground/70">Other columns by name, e.g. <code>qty * unit_cost</code></span>
                     </label>
                     <Input
                       value={col.formula || ''}
@@ -597,7 +597,7 @@ function PropertiesPanel({ field, fields = [], sections, onChange }) {
         </div>
       )}
 
-      {/* Validation — only for inputs that take it */}
+      {/* Validation: only for inputs that take it */}
       {['text', 'textarea', 'number', 'currency'].includes(field.field_type) && (
         <div className="pt-2 space-y-1.5 border-t border-border">
           <div className="text-xs font-medium text-foreground">Validation</div>
@@ -847,7 +847,7 @@ export default function FormDesigner() {
     queryFn: () => listRoles().then(r => r.data),
   })
 
-  // Local working state — list of field drafts in render order.
+  // Local working state: list of field drafts in render order.
   const [fields, setFields] = useState([])
   const [selectedId, setSelectedId] = useState(null)
   const [selectedColumnIdx, setSelectedColumnIdx] = useState(null)
@@ -958,7 +958,7 @@ export default function FormDesigner() {
     setSelectedId(tempId)
   }
 
-  // Add a field via the left toolbox — drops into the selected field's
+  // Add a field via the left toolbox: drops into the selected field's
   // section, or the last section if nothing is selected.
   const addFromToolbox = (type) => {
     const sel = fields.find(f => f.id === selectedId)
@@ -1085,8 +1085,8 @@ export default function FormDesigner() {
       })
       await replaceFormFields(id, payload)
 
-      // 2) Approval template (only touch if the user has interacted with it
-      // — i.e. there are steps OR there was already a template linked).
+      // 2) Approval template (only touch if the user has interacted with it,
+      // i.e. there are steps OR there was already a template linked).
       const stepsPayload = stepsToApiPayload(approvalSteps)
       if (formDef?.approval_template_id) {
         await updateApprovalTemplate(formDef.approval_template_id, { steps: stepsPayload })
@@ -1098,7 +1098,7 @@ export default function FormDesigner() {
         await updateFormDefinition(id, { approval_template_id: res.data.id })
       }
 
-      // 3) Initiator role restriction + section layouts — always send (empty
+      // 3) Initiator role restriction + section layouts: always send (empty
       // map / list = open to all / all sections default to 'grid').
       await updateFormDefinition(id, {
         initiator_role_ids: initiatorRoleIds,
@@ -1121,7 +1121,7 @@ export default function FormDesigner() {
       // Surface the real backend error in the toast instead of the generic
       // "Save failed." so we can diagnose without opening the network tab.
       // FastAPI usually returns detail as a string for 4xx, but for 422 it's
-      // a list of validation errors — handle both.
+      // a list of validation errors, handle both.
       const data = err?.response?.data
       let msg = 'Save failed.'
       if (typeof data?.detail === 'string') msg = data.detail
@@ -1170,7 +1170,7 @@ export default function FormDesigner() {
           </button>
           <div className="min-w-0">
             <h1 className="text-sm font-bold text-foreground truncate">
-              {formDef.printed_title || formDef.name} <span className="text-muted-foreground font-normal">— Schema Designer</span>
+              {formDef.printed_title || formDef.name}<span className="text-muted-foreground font-normal">: Schema Designer</span>
             </h1>
             <p className="text-[10px] text-muted-foreground">
               {fields.length} field{fields.length === 1 ? '' : 's'} across {sections.length} section{sections.length === 1 ? '' : 's'}
@@ -1204,7 +1204,7 @@ export default function FormDesigner() {
         <TabButton active={tab === 'initiator'} onClick={() => setTab('initiator')} icon={ShieldCheck}  label="Initiator" count={(initiatorRoleIds.length + initiatorUserIds.length) || null} hint={(initiatorRoleIds.length + initiatorUserIds.length) === 0 ? 'All users' : null} />
       </div>
 
-      {/* Body — three-pane for Fields, centered single panel for the others */}
+      {/* Body: three-pane for Fields, centered single panel for the others */}
       {tab === 'approval' && (
         <div className="flex-1 overflow-y-auto p-6">
           <ApprovalEditor
@@ -1313,7 +1313,7 @@ export default function FormDesigner() {
         </div>
       )}
 
-      {/* WYSIWYG preview modal — uses the same filler canvas employees see */}
+      {/* WYSIWYG preview modal: uses the same filler canvas employees see */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>

@@ -36,7 +36,7 @@ This document outlines all security improvements made and best practices for pro
 
 - **Issue**: No password strength requirements
 - **Fix**: Implemented strict validation:
-  - Minimum 12 characters
+  - Minimum 8 characters
   - At least 1 uppercase letter
   - At least 1 lowercase letter
   - At least 1 digit

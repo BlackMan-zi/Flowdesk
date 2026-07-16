@@ -311,7 +311,7 @@ export default function AdminDepartments() {
 
   const handleDragStart = ({ active }) => {
     setActiveUserId(active.id)
-    // Auto-expand the target dept on drag start — expand all
+    // Auto-expand the target dept on drag start: expand all
     setExpanded(prev => {
       const next = { ...prev }
       departments.forEach(d => { next[d.id] = true })
@@ -572,7 +572,7 @@ export default function AdminDepartments() {
                 onChange={e => setForm(p => ({ ...p, parent_department_id: e.target.value }))}
                 className="w-full border border-border rounded-md px-3 py-2 text-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               >
-                <option value="">— None (top-level department) —</option>
+                <option value="">None (top-level department)</option>
                 {topLevel.filter(d => d.id !== editing?.id).map(d => (
                   <option key={d.id} value={d.id}>{d.name}</option>
                 ))}
@@ -614,7 +614,7 @@ export default function AdminDepartments() {
                 )}
                 {deleteTarget?.member_count > 0 && (
                   <p className="text-destructive text-xs">
-                    {deleteTarget.member_count} user(s) are assigned here — reassign them before deleting.
+                    {deleteTarget.member_count} user(s) are assigned here. Reassign them before deleting.
                   </p>
                 )}
               </div>

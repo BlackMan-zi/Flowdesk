@@ -8,7 +8,7 @@ const TOOLBOX_GROUPS = ['Input', 'Selection', 'Advanced', 'Layout', 'System']
 
 /**
  * Vertical toolbox listing all field types grouped by category.
- * Clicking a type calls `onAdd(type)` — the caller decides which section the
+ * Clicking a type calls `onAdd(type)`; the caller decides which section the
  * new field lands in.
  */
 export default function Toolbox({ onAdd, disabled }) {

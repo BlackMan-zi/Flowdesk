@@ -115,7 +115,7 @@ async def lifespan(app: FastAPI):
     logger.info("FlowDesk API shutting down")
 
 
-# Interactive API docs are a full endpoint/schema map — keep them off in prod.
+# Interactive API docs are a full endpoint/schema map, so keep them off in prod.
 _docs_enabled = settings.ENVIRONMENT != "production"
 app = FastAPI(
     title="FlowDesk API",
@@ -143,7 +143,7 @@ app.add_middleware(
 
 @app.exception_handler(RateLimitExceeded)
 async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
-    # exc.headers can be None depending on slowapi version / limit type — a
+    # exc.headers can be None depending on slowapi version / limit type, and a
     # bare .get() on that crashes into a 500 instead of a clean 429. This was
     # previously dormant because no endpoint enforced a limit low enough to
     # trigger it in practice; wiring up per-endpoint auth rate limits exposed it.

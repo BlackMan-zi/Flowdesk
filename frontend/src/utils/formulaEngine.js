@@ -54,7 +54,7 @@ export function evaluateFormula(formula, values, fieldsByName) {
       expr = expr.replace(new RegExp(`\\b${escapeRegExp(name)}\\b`, 'g'), String(val))
     }
 
-    // 3. Safety check — only numbers and operators allowed after substitution
+    // 3. Safety check: only numbers and operators allowed after substitution
     if (/[^0-9+\-*/.()%\s]/.test(expr)) return ''
 
     // eslint-disable-next-line no-new-func

@@ -36,7 +36,7 @@ def download_document(
     if not instance:
         raise HTTPException(status_code=404, detail="Form instance not found")
 
-    # Authorization: org membership alone is NOT enough — that would let any
+    # Authorization: org membership alone is NOT enough, since that would let any
     # colleague pull any signed document. Require admin, the initiator, an
     # approver on the final version, or an explicit DocumentShare grant.
     role_names = [ur.role.name for ur in current_user.user_roles if ur.role]
@@ -171,14 +171,14 @@ def list_documents(
     # which the finalizer never produced a GeneratedDocument row (PDF render
     # failure, container restart mid-finalize, etc.). The /download endpoint
     # already re-renders live on every request, so the user can still get the
-    # PDF — they just need the row to appear here first.
+    # PDF, they just need the row to appear here first.
     virtual_query = db.query(FormInstance).filter(
         FormInstance.organization_id == current_user.organization_id,
         FormInstance.current_status.in_([FormStatus.approved, FormStatus.completed]),
     )
     if RoleName.admin not in role_names:
         # Initiator OR approver-of-final-version. CC visibility for virtual
-        # entries is omitted — those users get them once the finalizer succeeds.
+        # entries is omitted: those users get them once the finalizer succeeds.
         approver_instance_ids = (
             db.query(FormInstance.id)
             .join(FormVersion, FormVersion.form_instance_id == FormInstance.id)

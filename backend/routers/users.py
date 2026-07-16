@@ -4,12 +4,17 @@ from typing import List
 from database import get_db
 from models.user import User, Role, UserRole, UserStatus, RoleName, RoleCategory
 from models.organization import Organization
-from schemas.user import UserCreate, UserUpdate, UserResponse, RoleCreate, RoleUpdate, RoleResponse
+from schemas.user import (
+    UserCreate, UserUpdate, UserResponse, RoleCreate, RoleUpdate, RoleResponse,
+    AdminPasswordResetRequest, AdminPasswordResetResponse,
+    MFARequiredUpdate, MFABulkApplyRequest
+)
 from core.security import get_current_active_user
 from core.permissions import require_roles
 from services.auth_service import hash_password, generate_temp_password
-from services.email_service import send_temp_credentials_email
+from services.email_service import send_temp_credentials_email, send_password_reset_code_email
 from services import audit_service
+from datetime import datetime
 import secrets
 
 router = APIRouter(prefix="/users", tags=["Users"])
@@ -182,11 +187,13 @@ def create_user(
         Organization.id == current_user.organization_id
     ).first()
 
-    # Send temp credentials
-    try:
-        send_temp_credentials_email(user.email, user.name, temp_pw, org.name if org else "FlowDesk")
-    except Exception as e:
-        print(f"[WARNING] Email send failed: {e}")
+    # Send temp credentials, unless the caller explicitly opted out (e.g.
+    # bulk/demo user creation where no real mailbox should ever be hit)
+    if payload.send_welcome_email:
+        try:
+            send_temp_credentials_email(user.email, user.name, temp_pw, org.name if org else "FlowDesk")
+        except Exception as e:
+            print(f"[WARNING] Email send failed: {e}")
 
     audit_service.log_event(
         db, current_user.organization_id, "USER_CREATED",
@@ -207,7 +214,7 @@ def list_users_directory(
     """Minimal user listing for picker UIs (delegation, CC, etc.).
 
     Any authenticated user in the org can call this. Returns only id/name/email
-    for active users — no roles, no admin-only fields. Use the full GET /users
+    for active users, no roles, no admin-only fields. Use the full GET /users
     (admin-only) when you need the complete profile.
     """
     users = db.query(User).filter(
@@ -329,3 +336,109 @@ def deactivate_user(
         user_id=current_user.id, entity_type="User", entity_id=user.id
     )
     return {"message": "User deactivated"}
+
+
+@router.post("/{user_id}/reset-password", response_model=AdminPasswordResetResponse)
+def admin_reset_password(
+    user_id: str,
+    payload: AdminPasswordResetRequest,
+    current_user: User = Depends(require_roles(RoleName.admin)),
+    db: Session = Depends(get_db)
+):
+    """Admin-initiated password reset. Always returns the generated temp
+    password in the response so the admin can copy/share it manually,
+    regardless of whether the email send succeeds."""
+    user = db.query(User).filter(
+        User.id == user_id,
+        User.organization_id == current_user.organization_id
+    ).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    temp_code = generate_temp_password()
+    user.password_hash = hash_password(temp_code)
+    user.temp_password = temp_code
+    user.must_reset_password = True
+    user.password_changed_at = datetime.utcnow()
+    db.commit()
+
+    email_sent = False
+    if payload.send_email:
+        email_sent = send_password_reset_code_email(user.email, user.name, temp_code)
+
+    audit_service.log_event(
+        db, current_user.organization_id, "PASSWORD_RESET_BY_ADMIN",
+        user_id=current_user.id, entity_type="User", entity_id=user.id
+    )
+    return AdminPasswordResetResponse(temp_password=temp_code, email_sent=email_sent)
+
+
+@router.patch("/{user_id}/mfa-required")
+def set_mfa_required(
+    user_id: str,
+    payload: MFARequiredUpdate,
+    current_user: User = Depends(require_roles(RoleName.admin)),
+    db: Session = Depends(get_db)
+):
+    user = db.query(User).filter(
+        User.id == user_id,
+        User.organization_id == current_user.organization_id
+    ).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user.mfa_required = payload.mfa_required
+    db.commit()
+    audit_service.log_event(
+        db, current_user.organization_id, "MFA_REQUIRED_CHANGED",
+        user_id=current_user.id, entity_type="User", entity_id=user.id,
+        details={"mfa_required": payload.mfa_required, "target_email": user.email}
+    )
+    return {"id": user.id, "mfa_required": user.mfa_required, "mfa_enabled": user.mfa_enabled}
+
+
+@router.post("/{user_id}/mfa-reset")
+def reset_user_mfa(
+    user_id: str,
+    current_user: User = Depends(require_roles(RoleName.admin)),
+    db: Session = Depends(get_db)
+):
+    """Clears a user's enrollment (secret + enabled flag) so they re-enroll
+    with a fresh QR at their next MFA-required login. Does not touch
+    mfa_required. For lost/replaced-phone recovery."""
+    user = db.query(User).filter(
+        User.id == user_id,
+        User.organization_id == current_user.organization_id
+    ).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.id == current_user.id:
+        raise HTTPException(status_code=400, detail="Cannot reset your own MFA. Ask another admin.")
+
+    user.mfa_secret = None
+    user.mfa_enabled = False
+    db.commit()
+    audit_service.log_event(
+        db, current_user.organization_id, "MFA_RESET",
+        user_id=current_user.id, entity_type="User", entity_id=user.id,
+        details={"target_email": user.email}
+    )
+    return {"message": "MFA reset. The user will be prompted to re-enroll at next login."}
+
+
+@router.post("/mfa/apply-all")
+def apply_mfa_to_all(
+    payload: MFABulkApplyRequest,
+    current_user: User = Depends(require_roles(RoleName.admin)),
+    db: Session = Depends(get_db)
+):
+    count = db.query(User).filter(
+        User.organization_id == current_user.organization_id
+    ).update({"mfa_required": payload.mfa_required}, synchronize_session=False)
+    db.commit()
+    audit_service.log_event(
+        db, current_user.organization_id, "MFA_REQUIRED_BULK_APPLIED",
+        user_id=current_user.id, entity_type="Organization", entity_id=current_user.organization_id,
+        details={"mfa_required": payload.mfa_required, "affected_count": count}
+    )
+    return {"message": f"MFA requirement updated for {count} user(s).", "affected_count": count}

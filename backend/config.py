@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    MFA_PENDING_TOKEN_EXPIRE_MINUTES: int = 10
 
     # CORS
     ALLOWED_ORIGINS: List[str] = ["http://localhost:3000"]
@@ -30,7 +31,7 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "http://localhost:3000"
     MEDIA_DIR: str = os.path.join(os.path.dirname(os.path.dirname(__file__)), "media")
 
-    # Uploads — hard limit enforced server-side (nginx also caps at the edge).
+    # Uploads: hard limit enforced server-side (nginx also caps at the edge).
     MAX_UPLOAD_SIZE_MB: int = 20
 
     # Security

@@ -1,10 +1,11 @@
 import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { login, getMe } from '../api/auth'
 import { Workflow, Mail, Lock, ArrowRight, CheckCircle, AlertCircle } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Alert, AlertDescription } from '../components/ui/alert'
+import MfaChallenge from '../components/auth/MfaChallenge'
 import { cn } from '@/lib/utils'
 
 const FEATURES = [
@@ -44,8 +45,18 @@ export default function Login() {
   const [form, setForm] = useState({ email: '', password: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [stage, setStage] = useState('credentials') // 'credentials' | 'mfa'
+  const [mfaPendingToken, setMfaPendingToken] = useState(null)
+  const [mfaEnrolled, setMfaEnrolled] = useState(false)
 
   const set = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.value }))
+
+  const completeLogin = async (token, mustReset) => {
+    localStorage.setItem('fd_token', token)
+    const meRes = await getMe()
+    authLogin(token, { ...meRes.data, must_reset_password: mustReset })
+    navigate(mustReset ? '/force-reset-password' : '/')
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -54,17 +65,16 @@ export default function Login() {
     try {
       const { data } = await login(form)
       if (data.mfa_required) {
-        setError('MFA is required. Contact your admin to log in.')
+        setMfaPendingToken(data.mfa_pending_token)
+        setMfaEnrolled(!!data.mfa_enrolled)
+        setStage('mfa')
         return
       }
       if (!data.access_token) {
         setError('Login failed. No token received.')
         return
       }
-      localStorage.setItem('fd_token', data.access_token)
-      const meRes = await getMe()
-      authLogin(data.access_token, { ...meRes.data, must_reset_password: data.must_reset_password })
-      navigate(data.must_reset_password ? '/force-reset-password' : '/')
+      await completeLogin(data.access_token, data.must_reset_password)
     } catch (err) {
       setError(err.response?.data?.detail || 'Invalid email or password.')
     } finally {
@@ -93,7 +103,7 @@ export default function Login() {
             Streamline your<br />approval workflows
           </h2>
           <p className="mt-4 text-sidebar-foreground/60 text-sm leading-relaxed">
-            A modern platform for managing form submissions, multi-step approvals, and document workflows — all in one place.
+            A modern platform for managing form submissions, multi-step approvals, and document workflows, all in one place.
           </p>
           <div className="mt-8 space-y-3">
             {FEATURES.map(f => (
@@ -124,59 +134,78 @@ export default function Login() {
             <span className="text-xl font-bold text-foreground">FlowDesk</span>
           </div>
 
-          <div className="mb-8">
-            <h1 className="text-2xl font-bold text-foreground">Welcome back</h1>
-            <p className="text-muted-foreground mt-1 text-sm">
-              Sign in with your work email — your organisation is detected automatically.
-            </p>
-          </div>
+          {stage === 'mfa' ? (
+            <MfaChallenge
+              mfaPendingToken={mfaPendingToken}
+              mfaEnrolled={mfaEnrolled}
+              onSuccess={completeLogin}
+              onBack={() => { setStage('credentials'); setError('') }}
+            />
+          ) : (
+            <>
+              <div className="mb-8">
+                <h1 className="text-2xl font-bold text-foreground">Welcome back</h1>
+                <p className="text-muted-foreground mt-1 text-sm">
+                  Sign in with your work email. Your organisation is detected automatically.
+                </p>
+              </div>
 
-          <div className="bg-card rounded-xl border border-border shadow-sm p-7">
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <IconInput
-                icon={Mail}
-                label="Work email"
-                type="email"
-                placeholder="you@bsc.rw"
-                value={form.email}
-                onChange={set('email')}
-                required
-                autoFocus
-                autoComplete="email"
-              />
-              <IconInput
-                icon={Lock}
-                label="Password"
-                type="password"
-                placeholder="••••••••"
-                value={form.password}
-                onChange={set('password')}
-                required
-                autoComplete="current-password"
-              />
+              <div className="bg-card rounded-xl border border-border shadow-sm p-7">
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <IconInput
+                    icon={Mail}
+                    label="Work email"
+                    type="email"
+                    placeholder="you@bsc.rw"
+                    value={form.email}
+                    onChange={set('email')}
+                    required
+                    autoFocus
+                    autoComplete="email"
+                  />
+                  <div>
+                    <IconInput
+                      icon={Lock}
+                      label="Password"
+                      type="password"
+                      placeholder="••••••••"
+                      value={form.password}
+                      onChange={set('password')}
+                      required
+                      autoComplete="current-password"
+                    />
+                    <Link
+                      to="/forgot-password"
+                      className="inline-block mt-1.5 text-xs font-medium text-primary hover:underline"
+                    >
+                      Forgot password?
+                    </Link>
+                  </div>
 
-              {error && (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
+                  {error && (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>{error}</AlertDescription>
+                    </Alert>
+                  )}
 
-              <Button
-                type="submit"
-                loading={loading}
-                className="w-full mt-2"
-                size="default"
-              >
-                Sign In
-                <ArrowRight size={16} />
-              </Button>
-            </form>
-          </div>
+                  <Button
+                    type="submit"
+                    loading={loading}
+                    className="w-full mt-2"
+                    size="default"
+                  >
+                    Sign In
+                    <ArrowRight size={16} />
+                  </Button>
+                </form>
+              </div>
 
-          <p className="text-center text-xs text-muted-foreground mt-6">
-            Having trouble? Contact your system administrator.
-          </p>
+              <p className="text-center text-xs text-muted-foreground mt-6">
+                Having trouble? Contact your system administrator.
+              </p>
+            </>
+          )}
         </div>
       </div>
     </div>

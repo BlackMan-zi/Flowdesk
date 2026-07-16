@@ -2,7 +2,7 @@ import React, { useState, useMemo, useRef } from 'react'
 import { Search, X } from 'lucide-react'
 
 /**
- * Searchable single-select combobox. Token-based filter — query is split on
+ * Searchable single-select combobox. Token-based filter: query is split on
  * whitespace, every token must appear somewhere in label/sublabel/searchText.
  *
  * items: [{ id, label, sublabel?, searchText? }]

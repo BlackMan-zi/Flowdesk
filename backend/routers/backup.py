@@ -49,7 +49,7 @@ def _excel_val(val: Any) -> Any:
     if isinstance(val, enum.Enum):
         return val.value
     if isinstance(val, (dict, list)):
-        # JSON columns — serialize so they round-trip as a single cell value.
+        # JSON columns: serialize so they round-trip as a single cell value.
         import json
         return json.dumps(val, default=str)
     if isinstance(val, (bytes, bytearray, memoryview)):
@@ -58,7 +58,7 @@ def _excel_val(val: Any) -> Any:
         except Exception:
             return repr(val)
     if isinstance(val, datetime):
-        # openpyxl can't store tz-aware datetimes — strip tzinfo.
+        # openpyxl can't store tz-aware datetimes, so strip tzinfo.
         return val.replace(tzinfo=None) if val.tzinfo else val
     return val
 
@@ -90,7 +90,7 @@ def _run_backup(db: Session) -> dict:
     wb = openpyxl.Workbook()
     wb.remove(wb.active)
 
-    # sorted_tables walks FK dependencies — parents first.
+    # sorted_tables walks FK dependencies: parents first.
     for table in Base.metadata.sorted_tables:
         # Excel caps sheet names at 31 chars; truncate deterministically.
         sheet_title = table.name[:31]

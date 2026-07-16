@@ -268,7 +268,7 @@ function TableField({ field, value, onChange, accent, disabled }) {
 // ── Approval rows (resolves real approver names from user/roles/users) ───────
 
 // Render a signature value (type:Name or PNG data URL) inline. Returns
-// `null` if no value — caller renders the "not yet signed" dotted line.
+// `null` if no value; caller renders the "not yet signed" dotted line.
 function _renderSignatureCell(value) {
   if (!value) return null
   const v = String(value).trim()
@@ -386,7 +386,7 @@ function FileChips({ files, onRemove, disabled }) {
   )
 }
 
-// ── Field cell — interactive input(s) per field type ─────────────────────────
+// ── Field cell: interactive input(s) per field type ─────────────────────────
 
 function FieldCell({
   field, value, onChange,
@@ -469,7 +469,7 @@ function FieldCell({
     )
   }
 
-  // ── Auto-filled (current_user.*) — read-only, prefilled ──
+  // ── Auto-filled (current_user.*), read-only, prefilled ──
   if (field.auto_filled && field.auto_fill_source && !SYSTEM_BLOCK_BY_SOURCE[field.auto_fill_source]) {
     return (
       <div className="px-2 py-1">
@@ -628,7 +628,7 @@ function FieldCell({
   if (t === 'file') {
     const list = files?.[field.id] || []
     // View mode: if the form has zero attachments, hide the entire placed
-    // file field — label and all. Renders the field only when there's
+    // file field, label and all. Renders the field only when there's
     // something to point at, so the "Attachment:" header doesn't appear
     // above an empty placeholder.
     if (disabled && list.length === 0 && !hasAttachments) {
@@ -813,7 +813,7 @@ function InlineAttachments({ attachments, attachmentUrls, accent }) {
             <div className="flex items-center gap-2 mb-2">
               <div className="h-[3px] w-3 rounded-full" style={{ backgroundColor: accent }} />
               <p className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: accent }}>
-                Attachment {idx + 1} — {att.original_filename}
+                Attachment {idx + 1}: {att.original_filename}
               </p>
               <div className="flex-1 h-px bg-slate-200" />
             </div>
@@ -906,7 +906,7 @@ export default function FormFillerCanvas({
     ? Math.max(...freeFields.map(f => (f.y_pct ?? 0) + FREE_FIELD_HEIGHT_PADDING))
     : 0
 
-  // Page metrics — walk section bottoms and insert inline page-break chrome
+  // Page metrics: walk section bottoms and insert inline page-break chrome
   // between sections that span a page boundary (mirrors FormDesignerCanvas).
   const [pageHeight, setPageHeight] = useState(0)
   const [breakAfterIdx, setBreakAfterIdx] = useState({})
@@ -944,7 +944,7 @@ export default function FormFillerCanvas({
       })
       setPageHeight(ph)
       setPageCount(pageNum)
-      // Only update breakAfterIdx if the *content* changed — same content
+      // Only update breakAfterIdx if the *content* changed; same content
       // with a fresh reference would re-trigger the effect via deps and we'd
       // loop forever.
       setBreakAfterIdx(prev => {
@@ -971,7 +971,7 @@ export default function FormFillerCanvas({
       <div className="flex items-center justify-center px-12 py-4 h-24 border-b border-slate-100">
         {headerUrl
           ? <img src={headerUrl} alt="Header" className="max-h-full max-w-full object-contain" />
-          : <div className="text-xs text-slate-400 italic">No header — admin can upload one in Settings.</div>}
+          : <div className="text-xs text-slate-400 italic">No header. Admin can upload one in Settings.</div>}
       </div>
 
       {/* Body */}
@@ -1054,7 +1054,7 @@ export default function FormFillerCanvas({
           )
         })}
 
-        {/* Inline attachments — image / PDF render as added pages within
+        {/* Inline attachments: image / PDF render as added pages within
             the document in view / preview mode (disabled). Approval data
             already lives in the placed approval_block field on the form
             schema, so we don't auto-render a second copy here. */}
@@ -1071,7 +1071,7 @@ export default function FormFillerCanvas({
       <div className="flex items-end justify-center px-12 py-2 h-20 border-t border-slate-100">
         {footerUrl
           ? <img src={footerUrl} alt="Footer" className="max-h-full max-w-full object-contain" />
-          : <div className="text-xs text-slate-400 italic mb-1">No footer — admin can upload one in Settings.</div>}
+          : <div className="text-xs text-slate-400 italic mb-1">No footer. Admin can upload one in Settings.</div>}
       </div>
     </div>
   )

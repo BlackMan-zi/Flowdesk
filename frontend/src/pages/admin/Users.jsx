@@ -1,19 +1,45 @@
 import React, { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { listUsers, createUser, updateUser, deactivateUser, listRoles, createRole, updateRole, deleteRole, listDepartments } from '../../api/users'
+import {
+  listUsers, createUser, updateUser, deactivateUser, listRoles, createRole, updateRole, deleteRole, listDepartments,
+  setMfaRequired, resetUserMfa, applyMfaToAll
+} from '../../api/users'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { useAuth } from '../../context/AuthContext'
 import Card from '../../components/ui/Card'
 import Table from '../../components/ui/Table'
 import Badge from '../../components/ui/Badge'
 import Button from '../../components/ui/Button'
-import Modal from '../../components/ui/Modal'
+import Modal, { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/Modal'
 import Input, { Select } from '../../components/ui/Input'
 import Spinner from '../../components/ui/Spinner'
 import {
   Search, X, Users, Plus, LayoutList, Network,
-  ChevronDown, ChevronRight, Mail, Building2, UserCheck, ShieldCheck, Trash2, Pencil, Check
+  ChevronDown, ChevronRight, Mail, Building2, UserCheck, ShieldCheck, ShieldAlert, Trash2, Pencil, Check
 } from 'lucide-react'
+
+function MfaSwitch({ checked, onChange, disabled }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={cn(
+        'relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0',
+        checked ? 'bg-primary' : 'bg-input',
+        disabled && 'opacity-50 cursor-not-allowed'
+      )}
+    >
+      <span className={cn(
+        'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
+        checked ? 'translate-x-4' : 'translate-x-0.5'
+      )} />
+    </button>
+  )
+}
 
 // ── Role level ordering ───────────────────────────────────────────────────────
 
@@ -255,6 +281,7 @@ const EMPTY = {
 
 export default function AdminUsers() {
   const qc = useQueryClient()
+  const { user: currentUser } = useAuth()
   const [view, setView]         = useState('list')   // 'list' | 'tree'
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing]     = useState(null)
@@ -266,6 +293,7 @@ export default function AdminUsers() {
   const [rolesExpanded, setRolesExpanded] = useState(false)
   const [editingRoleId, setEditingRoleId] = useState(null)
   const [editingRoleName, setEditingRoleName] = useState('')
+  const [bulkMfaOpen, setBulkMfaOpen] = useState(false)
 
   const { data: users = [], isLoading } = useQuery({
     queryKey: ['users'],
@@ -378,6 +406,31 @@ export default function AdminUsers() {
     onError: () => toast.error('Failed to deactivate user.')
   })
 
+  const mfaRequiredMutation = useMutation({
+    mutationFn: ({ id, required }) => setMfaRequired(id, required),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
+    onError: () => toast.error('Failed to update MFA requirement.')
+  })
+
+  const resetMfaMutation = useMutation({
+    mutationFn: (id) => resetUserMfa(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['users'] })
+      toast.success('MFA reset. They\'ll re-enroll at next login.')
+    },
+    onError: (err) => toast.error(err.response?.data?.detail || 'Failed to reset MFA.')
+  })
+
+  const applyAllMutation = useMutation({
+    mutationFn: (required) => applyMfaToAll(required),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['users'] })
+      setBulkMfaOpen(false)
+      toast.success(`MFA requirement updated for ${res.data.affected_count} user(s).`)
+    },
+    onError: () => toast.error('Failed to apply MFA setting to all users.')
+  })
+
   const toggleRole = (id) => setForm(p => ({
     ...p,
     role_ids: p.role_ids.includes(id) ? p.role_ids.filter(r => r !== id) : [...p.role_ids, id]
@@ -459,10 +512,37 @@ export default function AdminUsers() {
       )
     },
     {
+      key: 'mfa', label: 'MFA',
+      render: r => (
+        <div className="flex items-center gap-2">
+          <MfaSwitch
+            checked={!!r.mfa_required}
+            disabled={mfaRequiredMutation.isPending}
+            onChange={(next) => mfaRequiredMutation.mutate({ id: r.id, required: next })}
+          />
+          {r.mfa_required && (
+            r.mfa_enabled
+              ? <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400"><ShieldCheck size={12} /> Enrolled</span>
+              : <span className="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400"><ShieldAlert size={12} /> Pending</span>
+          )}
+        </div>
+      )
+    },
+    {
       key: 'actions', label: '',
       render: r => (
         <div className="flex gap-1">
           <Button size="sm" variant="ghost" onClick={() => openEdit(r)}>Edit</Button>
+          {r.mfa_enabled && r.id !== currentUser?.id && (
+            <Button size="sm" variant="ghost"
+              onClick={() => {
+                if (window.confirm(`Reset MFA for ${r.name}? They'll be asked to re-enroll (fresh QR code) at their next login.`))
+                  resetMfaMutation.mutate(r.id)
+              }}
+            >
+              Reset MFA
+            </Button>
+          )}
           {r.status !== 'Not Active' && r.status !== 'not_active' && (
             <Button size="sm" variant="ghost"
               className="text-destructive hover:text-destructive/80"
@@ -516,6 +596,9 @@ export default function AdminUsers() {
               <Network size={14} /> Org Chart
             </button>
           </div>
+          <Button variant="outline" size="sm" onClick={() => setBulkMfaOpen(true)}>
+            <ShieldCheck size={14} /> Bulk MFA
+          </Button>
           <Button onClick={openCreate}>
             <Plus size={14} /> Add User
           </Button>
@@ -700,7 +783,7 @@ export default function AdminUsers() {
       <Modal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        title={editing ? `Edit — ${editing.name}` : 'Add User'}
+        title={editing ? `Edit: ${editing.name}` : 'Add User'}
         size="lg"
       >
         <div className="space-y-4">
@@ -720,7 +803,7 @@ export default function AdminUsers() {
               onChange={handleUnitChange}
               disabled={!form.dept_top_id || availableUnits.length === 0}
             >
-              <option value="">— No unit —</option>
+              <option value="">No unit</option>
               {availableUnits.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
             </Select>
           </div>
@@ -813,6 +896,40 @@ export default function AdminUsers() {
           </div>
         </div>
       </Modal>
+
+      {/* Bulk MFA Dialog */}
+      <Dialog open={bulkMfaOpen} onOpenChange={setBulkMfaOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Bulk MFA</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Apply an MFA requirement to every user in this organisation at once.
+            Individual toggles above are unaffected until you choose one of these.
+          </p>
+          <div className="flex flex-col gap-2 pt-1">
+            <Button
+              loading={applyAllMutation.isPending}
+              onClick={() => {
+                if (window.confirm('Require MFA for every user in this organisation?'))
+                  applyAllMutation.mutate(true)
+              }}
+            >
+              Require MFA for everyone
+            </Button>
+            <Button
+              variant="outline"
+              loading={applyAllMutation.isPending}
+              onClick={() => {
+                if (window.confirm('Turn off the MFA requirement for every user?'))
+                  applyAllMutation.mutate(false)
+              }}
+            >
+              Turn off for everyone
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

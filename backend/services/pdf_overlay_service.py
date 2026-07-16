@@ -64,7 +64,7 @@ def _to_pts(x_pct, y_pct, w_pct, h_pct, page_w, page_h):
     x = (x_pct / 100.0) * page_w
     h = (h_pct / 100.0) * page_h
     w = (w_pct / 100.0) * page_w
-    # PDF y=0 is bottom; our y=0 is top — flip
+    # PDF y=0 is bottom, our y=0 is top: flip
     y = page_h - ((y_pct / 100.0) * page_h) - h
     return x, y, w, h
 
@@ -136,7 +136,7 @@ def overlay_pdf(
 ) -> bytes:
     """
     Overlay form data onto a PDF template page by page.
-    Returns PDF bytes (without audit page — caller appends that separately).
+    Returns PDF bytes (without audit page; caller appends that separately).
     """
     reader = PdfReader(template_path)
     writer = PdfWriter()

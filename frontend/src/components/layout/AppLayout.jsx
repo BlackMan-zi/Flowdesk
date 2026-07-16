@@ -9,7 +9,7 @@ import Header from './Header'
 import { Button } from '../ui/Button'
 import { ThemeToggle } from '../ui/theme-toggle'
 
-// Minimal executive layout — no sidebar
+// Minimal executive layout, no sidebar
 function ExecutiveLayout() {
   const { user, logout } = useAuth()
   const initials = (user?.name || 'U').split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()

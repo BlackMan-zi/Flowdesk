@@ -80,7 +80,7 @@ function ApproverCombobox({ step, onStepChange, users, roles, deptMap, hideSubmi
       .map(r => ({
         id: `role_${r.id}`,
         label: r.name,
-        sublabel: `${r.role_category} — signs by whoever holds this position`,
+        sublabel: `${r.role_category}: signs by whoever holds this position`,
         role_type: r.role_category,
         hierarchy_level: null, role_id: r.id, specific_user_id: null,
       })),
@@ -124,7 +124,7 @@ function ApproverCombobox({ step, onStepChange, users, roles, deptMap, hideSubmi
     }
     if (rt === 'Functional' || rt === 'Executive') {
       const r = roles.find(x => x.id === step.role_id)
-      return { label: r?.name || null, sub: r ? `${r.role_category} — signs by position` : null }
+      return { label: r?.name || null, sub: r ? `${r.role_category}: signs by position` : null }
     }
     return { label: null, sub: null }
   }, [step, users, roles])
@@ -291,7 +291,7 @@ function StepCard({ step, onStepChange, onRemove, users, roles, deptMap,
         <div>
           <p className="text-xs font-medium text-foreground mb-1">
             Approver *
-            <span className="ml-1.5 font-normal text-muted-foreground">— choose a position so approval still works if the person changes</span>
+            <span className="ml-1.5 font-normal text-muted-foreground">(choose a position so approval still works if the person changes)</span>
           </p>
           <ApproverCombobox
             step={step}
@@ -304,7 +304,7 @@ function StepCard({ step, onStepChange, onRemove, users, roles, deptMap,
 
         <div>
           <p className="text-xs font-medium text-foreground mb-1">
-            Step Label <span className="font-normal text-muted-foreground">(optional — auto-filled from approver if blank)</span>
+            Step Label <span className="font-normal text-muted-foreground">(optional, auto-filled from approver if blank)</span>
           </p>
           <input
             type="text"
@@ -512,7 +512,7 @@ export default function AdminApprovalTemplates() {
     onError: (err) => {
       const detail = err.response?.data?.detail
       const msg = Array.isArray(detail)
-        ? 'Validation error — make sure every approver and recipient has a selection.'
+        ? 'Validation error: make sure every approver and recipient has a selection.'
         : (detail || 'Save failed.')
       setError(msg)
       toast.error(msg)
@@ -621,7 +621,7 @@ export default function AdminApprovalTemplates() {
       <Modal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        title={editing ? `Edit — ${editing.name}` : 'New Approval Template'}
+        title={editing ? `Edit: ${editing.name}` : 'New Approval Template'}
         size="xl"
       >
         <div className="space-y-5">

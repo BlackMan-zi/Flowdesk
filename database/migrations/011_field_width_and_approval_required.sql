@@ -1,11 +1,11 @@
 -- 011_field_width_and_approval_required.sql
 -- Phase C.2 of the schema-designer redesign.
 --
--- form_fields.grid_width — width fraction in the new 12-col canvas:
+-- form_fields.grid_width: width fraction in the new 12-col canvas:
 --   '1/4' | '1/3' | '1/2' | '2/3' | '3/4' | 'full'
--- form_fields.free_position — when true, x_pct/y_pct/width_pct/height_pct
+-- form_fields.free_position: when true, x_pct/y_pct/width_pct/height_pct
 --   override the grid (Round A free-positioning, off by default).
--- approval_template_steps.is_required — required steps (default) vs optional
+-- approval_template_steps.is_required: required steps (default) vs optional
 --   ones the requester can choose to skip / approvers can mark not-applicable.
 
 ALTER TABLE form_fields

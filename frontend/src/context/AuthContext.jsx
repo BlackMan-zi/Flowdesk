@@ -40,7 +40,7 @@ export function AuthProvider({ children }) {
   // Observer: read-only documents view
   const isObserver = roles.includes('Observer') && !isAdmin && !isReportManager && !isExecutive
 
-  // HOD: Head of Department — needs both approver queue and own form submissions
+  // HOD: Head of Department, needs both approver queue and own form submissions
   const isHod = roles.includes('HOD') && !isAdmin && !isReportManager
 
   // Approver: admin, report manager, or any functional/executive/hierarchy role holder

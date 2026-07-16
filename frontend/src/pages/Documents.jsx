@@ -31,7 +31,7 @@ function tokenMatch(query, ...fields) {
 //
 // All comparisons in the user's local timezone. Returns a stable string
 // label that we group rows by. Order is enforced by the data being
-// pre-sorted by `generated_at` desc — the first bucket we encounter on the
+// pre-sorted by `generated_at` desc, so the first bucket we encounter on the
 // page is the most recent.
 
 function startOfLocalDay(d) {
@@ -109,7 +109,7 @@ function PagerFooter({ pageIndex, pageSize, totalRows, onChangePage, onChangePag
   )
 }
 
-// ── Grouped table — section headers inserted at bucket boundaries ────────────
+// ── Grouped table: section headers inserted at bucket boundaries ────────────
 
 function GroupedDocsTable({ rows, columns, onDownload }) {
   if (!rows.length) {
@@ -359,7 +359,7 @@ export default function Documents() {
           <Card>
             <CardHeader
               title="CC'd to Me"
-              subtitle="Completed forms where you're a CC recipient — copies of forms initiated by others"
+              subtitle="Completed forms where you're a CC recipient: copies of forms initiated by others"
             />
             {isLoading
               ? <div className="flex justify-center py-12"><Spinner /></div>

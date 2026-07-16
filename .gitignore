@@ -1,7 +1,7 @@
 # Claude settings
 .claude/
 
-# Per-machine Docker overrides — server uses committed compose as-is.
+# Per-machine Docker overrides: server uses committed compose as-is.
 docker-compose.override.yml
 docker-compose.override.yaml
 

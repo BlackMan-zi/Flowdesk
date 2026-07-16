@@ -196,7 +196,7 @@ def approve_step(
     """Approve the current step; activate next. Returns True if all done.
 
     Auto-cascades only when the next waiting step shares BOTH the acting
-    approver AND the same delegated_from context — i.e. the same person is
+    approver AND the same delegated_from context, i.e. the same person is
     fulfilling the same underlying responsibility (e.g. one user is both
     Manager and SN Manager, or two roles were delegated from the same
     person). The cascade stops as soon as either field diverges: signing
@@ -226,7 +226,7 @@ def approve_step(
             break
 
         # Cascade only when the next step shares the same (approver, delegated_from)
-        # tuple — same person AND same ownership context.
+        # tuple: same person AND same ownership context.
         same_actor = approver_id and next_step.approver_user_id == approver_id
         same_origin = next_step.delegated_from_user_id == delegated_from_id
         if same_actor and same_origin:
@@ -242,7 +242,7 @@ def approve_step(
         db.commit()
         return False
 
-    # No more waiting steps — mark form completed.
+    # No more waiting steps: mark form completed.
     form_version = db.query(FormVersion).filter(
         FormVersion.id == approval_instance.form_version_id
     ).first()

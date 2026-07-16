@@ -254,7 +254,7 @@ export default function AdminFormDefinitions() {
   const validate = () => {
     if (!form.name.trim()) return 'Form Name is required.'
     if (!form.code_suffix.trim()) return 'Code Suffix is required.'
-    if (!form.approval_template_id) return 'Approval Workflow is required — pick a template.'
+    if (!form.approval_template_id) return 'Approval Workflow is required: pick a template.'
     if (!form.confidentiality) return 'Document Classification is required.'
     if (form.visibility === 'specific_departments' && form.visible_department_ids.length === 0)
       return 'Select at least one department when visibility is restricted.'
@@ -303,7 +303,7 @@ export default function AdminFormDefinitions() {
       setModalOpen(false)
       toast.success(editing
         ? `"${updated.name}" updated successfully`
-        : `"${updated.name}" created — open the Designer to add fields`
+        : `"${updated.name}" created. Open the Designer to add fields`
       )
     },
     onError: (err) => {
@@ -515,7 +515,7 @@ export default function AdminFormDefinitions() {
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground">
                 Printed Title
-                <span className="ml-1.5 text-xs text-muted-foreground font-normal">— shown at the top of the form when filled or exported. Leave blank to use the Form Name.</span>
+                <span className="ml-1.5 text-xs text-muted-foreground font-normal">(shown at the top of the form when filled or exported. Leave blank to use the Form Name.)</span>
               </label>
               <input
                 value={form.printed_title}
@@ -568,14 +568,14 @@ export default function AdminFormDefinitions() {
               </div>
             </div>
 
-            {/* Department picker — shown when specific_departments */}
+            {/* Department picker, shown when specific_departments */}
             {form.visibility === 'specific_departments' && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="text-sm font-medium text-foreground">
                     Accessible Departments
                     <span className="ml-1.5 text-xs text-muted-foreground font-normal">
-                      — Only users in these departments will see this form
+                      (only users in these departments will see this form)
                     </span>
                   </label>
                 </div>
@@ -594,7 +594,7 @@ export default function AdminFormDefinitions() {
                 />
                 {form.visible_department_ids.length === 0 && (
                   <p className="text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-md px-3 py-2">
-                    No departments selected — the form will be hidden from all users until at least one is chosen.
+                    No departments selected. The form will be hidden from all users until at least one is chosen.
                   </p>
                 )}
               </div>
@@ -605,7 +605,7 @@ export default function AdminFormDefinitions() {
               <label className="text-sm font-medium text-foreground flex items-center gap-1.5">
                 <Shield size={13} className="text-muted-foreground" />
                 Document Classification <span className="text-destructive">*</span>
-                <span className="text-xs text-muted-foreground font-normal ml-1">— shown at the top of every submitted form</span>
+                <span className="text-xs text-muted-foreground font-normal ml-1">(shown at the top of every submitted form)</span>
               </label>
               <div className={cn(
                 'flex flex-wrap gap-2 p-2 rounded-md border',

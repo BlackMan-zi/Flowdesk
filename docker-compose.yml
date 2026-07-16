@@ -1,4 +1,4 @@
-# FlowDesk — Production Docker Compose
+# FlowDesk: Production Docker Compose
 # Deployed at /opt/flowdesk on the BSC server (10.20.26.47)
 # Accessible at http://10.20.26.47/flowdesk/
 
@@ -13,7 +13,7 @@ services:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
-    # No ports exposed — only reachable by other containers on bsc_network
+    # No ports exposed, only reachable by other containers on bsc_network
     expose:
       - "5432"
     volumes:

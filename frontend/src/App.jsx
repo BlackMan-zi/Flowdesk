@@ -5,6 +5,7 @@ import { RealtimeProvider } from './context/RealtimeContext'
 import AppLayout from './components/layout/AppLayout'
 
 import Login from './pages/Login'
+import ForgotPassword from './pages/ForgotPassword'
 import ForcePasswordReset from './pages/ForcePasswordReset'
 import Dashboard from './pages/Dashboard'
 import MyForms from './pages/MyForms'
@@ -47,10 +48,11 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
+      <Route path="/forgot-password" element={user ? <Navigate to="/" replace /> : <ForgotPassword />} />
       {/* Only reachable by a logged-in user (who still owes a password reset). */}
       <Route path="/force-reset-password" element={user ? <ForcePasswordReset /> : <Navigate to="/login" replace />} />
 
-      {/* Full-screen routes — no AppLayout wrapper */}
+      {/* Full-screen routes: no AppLayout wrapper */}
       <Route
         path="admin/form-definitions/:id/builder"
         element={<RequireAdmin><FormBuilder /></RequireAdmin>}
@@ -72,7 +74,7 @@ function AppRoutes() {
         <Route path="delegations" element={<Delegations />} />
         <Route path="documents" element={<Documents />} />
 
-        {/* Admin only — user management */}
+        {/* Admin only: user management */}
         <Route path="admin/users" element={<RequireAdmin><AdminUsers /></RequireAdmin>} />
 
         {/* Admin only */}

@@ -16,7 +16,7 @@
  *   IF(amount > 1000, amount * 0.18, 0)
  *   ROUND(subtotal * 1.18, 2)
  *
- * Not a full JS evaluator — no assignment, no closures, no member writes.
+ * Not a full JS evaluator: no assignment, no closures, no member writes.
  * Caller supplies the variable context, which is the only data the formula
  * can read.
  */
@@ -425,7 +425,7 @@ export function extractReferences(formula) {
     let prevDot = false
     for (const t of tokens) {
       if (t.type === TOK_IDENT && !prevDot) {
-        // Skip function names — they're followed by '('
+        // Skip function names: they're followed by '('
         const next = tokens[tokens.indexOf(t) + 1]
         if (!next || next.type !== TOK_LP) refs.add(t.value)
       }

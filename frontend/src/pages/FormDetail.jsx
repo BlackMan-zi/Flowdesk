@@ -276,7 +276,7 @@ export default function FormDetail() {
 
   // For the inline approval block on the form: pass only the REAL approval
   // steps. The canvas's ApprovalRows component already prepends its own
-  // "Requested by <initiator>" row — including the synthetic initiator step
+  // "Requested by <initiator>" row. Including the synthetic initiator step
   // here would double that row up.
   const renderedApprovalSteps = rawApprovalSteps.length > 0
     ? rawApprovalSteps.map(s => ({
@@ -357,7 +357,7 @@ export default function FormDetail() {
   return (
     <div className="max-w-7xl space-y-4">
 
-      {/* Header — full width across the layout */}
+      {/* Header: full width across the layout */}
       <div className="flex items-center gap-3">
         <button
           onClick={() => navigate(-1)}
@@ -415,7 +415,7 @@ export default function FormDetail() {
         </div>
       </div>
 
-      {/* Returned alert (full-width — needs the user's attention before anything else) */}
+      {/* Returned alert (full-width, needs the user's attention before anything else) */}
       {canResubmit && (
         <div className="bg-orange-50 border border-orange-200 rounded-2xl px-5 py-4 flex items-start gap-3">
           <AlertCircle size={18} className="text-orange-500 flex-shrink-0 mt-0.5" />
@@ -435,7 +435,7 @@ export default function FormDetail() {
           vertically on narrow screens. */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 lg:items-start">
 
-        {/* Left column (2/3) — the document being reviewed */}
+        {/* Left column (2/3): the document being reviewed */}
         <div className="lg:col-span-2 space-y-4 min-w-0">
 
       {/* Form data (WYSIWYG, read-only) */}
@@ -473,7 +473,7 @@ export default function FormDetail() {
         </Card>
       )}
 
-      {/* Attachments uploaded with this submission — stay in the LEFT
+      {/* Attachments uploaded with this submission stay in the LEFT
           column with the form they belong to. */}
       {(instance.attachments?.length || 0) > 0 && (
         <Card>
@@ -507,7 +507,7 @@ export default function FormDetail() {
 
         </div>{/* /left column */}
 
-        {/* Right column (1/3) — sticky workflow chrome: progress bar,
+        {/* Right column (1/3), sticky workflow chrome: progress bar,
             version history, the detailed approval chain, action buttons,
             admin overrides. Always visible while scrolling the form. */}
         <div className="lg:col-span-1 space-y-4 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
@@ -520,7 +520,7 @@ export default function FormDetail() {
       {/* Version history (only renders when there's more than one version) */}
       <VersionHistory versions={instance.versions} currentVersion={instance.current_version} />
 
-      {/* Approval Chain — compact one-line-per-step layout so the whole
+      {/* Approval Chain: compact one-line-per-step layout so the whole
           chain fits in a glance and you can see immediately who needs
           to act next. Notes still expand under each step that has them. */}
       {approvalSteps.length > 0 && (
@@ -711,7 +711,7 @@ export default function FormDetail() {
             onChange={e => setReassignUserId(e.target.value)}
             required
           >
-            <option value="">— Select user —</option>
+            <option value="">Select user…</option>
             {users.map(u => (
               <option key={u.id} value={u.id}>{u.name} ({u.email})</option>
             ))}

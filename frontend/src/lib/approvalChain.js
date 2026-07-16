@@ -1,4 +1,4 @@
-// Approval-chain helpers — dedup + sort for rendering.
+// Approval-chain helpers: dedup + sort for rendering.
 //
 // Background: older `/resubmit` and `/submit` codepaths could insert
 // duplicate ApprovalInstance rows for the same template step on a single
@@ -7,7 +7,7 @@
 // dedupe at the UI layer to avoid a chain that looks like it has 8 rows
 // for a 4-step template.
 //
-// We dedupe by step_order, keeping the row that "matters most" — the
+// We dedupe by step_order, keeping the row that "matters most": the
 // active step beats waiting, recent signed actions beat older ones, etc.
 
 const STATUS_PRIORITY = {

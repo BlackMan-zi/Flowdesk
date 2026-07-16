@@ -75,7 +75,7 @@ def find_test_users(db: Session):
             ApprovalInstance.status == ApprovalStepStatus.waiting
         ).first()
     if not pending:
-        raise RuntimeError("No active/waiting approval instances in DB — cannot test reassignment.")
+        raise RuntimeError("No active/waiting approval instances in DB, cannot test reassignment.")
 
     original = db.query(User).filter(User.id == pending.approver_user_id).first()
     delegate = db.query(User).filter(
@@ -206,10 +206,10 @@ def main():
         traceback.print_exc()
         return 2
     finally:
-        # Roll everything back — no DB pollution.
+        # Roll everything back: no DB pollution.
         outer.rollback()
         conn.close()
-        print("\n(transaction rolled back — DB is unchanged)")
+        print("\n(transaction rolled back, DB is unchanged)")
 
 
 if __name__ == "__main__":

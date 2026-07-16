@@ -190,7 +190,7 @@ export default function SubmitForm() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formDef?.id, user?.id, formDef?.confidentiality])
 
-  // ── Calculated fields — live re-eval via legacy engine (field_name tokens) ──
+  // ── Calculated fields: live re-eval via legacy engine (field_name tokens) ──
   const fieldsByName = useMemo(() => {
     const map = {}
     ;(formDef?.fields || []).forEach(f => { map[f.field_name] = f })
@@ -211,7 +211,7 @@ export default function SubmitForm() {
     return formDef.fields
       .filter(f => f.is_active !== false)
       .map(f => {
-        // System blocks store '' — actual values rendered from instance/org/user at view time.
+        // System blocks store '': actual values rendered from instance/org/user at view time.
         if (f.auto_fill_source && SYSTEM_BLOCK_SOURCES.has(f.auto_fill_source) && f.auto_fill_source !== 'static_text') {
           return { form_field_id: f.id, value: '' }
         }
@@ -225,7 +225,7 @@ export default function SubmitForm() {
     if (!allFiles.length) return
     const results = await Promise.allSettled(allFiles.map(f => uploadAttachment(instanceId, f)))
     const failed = results.filter(r => r.status === 'rejected').length
-    if (failed > 0) toast.error(`${failed} attachment${failed === 1 ? '' : 's'} failed to upload — retry from the form detail page.`)
+    if (failed > 0) toast.error(`${failed} attachment${failed === 1 ? '' : 's'} failed to upload. Retry from the form detail page.`)
     setPendingFiles({})
   }
 
@@ -295,7 +295,7 @@ export default function SubmitForm() {
 
   // ── Resolved props for the canvas ──
   // Falls back to the standard label palette when the org hasn't customised
-  // its own labels — otherwise forms tagged with a default classification
+  // its own labels, otherwise forms tagged with a default classification
   // would render as "Unclassified".
   const classification = useMemo(
     () => resolveClassification(formDef?.confidentiality, org?.classification_labels),
@@ -436,7 +436,7 @@ export default function SubmitForm() {
                   currentVersion={existingDraft.current_version}
                 />
               )}
-              {/* Full version timeline (collapsed by default) — gives the
+              {/* Full version timeline (collapsed by default): gives the
                   corrector context on prior submissions / notes if they
                   want to dig in. */}
               {isCorrection && existingDraft && (
@@ -464,7 +464,7 @@ export default function SubmitForm() {
                 />
               </div>
 
-              {/* Certify & Submit — initiator's signature + chosen date are
+              {/* Certify & Submit: initiator's signature + chosen date are
                   mandatory to submit. Defaults to today; user can backdate
                   for events that happened earlier. Not required for Save
                   Draft. */}

@@ -9,7 +9,7 @@ def gen_uuid():
     return str(uuid.uuid4())
 
 
-# Defaults — colors chosen so common labels are intuitive at a glance.
+# Defaults: colors chosen so common labels are intuitive at a glance.
 DEFAULT_CLASSIFICATION_LABELS = [
     {"name": "Public",       "color": "#22C55E"},  # green
     {"name": "Internal",     "color": "#EAB308"},  # yellow
@@ -43,7 +43,7 @@ class Organization(Base):
     email_domain = Column(String(255), unique=True, nullable=True)  # e.g. bsc.rw → auto-detects org on login
     subscription_plan = Column(String(50), default="starter")
     is_active = Column(Boolean, default=True)
-    # Branding — used as letterhead on every form's PDF export
+    # Branding, used as letterhead on every form's PDF export
     header_image_path = Column(String(500), nullable=True)
     footer_image_path = Column(String(500), nullable=True)
     letterhead_accent = Column(String(20), nullable=True)        # e.g. "#0066B3"

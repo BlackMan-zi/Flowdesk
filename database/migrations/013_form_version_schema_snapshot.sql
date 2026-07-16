@@ -4,7 +4,7 @@
 -- even if an admin later edits the form definition (renames a field, removes
 -- a section, changes layout etc.).
 --
--- form_versions.schema_snapshot — JSON: { name, printed_title, code_suffix,
+-- form_versions.schema_snapshot: JSON: { name, printed_title, code_suffix,
 -- confidentiality, section_layouts, fields: [...] }. NULL on rows from before
 -- this migration / draft versions; the application falls back to the live
 -- form definition in that case.

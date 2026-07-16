@@ -24,7 +24,7 @@ def _normalize_labels(value) -> Optional[List[dict]]:
 class OrganizationCreate(BaseModel):
     name: str
     subdomain: str
-    # subscription_plan is intentionally NOT accepted from the client — it is
+    # subscription_plan is intentionally NOT accepted from the client: it is
     # set server-side so a caller can't self-provision on a higher tier.
 
 
@@ -48,7 +48,7 @@ class OrganizationResponse(BaseModel):
     subscription_plan: str
     is_active: bool
     created_at: datetime
-    # Branding — paths are server-side; the frontend uses dedicated URLs to fetch the images.
+    # Branding: paths are server-side; the frontend uses dedicated URLs to fetch the images.
     has_header_image: bool = False
     has_footer_image: bool = False
     letterhead_accent: Optional[str] = None

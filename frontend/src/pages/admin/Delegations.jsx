@@ -235,7 +235,7 @@ export default function AdminDelegations() {
             )}
           </Select>
           <p className="text-xs text-muted-foreground -mt-2">
-            "All" covers every form the approver would sign during this period — both functional roles and hierarchy position.
+            "All" covers every form the approver would sign during this period: both functional roles and hierarchy position.
           </p>
           <div className="grid grid-cols-2 gap-3">
             <Input label="Start Date *" type="date" value={form.start_date} onChange={set('start_date')} />

@@ -1,4 +1,4 @@
-# FlowDesk — System Blueprint
+# FlowDesk: System Blueprint
 
 **Version:** 1.0
 **Date:** 2026-05-18
@@ -12,11 +12,11 @@
 ## Table of Contents
 
 1. [Executive Summary](#1-executive-summary)
-2. [What FlowDesk Does — In Plain English](#2-what-flowdesk-does--in-plain-english)
-3. [The Big Picture — System Architecture](#3-the-big-picture--system-architecture)
-4. [Who Uses It — Roles & Permissions](#4-who-uses-it--roles--permissions)
-5. [A Day in the Life — A Form's Journey](#5-a-day-in-the-life--a-forms-journey)
-6. [The Approval Engine — Form Lifecycle](#6-the-approval-engine--form-lifecycle)
+2. [What FlowDesk Does: In Plain English](#2-what-flowdesk-does-in-plain-english)
+3. [The Big Picture: System Architecture](#3-the-big-picture-system-architecture)
+4. [Who Uses It: Roles & Permissions](#4-who-uses-it-roles--permissions)
+5. [A Day in the Life: A Form's Journey](#5-a-day-in-the-life-a-forms-journey)
+6. [The Approval Engine: Form Lifecycle](#6-the-approval-engine-form-lifecycle)
 7. [Database Blueprint](#7-database-blueprint)
 8. [API Catalogue](#8-api-catalogue)
 9. [How Frontend, Backend, and Database Work Together](#9-how-frontend-backend-and-database-work-together)
@@ -48,14 +48,14 @@
 - **Frontend:** React 18 single-page app, served by Nginx
 - **Backend:** FastAPI (Python) REST API
 - **Database:** PostgreSQL 16
-- **Containerized:** Docker Compose (three containers — `nginx`, `api`, `db`)
+- **Containerized:** Docker Compose (three containers: `nginx`, `api`, `db`)
 - **Hosted:** On-premises at `10.20.26.47/flowdesk/` behind the BSC reverse proxy
 
-**Readiness:** All core flows (submit, approve, reject, send-back, delegate, PDF export, audit) are complete and exercised in production-like environments. See [Section 16 — Go-Live Readiness Checklist](#16-go-live-readiness-checklist).
+**Readiness:** All core flows (submit, approve, reject, send-back, delegate, PDF export, audit) are complete and exercised in production-like environments. See [Section 16: Go-Live Readiness Checklist](#16-go-live-readiness-checklist).
 
 ---
 
-## 2. What FlowDesk Does — In Plain English
+## 2. What FlowDesk Does: In Plain English
 
 Imagine the **Leave Request** form your team currently does on paper:
 
@@ -74,13 +74,13 @@ Imagine the **Leave Request** form your team currently does on paper:
 - **Step 6** → The system generates a single PDF with your organisation's letterhead, every signature in place, a unique reference number (e.g., `BSC-LRQ-2026-0042`), and an audit trail showing exactly who did what and when.
 - **Step 7** → That PDF is permanently archived in the system. Anyone with access can look it up by reference number, status, or date.
 
-The system also handles the **awkward cases** — what if the manager is on leave? (Delegation.) What if HR sends it back asking for a change? (Correction cycle.) What if a manager rejects it outright? (Rejection workflow.) What if you need to attach a doctor's note? (Attachments.)
+The system also handles the **awkward cases**: what if the manager is on leave? (Delegation.) What if HR sends it back asking for a change? (Correction cycle.) What if a manager rejects it outright? (Rejection workflow.) What if you need to attach a doctor's note? (Attachments.)
 
 Everything is **organisation-isolated**: BSC's data never leaks to another tenant on the same platform.
 
 ---
 
-## 3. The Big Picture — System Architecture
+## 3. The Big Picture: System Architecture
 
 The system has four layers, each with a clear job. The diagram below shows how a user's click flows from their browser all the way down to the database and back.
 
@@ -134,20 +134,20 @@ flowchart TB
 
 | Layer | Container | Job | Technology |
 |---|---|---|---|
-| **Edge** | (host network) | Front door — terminates HTTPS, routes by URL prefix to FlowDesk vs. other BSC apps | Nginx on host |
+| **Edge** | (host network) | Front door: terminates HTTPS, routes by URL prefix to FlowDesk vs. other BSC apps | Nginx on host |
 | **Frontend** | `flowdesk-nginx` | Serves the React app + reverse-proxies API calls. The user's browser does the work after the first page loads. | Nginx Alpine |
 | **Backend** | `flowdesk-api` | The brain. Enforces rules, runs workflows, generates PDFs, sends email, writes the audit log. | FastAPI / Python 3.12 |
-| **Database** | `flowdesk-db` | Source of truth — every form, user, signature, decision. | PostgreSQL 16 |
+| **Database** | `flowdesk-db` | Source of truth: every form, user, signature, decision. | PostgreSQL 16 |
 | **Media volume** | shared with `flowdesk-api` | Files that don't belong in the database: uploaded attachments, signature images, final PDFs, organisation letterhead. | Docker named volume |
 
 ---
 
-## 4. Who Uses It — Roles & Permissions
+## 4. Who Uses It: Roles & Permissions
 
 FlowDesk has **two role dimensions** working together:
 
-1. **Hierarchy** — who is whose manager (Line Manager → Senior Manager → Head of Department).
-2. **Functional / System roles** — what someone can *do* in the system (Admin, Approver, Initiator, etc.).
+1. **Hierarchy**: who is whose manager (Line Manager → Senior Manager → Head of Department).
+2. **Functional / System roles**: what someone can *do* in the system (Admin, Approver, Initiator, etc.).
 
 When admins design an approval template, they pick from these:
 
@@ -187,19 +187,19 @@ flowchart LR
 
 | Tier | Who | Sees |
 |---|---|---|
-| **Admin** | System administrators | Everything — users, forms, templates, all submissions, audit log, settings |
+| **Admin** | System administrators | Everything: users, forms, templates, all submissions, audit log, settings |
 | **Report Manager** | Department managers with reporting rights | Department-scoped dashboard, can create users |
 | **Executive** | C-suite | Org-wide read-only dashboard, approves executive-tier forms |
 | **HOD** | Head of Department | Own submissions + department approval queue |
 | **Approver** | Anyone in an approval chain | Pending-approvals inbox + history |
-| **Initiator** | Default — every employee | Submit forms, view own forms |
+| **Initiator** | Default (every employee) | Submit forms, view own forms |
 | **Observer** | Read-only auditors | Org-wide read of completed documents |
 
 Each user can hold **multiple roles** simultaneously (e.g., a Finance Manager is both an Approver and a Line Manager).
 
 ---
 
-## 5. A Day in the Life — A Form's Journey
+## 5. A Day in the Life: A Form's Journey
 
 This is the single most important diagram for understanding the system. It walks through a **Leave Request** from "Maria clicks submit" to "the signed PDF is downloadable in the archive".
 
@@ -266,11 +266,11 @@ sequenceDiagram
   FE-->>M: Browser saves PDF
 ```
 
-**Why this matters:** every arrow in that diagram is a real, audited, recoverable action. If John approves but the email to Aline fails, the database state is still correct — Aline still sees it in her inbox when she logs in, because the system queries the database, not the email.
+**Why this matters:** every arrow in that diagram is a real, audited, recoverable action. If John approves but the email to Aline fails, the database state is still correct: Aline still sees it in her inbox when she logs in, because the system queries the database, not the email.
 
 ---
 
-## 6. The Approval Engine — Form Lifecycle
+## 6. The Approval Engine: Form Lifecycle
 
 A form is never just "open" or "closed". It moves through a defined set of states. Every transition is gated by a permission check and writes to the audit log.
 
@@ -287,7 +287,7 @@ stateDiagram-v2
   Pending --> ReturnedForCorrection : Approver "Send Back"<br/>(with notes)
   ReturnedForCorrection --> Submitted : Initiator resubmits<br/>(new version created)
 
-  Pending --> Rejected : Approver "Reject"<br/>(terminal — must re-initiate)
+  Pending --> Rejected : Approver "Reject"<br/>(terminal, must re-initiate)
 
   Approved --> Completed : Background PDF render<br/>+ email + archive
 
@@ -307,7 +307,7 @@ stateDiagram-v2
 | **Submitted** | Submitted, approval chain initialised, awaiting first approver | System (auto) |
 | **Pending** | Mid-flight in approval chain | Next approver in line |
 | **Returned for Correction** | An approver sent it back with notes | Initiator (resubmits) |
-| **Rejected** | Terminal — chain ended in rejection | (Initiator may re-initiate a fresh form) |
+| **Rejected** | Terminal: chain ended in rejection | (Initiator may re-initiate a fresh form) |
 | **Approved** | Final approver said yes, awaiting PDF generation | System (auto) |
 | **Completed** | Final PDF generated and archived | (Terminal) |
 | **Cancelled** | Admin override | (Terminal) |
@@ -374,7 +374,7 @@ erDiagram
   USERS ||--o{ AUDIT_LOGS : performs
 ```
 
-### 7.2 Tables — Master Reference
+### 7.2 Tables: Master Reference
 
 #### Tenant & Identity
 
@@ -384,17 +384,17 @@ erDiagram
 | **departments** | Hierarchical org structure. Departments can have sub-departments. | `id`, `organization_id`, `name`, `parent_department_id` |
 | **users** | Every person who can log in. | `id`, `organization_id`, `name`, `email`, `password_hash`, `department_id`, `manager_id`, `sn_manager_id`, `hod_id`, `status`, `mfa_enabled`, `must_reset_password` |
 | **roles** | Functional + system + executive + hierarchy roles. | `id`, `organization_id`, `name`, `role_category` |
-| **user_roles** | Junction — which user has which role. | `user_id`, `role_id`, `assigned_by` |
+| **user_roles** | Junction: which user has which role. | `user_id`, `role_id`, `assigned_by` |
 | **password_reset_tokens** | Time-bound reset links emailed to users. | `id`, `user_id`, `token`, `expires_at`, `used` |
 
 #### Form Templates (designed by admins)
 
 | Table | Purpose | Key Columns |
 |---|---|---|
-| **form_definitions** | A form template — e.g., "Leave Request". | `id`, `name`, `printed_title`, `code_suffix`, `visibility`, `pdf_template_path`, `confidentiality`, `approval_template_id`, `section_layouts` (JSON) |
-| **form_fields** | The fields inside a template — labels, types, validation. | `id`, `form_definition_id`, `field_label`, `field_type`, `section_name`, `required`, `validation_rules` (JSON), `auto_filled`, `auto_fill_source`, `calculation_formula`, `grid_width`, `display_order` |
-| **form_definition_initiator_roles** | Junction — which roles may initiate this form. | `form_definition_id`, `role_id` |
-| **form_definition_initiator_users** | Junction — which specific users may initiate. | `form_definition_id`, `user_id` |
+| **form_definitions** | A form template (e.g., "Leave Request"). | `id`, `name`, `printed_title`, `code_suffix`, `visibility`, `pdf_template_path`, `confidentiality`, `approval_template_id`, `section_layouts` (JSON) |
+| **form_fields** | The fields inside a template: labels, types, validation. | `id`, `form_definition_id`, `field_label`, `field_type`, `section_name`, `required`, `validation_rules` (JSON), `auto_filled`, `auto_fill_source`, `calculation_formula`, `grid_width`, `display_order` |
+| **form_definition_initiator_roles** | Junction: which roles may initiate this form. | `form_definition_id`, `role_id` |
+| **form_definition_initiator_users** | Junction: which specific users may initiate. | `form_definition_id`, `user_id` |
 | **approval_templates** | A named approval workflow (reusable across forms). | `id`, `name`, `restart_on_correction` |
 | **approval_template_steps** | The ordered steps inside an approval template. | `id`, `template_id`, `step_order`, `step_label`, `role_type`, `role_id`, `specific_user_id`, `hierarchy_level`, `is_required` |
 | **approval_template_cc_recipients** | People CC'd on completion (for visibility). | `template_id`, `role_type`, `role_id`, `specific_user_id`, `email` |
@@ -403,7 +403,7 @@ erDiagram
 
 | Table | Purpose | Key Columns |
 |---|---|---|
-| **form_instances** | A single submitted form — one per "Maria's leave request". | `id`, `form_definition_id`, `reference_number`, `created_by`, `current_status`, `current_version`, `initiator_signature_data`, `initiator_signed_at` |
+| **form_instances** | A single submitted form, one per "Maria's leave request". | `id`, `form_definition_id`, `reference_number`, `created_by`, `current_status`, `current_version`, `initiator_signature_data`, `initiator_signed_at` |
 | **form_versions** | A snapshot per submit/resubmit cycle. | `id`, `form_instance_id`, `version_number`, `change_notes`, `schema_snapshot` (JSON) |
 | **form_field_values** | The actual values entered for each field per version. | `id`, `form_version_id`, `form_field_id`, `value` |
 | **form_attachments** | Uploaded files (doctor's notes, receipts, etc.). | `id`, `form_instance_id`, `original_filename`, `stored_filename`, `file_size`, `uploaded_by` |
@@ -417,8 +417,8 @@ erDiagram
 | Table | Purpose | Key Columns |
 |---|---|---|
 | **delegations** | Active delegation of approval authority between users. | `id`, `original_approver_id`, `delegate_user_id`, `role_id`, `start_date`, `end_date`, `reason`, `is_active`, `returned_at` |
-| **audit_logs** | Every meaningful action — submitted, approved, rejected, user created. | `id`, `user_id`, `action`, `entity_type`, `entity_id`, `details` (JSON), `ip_address`, `timestamp` |
-| **schema_migrations** | Internal — which SQL migrations have run. | `filename`, `applied_at` |
+| **audit_logs** | Every meaningful action: submitted, approved, rejected, user created. | `id`, `user_id`, `action`, `entity_type`, `entity_id`, `details` (JSON), `ip_address`, `timestamp` |
+| **schema_migrations** | Internal: which SQL migrations have run. | `filename`, `applied_at` |
 
 ### 7.3 Migrations (schema evolution)
 
@@ -427,19 +427,19 @@ These run **automatically** when the API container starts. Each is idempotent (o
 | # | What it added |
 |---|---|
 | 001 | Initial BSC org fixtures (subdomain, emails) |
-| 002 | `email_domain` on orgs — auto-detects tenant from login email |
+| 002 | `email_domain` on orgs: auto-detects tenant from login email |
 | 003 | Performance indexes (10× faster auth + approval lookups) |
-| 004 | `role_id` on delegations — scope delegations to specific roles |
+| 004 | `role_id` on delegations: scope delegations to specific roles |
 | 005 | Initiator-roles junction; email CC recipients |
-| 006 | Org branding — header/footer images + letterhead accent |
+| 006 | Org branding: header/footer images + letterhead accent |
 | 007 | Form classification labels (Public/Internal/Confidential/Restricted) |
 | 008 | Separate `printed_title` from internal `name` |
 | 009 | Section grouping on form fields |
 | 011 | Field grid width (`1/4`, `1/2`, `full`) + `is_required` on approval steps |
 | 012 | `section_layouts` per form (grid / row / stack) |
-| 013 | `schema_snapshot` on form versions — freeze the schema at submit time |
+| 013 | `schema_snapshot` on form versions: freeze the schema at submit time |
 | 014 | Initiator signature on form instances |
-| 015 | Initiator-users junction — restrict forms to named users |
+| 015 | Initiator-users junction: restrict forms to named users |
 
 ---
 
@@ -447,7 +447,7 @@ These run **automatically** when the API container starts. Each is idempotent (o
 
 The backend exposes a REST API at `/api/...`. Every endpoint except login requires a valid JWT bearer token. Admin endpoints additionally require an Admin role.
 
-### 8.1 API Surface — Endpoint Map
+### 8.1 API Surface: Endpoint Map
 
 ```mermaid
 flowchart LR
@@ -460,7 +460,7 @@ flowchart LR
 
   subgraph User["🔐 ANY AUTHENTICATED USER"]
     U1[/auth/me, mfa/]
-    U2[/forms/instances/* — submit, draft, attach]
+    U2[/forms/instances/*: submit, draft, attach]
     U3[/approvals/pending, approve, reject, send-back/]
     U4[/delegations/]
     U5[/dashboard/initiator, approver/]
@@ -468,8 +468,8 @@ flowchart LR
   end
 
   subgraph Admin["🛡️ ADMIN ONLY"]
-    A1[/users — create, update, deactivate/]
-    A2[/forms/definitions — CRUD + PDF template/]
+    A1[/users: create, update, deactivate/]
+    A2[/forms/definitions: CRUD + PDF template/]
     A3[/approval-templates/]
     A4[/departments, /roles/]
     A5[/settings/organization/]
@@ -483,7 +483,7 @@ flowchart LR
 
 ### 8.2 Endpoints by Router
 
-#### `/auth` — Authentication
+#### `/auth`: Authentication
 | Method | Path | Purpose | Who |
 |---|---|---|---|
 | POST | `/auth/login` | Email + password → JWT token | Public |
@@ -495,7 +495,7 @@ flowchart LR
 | POST | `/auth/mfa/setup` | Generate TOTP secret + QR code | Self |
 | POST | `/auth/mfa/enable` | Enable TOTP after verifying first code | Self |
 
-#### `/forms` — Forms (templates + instances)
+#### `/forms`: Forms (templates + instances)
 | Method | Path | Purpose | Who |
 |---|---|---|---|
 | GET | `/forms/definitions` | List forms I can initiate | Any |
@@ -516,7 +516,7 @@ flowchart LR
 | GET | `/forms/attachments/{id}` | Download attachment | Any (gated) |
 | GET | `/forms/instances/{id}/pdf` | Export to PDF | Any (gated) |
 
-#### `/approval-templates` — Workflow templates
+#### `/approval-templates`: Workflow templates
 | Method | Path | Purpose | Who |
 |---|---|---|---|
 | GET | `/approval-templates` | List templates | Any |
@@ -525,7 +525,7 @@ flowchart LR
 | PATCH | `/approval-templates/{id}` | Update | Admin |
 | DELETE | `/approval-templates/{id}` | Soft-delete | Admin |
 
-#### `/approvals` — Approval actions
+#### `/approvals`: Approval actions
 | Method | Path | Purpose | Who |
 |---|---|---|---|
 | GET | `/approvals/pending` | My pending approval queue | Any |
@@ -537,7 +537,7 @@ flowchart LR
 | POST | `/approvals/{id}/admin-send-back` | Force send-back | Admin |
 | POST | `/approvals/{id}/reassign-step` | Reassign active step | Admin |
 
-#### `/delegations` — Delegation
+#### `/delegations`: Delegation
 | Method | Path | Purpose | Who |
 |---|---|---|---|
 | POST | `/delegations` | Create personal delegation | Self |
@@ -546,16 +546,16 @@ flowchart LR
 | GET | `/delegations/all` | List all org delegations | Admin |
 | POST | `/delegations/admin-create` | Admin forces a delegation | Admin |
 
-#### `/users`, `/roles`, `/departments` — User management
+#### `/users`, `/roles`, `/departments`: User management
 Standard CRUD: `GET (list/one)`, `POST`, `PATCH`, `DELETE`. All write operations require Admin. `GET /users/directory` is a slimmed list usable by anyone for pickers.
 
-#### `/documents` — Archive
+#### `/documents`: Archive
 | Method | Path | Purpose | Who |
 |---|---|---|---|
 | GET | `/documents` | List documents I can see | Any |
 | GET | `/documents/{id}/download` | Download (live re-render) | Any (gated) |
 
-#### `/dashboard` — Role-specific aggregates
+#### `/dashboard`: Role-specific aggregates
 | Method | Path | Purpose | Who |
 |---|---|---|---|
 | GET | `/dashboard/initiator` | My forms by status | Any |
@@ -564,7 +564,7 @@ Standard CRUD: `GET (list/one)`, `POST`, `PATCH`, `DELETE`. All write operations
 | GET | `/dashboard/admin` | Org-wide KPIs + filters | Admin |
 | GET | `/dashboard/logs` | Paginated audit log | Admin |
 
-#### `/settings` — Organisation branding
+#### `/settings`: Organisation branding
 | Method | Path | Purpose | Who |
 |---|---|---|---|
 | GET | `/settings/organization` | Org profile | Any |
@@ -640,9 +640,9 @@ flowchart LR
 3. **`api/forms.js → listFormInstances()`** calls the shared axios client with the URL `/forms/instances`.
 4. **`api/client.js`** prepends the base URL (`/flowdesk/api`), attaches the `Authorization: Bearer <jwt>` header from `localStorage`, and fires the GET.
 5. **Nginx** receives the request, sees it matches `/flowdesk/api/...`, and proxies it to the `api` container on port 8000.
-6. **FastAPI** routes the request to `routers/forms.py::list_form_instances`, which has `Depends(get_current_active_user)` — this decodes the JWT, loads the user from the DB, and rejects if the token is invalid.
+6. **FastAPI** routes the request to `routers/forms.py::list_form_instances`, which has `Depends(get_current_active_user)`: this decodes the JWT, loads the user from the DB, and rejects if the token is invalid.
 7. The handler calls **SQLAlchemy ORM** to query `form_instances` joined to `form_versions`, scoped to `organization_id = user.organization_id` (tenant isolation).
-8. The result is shaped into a **Pydantic response model** (which doubles as the API contract — what the frontend can rely on).
+8. The result is shaped into a **Pydantic response model** (which doubles as the API contract: what the frontend can rely on).
 9. FastAPI returns JSON.
 10. React Query caches the result and updates the component state. The page re-renders.
 11. If the user takes an action (submit, approve), the cycle repeats with POST/PATCH, the service writes to the DB, and `audit_service.log_event` writes an audit row.
@@ -674,7 +674,7 @@ flowchart TD
   Final --> Stream["Stream bytes to browser<br/>OR attach to completion email"]
 ```
 
-### Document access — who can see what
+### Document access: who can see what
 
 When a form completes, the system creates `document_shares` rows for:
 
@@ -695,13 +695,13 @@ The system sends transactional emails at every meaningful event. All emails are 
 | User created | New user | Welcome + temporary password |
 | Password reset requested | User | Reset link (24h expiry) |
 | Form submitted | First approver | "Please approve" + form link |
-| Step approved | Initiator | "X approved — now with Y" |
+| Step approved | Initiator | "X approved, now with Y" |
 | Step approved | Next approver | "Please approve" |
-| Form rejected | Initiator | "X rejected — see notes" |
-| Form sent back | Initiator | "X needs corrections — see notes" |
+| Form rejected | Initiator | "X rejected: see notes" |
+| Form sent back | Initiator | "X needs corrections: see notes" |
 | Form completed | Initiator + all approvers + CC | "Final signed document" + PDF attachment |
 
-**SMTP configuration** is environment-driven (`SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, `SMTP_TLS`). The system supports any SMTP server — corporate Exchange, Microsoft 365, Gmail, or a dedicated transactional service.
+**SMTP configuration** is environment-driven (`SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, `SMTP_TLS`). The system supports any SMTP server: corporate Exchange, Microsoft 365, Gmail, or a dedicated transactional service.
 
 ---
 
@@ -723,7 +723,7 @@ flowchart TD
 **Properties**
 
 - Delegations have a **start date** and **end date** (or end manually).
-- Delegations can be **role-scoped** — "John delegates only his Finance Approver role to Jane, not his Line Manager role".
+- Delegations can be **role-scoped**: "John delegates only his Finance Approver role to Jane, not his Line Manager role".
 - The audit log preserves both the **original approver** and the **delegate** for every step they handled.
 - Admins can create or revoke delegations on behalf of any user.
 
@@ -764,7 +764,7 @@ flowchart TB
 | Area | Control |
 |---|---|
 | **Authentication** | JWT bearer tokens, bcrypt password hashing (cost factor 12), TOTP MFA available |
-| **Password policy** | Minimum 12 characters, upper + lower + digit + special character |
+| **Password policy** | Minimum 8 characters, upper + lower + digit + special character |
 | **Forced reset** | Every user must change their temp password on first login |
 | **Authorization** | `require_roles()` dependency on every admin endpoint |
 | **Tenant isolation** | `organization_id` filter on every query |
@@ -774,7 +774,7 @@ flowchart TB
 | **SQL injection** | SQLAlchemy ORM with parameterised queries |
 | **Audit log** | Every state change recorded with user, IP, timestamp |
 | **Secret management** | `SECRET_KEY` required at startup (≥32 chars, no defaults) |
-| **Error masking** | Production never leaks stack traces — generic error + request ID only |
+| **Error masking** | Production never leaks stack traces: generic error + request ID only |
 | **Transport** | Designed to run behind HTTPS reverse proxy; `REQUIRE_HTTPS=true` enforces |
 
 ### 14.2 Known follow-ups (tracked in `SECURITY.md`)
@@ -836,10 +836,10 @@ flowchart TB
 - **Path:** `/opt/flowdesk` on the BSC server.
 - **URL:** `http://10.20.26.47/flowdesk/` (intended to move to HTTPS at go-live).
 - **Three containers:** all on the shared `bsc_network` Docker network so the outer proxy can address them.
-- **Database not exposed** outside the Docker network — only reachable by the API container.
+- **Database not exposed** outside the Docker network: only reachable by the API container.
 - **Persistent volumes:**
-  - `flowdesk_pgdata` — PostgreSQL data files.
-  - `flowdesk_media` — uploaded attachments, signatures, generated PDFs, letterhead images.
+  - `flowdesk_pgdata`: PostgreSQL data files.
+  - `flowdesk_media`: uploaded attachments, signatures, generated PDFs, letterhead images.
 - **Automatic startup:** all containers `restart: unless-stopped`. PostgreSQL has a healthcheck; the API waits for the DB before starting.
 
 ### Deployment workflow
@@ -851,7 +851,7 @@ docker compose build api nginx     # rebuild whatever changed
 docker compose up -d                # apply
 ```
 
-Schema migrations run **automatically** at API startup — no manual DB step.
+Schema migrations run **automatically** at API startup: no manual DB step.
 
 ### Backup
 
@@ -900,10 +900,10 @@ Schema migrations run **automatically** at API startup — no manual DB step.
 ### Documents to hand over with go-live
 
 - This blueprint (`FLOWDESK_BLUEPRINT.md`)
-- `SECURITY.md` — security posture + pending follow-ups
-- `.env.example` — required environment variables
-- Admin user guide (form designer + approval template editor) — _to be drafted_
-- End-user one-pager (submit + approve) — _to be drafted_
+- `SECURITY.md`: security posture + pending follow-ups
+- `.env.example`: required environment variables
+- Admin user guide (form designer + approval template editor), _to be drafted_
+- End-user one-pager (submit + approve), _to be drafted_
 
 ---
 
@@ -915,16 +915,16 @@ Schema migrations run **automatically** at API startup — no manual DB step.
 | **Initiator** | The person who starts (submits) a form. |
 | **Approver** | A person assigned to approve, reject, or send back a form at a specific step. |
 | **Approval template** | A reusable workflow definition (sequence of steps). |
-| **Approval step** | A single point of approval in the chain — e.g., "Line Manager", "HR". |
+| **Approval step** | A single point of approval in the chain, e.g., "Line Manager", "HR". |
 | **Approval instance** | A live, in-flight approval step on an actual form (one per form per step). |
-| **Form definition** | An admin-designed template — fields, validation, approval workflow attached. |
+| **Form definition** | An admin-designed template: fields, validation, approval workflow attached. |
 | **Form instance** | A single user's submission of a form. |
 | **Form version** | A snapshot of values at submit time. New version on every resubmit. |
 | **Send back** | An approver returning the form to the initiator for corrections (with notes). |
 | **Delegation** | Hand-off of approval authority from one user to another for a time window. |
 | **Hierarchy** | Manager / Senior Manager / Head of Department reporting structure. |
-| **JWT** | JSON Web Token — the cryptographic ticket the browser presents to prove who you are. |
-| **TOTP** | Time-based One-Time Password — the 6-digit code in Google/Microsoft Authenticator. |
+| **JWT** | JSON Web Token: the cryptographic ticket the browser presents to prove who you are. |
+| **TOTP** | Time-based One-Time Password: the 6-digit code in Google/Microsoft Authenticator. |
 | **WeasyPrint / ReportLab** | The two libraries that turn HTML into a PDF. |
 | **Reference number** | Human-readable unique ID per form, e.g., `BSC-LRQ-2026-0042`. |
 
@@ -932,4 +932,4 @@ Schema migrations run **automatically** at API startup — no manual DB step.
 
 **End of blueprint.**
 
-_For questions or corrections, contact the FlowDesk implementation team. This document should be updated whenever a structural change is made — new table, new endpoint group, new deployment topology._
+_For questions or corrections, contact the FlowDesk implementation team. This document should be updated whenever a structural change is made: new table, new endpoint group, new deployment topology._

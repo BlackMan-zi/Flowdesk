@@ -2,7 +2,7 @@
 
 A self-contained pattern for admin-managed user accounts where:
 
-- An admin creates/resets a user and gets a **one-time readable password shown once in the UI** to share out-of-band (Slack, WhatsApp, in person) — email is best-effort, never required
+- An admin creates/resets a user and gets a **one-time readable password shown once in the UI** to share out-of-band (Slack, WhatsApp, in person); email is best-effort, never required
 - A **self-service "Forgot password"** flow emails the user a one-time sign-in code
 - The user is **forced to change** the temporary password/code on first login
 - A mail outage can **never lock anyone out**
@@ -26,7 +26,7 @@ A self-contained pattern for admin-managed user accounts where:
    ├─ user enters email on /forgot-password
    ├─ if account doesn't exist → SAME generic 200 (no enumeration)
    ├─ generate readable code
-   ├─ EMAIL FIRST — if the email fails, STOP. Password unchanged. No lockout.
+   ├─ EMAIL FIRST: if the email fails, STOP. Password unchanged. No lockout.
    ├─ only after send succeeds: hash code → password, must_change = true
    └─ generic 200: "If an account exists for that email, a code has been sent."
 
@@ -42,7 +42,7 @@ THEN (all three converge):
 
 | Rule | Why |
 |---|---|
-| Plain code never persisted — bcrypt hash only | DB leak ≠ credential leak |
+| Plain code never persisted (bcrypt hash only) | DB leak ≠ credential leak |
 | Code shown to admin exactly once, never re-displayable | Limits exposure window |
 | Readable alphabet `ABCDEFGHJKMNPQRSTUVWXYZ23456789` (no 0/O/1/I/L) | Shareable by voice/chat without transcription errors |
 | Code length ≥ 8 from a 31-char alphabet (~10¹² combos) | Survives online guessing without rate limiting; never use 6-digit numeric as a password |
@@ -54,9 +54,9 @@ THEN (all three converge):
 
 ---
 
-## Implementation A — Python / FastAPI / SQLAlchemy / React *(as shipped)*
+## Implementation A: Python / FastAPI / SQLAlchemy / React *(as shipped)*
 
-### Schema — two columns on your user table
+### Schema: two columns on your user table
 
 ```python
 class User(Base):
@@ -84,14 +84,14 @@ def hash_password(plain: str) -> str:
 def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
 
-# Readable alphabet — omits 0/O/1/I/L to avoid visual confusion
+# Readable alphabet: omits 0/O/1/I/L to avoid visual confusion
 _READABLE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 
 def generate_temp_password(length: int = 10) -> str:
     return "".join(secrets.choice(_READABLE_ALPHABET) for _ in range(length))
 ```
 
-### Response model — the plain code goes back to the admin, once
+### Response model: the plain code goes back to the admin, once
 
 ```python
 class TempPasswordResponse(BaseModel):
@@ -99,7 +99,7 @@ class TempPasswordResponse(BaseModel):
     name:          str
     email:         str
     role:          str
-    temp_password: str    # plain — displayed once in the UI, never stored
+    temp_password: str    # plain: displayed once in the UI, never stored
     email_sent:    bool   # lets the UI say "also emailed" vs "share it yourself"
     must_change_password: bool = True
 ```
@@ -154,7 +154,7 @@ def reset_password(user_id: int, db=Depends(get_db), admin=Depends(require_admin
                                 role=user.role, temp_password=temp, email_sent=email_sent)
 ```
 
-### Self-service forgot password (public — mount WITHOUT auth dependency)
+### Self-service forgot password (public, mount WITHOUT auth dependency)
 
 ```python
 class ForgotPasswordRequest(BaseModel):
@@ -168,7 +168,7 @@ def forgot_password(body: ForgotPasswordRequest, db=Depends(get_db)):
         return generic                      # identical response → no enumeration
 
     code = generate_temp_password(8)
-    # EMAIL FIRST — only invalidate the current password once the code is delivered,
+    # EMAIL FIRST: only invalidate the current password once the code is delivered,
     # so a mail failure can never lock the user out.
     try:
         email_service.send_forgot_password_code(user.email, user.name, code)
@@ -204,7 +204,7 @@ def change_password(user_id: int, body: PasswordChange,
                     db=Depends(get_db), current=Depends(get_current_user)):
     if current.id != user_id and current.role != "admin":
         raise HTTPException(403, "You can only change your own password")
-    validate_strength(body.new_password)        # 8+, upper, digit, special — server-side
+    validate_strength(body.new_password)        # 8+, upper, digit, special (server-side)
     user = db.query(User).get(user_id)
     user.hashed_password = hash_password(body.new_password)
     user.must_change_password = False
@@ -212,7 +212,7 @@ def change_password(user_id: int, body: PasswordChange,
     return {"message": "Password updated"}
 ```
 
-### React — login redirect
+### React: login redirect
 
 ```jsx
 const res = await authAPI.login({ email, password });
@@ -220,7 +220,7 @@ login(res.data);   // store token + user
 navigate(res.data.must_change_password ? '/change-password' : '/');
 ```
 
-### React — one-time temp password modal (admin side)
+### React: one-time temp password modal (admin side)
 
 ```jsx
 function TempPasswordModal({ info, onClose }) {       // info: {name, email, password, emailSent}
@@ -234,7 +234,7 @@ function TempPasswordModal({ info, onClose }) {       // info: {name, email, pas
         <h3>Temporary password</h3>
         <p>{info.name} · {info.email}</p>
         <div className="warning-box">
-          <strong>Share this with the user — this is your only chance to see it.</strong>
+          <strong>Share this with the user: this is your only chance to see it.</strong>
           <div className="code-box">
             <span className="mono">{info.password}</span>
             <button onClick={copy}>{copied ? '✓ Copied' : 'Copy'}</button>
@@ -242,7 +242,7 @@ function TempPasswordModal({ info, onClose }) {       // info: {name, email, pas
         </div>
         <p className="muted">
           {info.emailSent ? '✓ Also emailed to the user.'
-                          : 'Email was not sent — share it directly.'}
+                          : 'Email was not sent; share it directly.'}
         </p>
         <button onClick={onClose}>Done</button>
       </div>
@@ -251,7 +251,7 @@ function TempPasswordModal({ info, onClose }) {       // info: {name, email, pas
 }
 ```
 
-### React — forgot-password page (public route, linked from login)
+### React: forgot-password page (public route, linked from login)
 
 ```jsx
 const handleSubmit = async (e) => {
@@ -259,7 +259,7 @@ const handleSubmit = async (e) => {
   try {
     await authAPI.forgotPassword({ email });
     setSent(true);   // show: "If an account exists, we've emailed a one-time code.
-                     //        Use it on the login page — you'll set a new password after."
+                     //        Use it on the login page; you'll set a new password after."
   } catch (err) {
     setError(err.response?.data?.detail || 'Something went wrong.');
   }
@@ -268,13 +268,13 @@ const handleSubmit = async (e) => {
 
 ---
 
-## Email delivery via Microsoft 365 — real-world gotchas
+## Email delivery via Microsoft 365: real-world gotchas
 
 These cost us hours; check them in order when email "mysteriously" fails.
 
 ### 1. `535 5.7.139 ... SmtpClientAuthentication is disabled for the Tenant`
 
-Microsoft disables SMTP basic auth **tenant-wide by default**. Your code and password can be perfect — every `smtp.login()` fails until an admin enables it **per-mailbox** (per-mailbox overrides the tenant setting):
+Microsoft disables SMTP basic auth **tenant-wide by default**. Your code and password can be perfect, yet every `smtp.login()` fails until an admin enables it **per-mailbox** (per-mailbox overrides the tenant setting):
 
 - **Admin center:** admin.microsoft.com → Users → Active users → *the sending mailbox* → **Mail** tab → **Manage email apps** → tick **Authenticated SMTP** → Save
 - **PowerShell:** `Set-CASMailbox -Identity sender@yourdomain -SmtpClientAuthenticationDisabled $false`
@@ -282,11 +282,11 @@ Microsoft disables SMTP basic auth **tenant-wide by default**. Your code and pas
 
 ### 2. Entra **Security Defaults** override everything
 
-If Security Defaults are **Enabled** (entra.microsoft.com → Identity → Overview → Properties → Manage security defaults), legacy auth — including SMTP AUTH — is blocked for the whole tenant *regardless of the mailbox setting*. Options: disable Security Defaults (a real security trade-off — replaces baseline MFA), use Conditional Access exceptions (needs Entra P1), or switch to the Graph API sender.
+If Security Defaults are **Enabled** (entra.microsoft.com → Identity → Overview → Properties → Manage security defaults), legacy auth (including SMTP AUTH) is blocked for the whole tenant *regardless of the mailbox setting*. Options: disable Security Defaults (a real security trade-off: it replaces baseline MFA), use Conditional Access exceptions (needs Entra P1), or switch to the Graph API sender.
 
 ### 3. `535 ... user credentials were incorrect` (after fixing #1)
 
-Good news — this error means SMTP AUTH is now reachable and Microsoft is actually checking the password. Fix the stored password. If the mailbox has **MFA**, the normal password will never work over SMTP — generate an **App Password** for it and use that.
+Good news: this error means SMTP AUTH is now reachable and Microsoft is actually checking the password. Fix the stored password. If the mailbox has **MFA**, the normal password will never work over SMTP, so generate an **App Password** for it and use that.
 
 ### 4. Diagnostic one-liner (auth check, sends nothing)
 
@@ -306,7 +306,7 @@ from email.mime.text import MIMEText
 
 def send(to: str, subject: str, html: str) -> None:
     if not SMTP_USER or not SMTP_PASSWORD:
-        return                                    # email disabled — fine for admin flows
+        return                                    # email disabled: fine for admin flows
     msg = MIMEMultipart("alternative")
     msg["Subject"], msg["From"], msg["To"] = subject, f"{FROM_NAME} <{SMTP_USER}>", to
     msg.attach(MIMEText(html, "html"))
@@ -316,11 +316,11 @@ def send(to: str, subject: str, html: str) -> None:
         s.sendmail(SMTP_USER, to, msg.as_string())
 ```
 
-The modern alternative (unaffected by #1/#2): an Entra app registration with `Mail.Send` and the **Microsoft Graph API** — more setup, no legacy-auth dependence.
+The modern alternative (unaffected by #1/#2): an Entra app registration with `Mail.Send` and the **Microsoft Graph API**, with more setup and no legacy-auth dependence.
 
 ---
 
-## Implementation B — Next.js / Prisma (alternate stack)
+## Implementation B: Next.js / Prisma (alternate stack)
 
 ### Schema
 
@@ -356,7 +356,7 @@ export function generateTempPassword(length = 10): string {
 }
 ```
 
-### Admin actions — return the plain code once
+### Admin actions: return the plain code once
 
 ```ts
 export async function createUserAction(formData: FormData) {
@@ -412,7 +412,7 @@ export async function forgotPasswordAction(formData: FormData) {
 //                  store new hash, passwordResetRequired = false
 ```
 
-Session/cookie middleware (HMAC-signed tokens, Edge verification) is orthogonal to this pattern — any session mechanism works. Key points if rolling your own: `httpOnly` + `sameSite: lax` cookie, HMAC-SHA256 with timing-safe comparison, embedded expiry + role claims.
+Session/cookie middleware (HMAC-signed tokens, Edge verification) is orthogonal to this pattern: any session mechanism works. Key points if rolling your own: `httpOnly` + `sameSite: lax` cookie, HMAC-SHA256 with timing-safe comparison, embedded expiry + role claims.
 
 ---
 
@@ -422,7 +422,7 @@ Session/cookie middleware (HMAC-signed tokens, Edge verification) is orthogonal 
 # Sessions / JWT
 SECRET_KEY=<min 32 random bytes>
 
-# Email (Microsoft 365 SMTP) — leave SMTP_USER blank to disable email entirely;
+# Email (Microsoft 365 SMTP): leave SMTP_USER blank to disable email entirely;
 # admin flows keep working because the temp password is shown in the UI.
 SMTP_HOST=smtp.office365.com
 SMTP_PORT=587
@@ -431,7 +431,7 @@ SMTP_PASSWORD=<mailbox password, or App Password if the mailbox has MFA>
 SMTP_FROM_NAME=Your App Name
 ```
 
-> Deployment reminder: `.env` changes require a container/process restart to take effect — and remember to update **both** local and server `.env` files.
+> Deployment reminder: `.env` changes require a container/process restart to take effect, and remember to update **both** local and server `.env` files.
 
 ---
 

@@ -1,4 +1,4 @@
-# FlowDesk — Page Use Cases & Data Flow
+# FlowDesk: Page Use Cases & Data Flow
 
 **Version:** 1.0
 **Date:** 2026-05-19
@@ -6,10 +6,10 @@
 **Companion to:** [`FLOWDESK_BLUEPRINT.md`](FLOWDESK_BLUEPRINT.md)
 
 > For every page in the FlowDesk frontend (`frontend/src/pages/`), this document records:
-> - **Use case** — who it is for and why it exists
-> - **What it does** — the UI behaviour
-> - **Data IN** — which API endpoints feed it, which database tables those ultimately read from
-> - **Data OUT** — which API endpoints it calls back, which database tables those mutate
+> - **Use case:** who it is for and why it exists
+> - **What it does:** the UI behaviour
+> - **Data IN:** which API endpoints feed it, which database tables those ultimately read from
+> - **Data OUT:** which API endpoints it calls back, which database tables those mutate
 >
 > Notation: arrows like `GET /forms/instances → form_instances` mean "the page calls this HTTP endpoint, which reads from this table". Mutations go the other direction.
 
@@ -33,26 +33,26 @@
 11. [Logs](#11-logs)
 
 ### Dashboard variants (`pages/dashboards/`)
-12. [AdminDashboard](#12-admindashboard)
-13. [ReportManagerDashboard](#13-reportmanagerdashboard)
-14. [ExecutiveDashboard](#14-executivedashboard)
-15. [HodDashboard](#15-hoddashboard)
-16. [ApproverDashboard](#16-approverdashboard)
-17. [InitiatorDashboard](#17-initiatordashboard)
-18. [ObserverDashboard](#18-observerdashboard)
+12. [AdminDashboard](#12-dashboards-admindashboard)
+13. [ReportManagerDashboard](#13-dashboards-reportmanagerdashboard)
+14. [ExecutiveDashboard](#14-dashboards-executivedashboard)
+15. [HodDashboard](#15-dashboards-hoddashboard)
+16. [ApproverDashboard](#16-dashboards-approverdashboard)
+17. [InitiatorDashboard](#17-dashboards-initiatordashboard)
+18. [ObserverDashboard](#18-dashboards-observerdashboard)
 
 ### Admin pages (`pages/admin/`)
-19. [Users](#19-admin--users)
-20. [Departments](#20-admin--departments)
-21. [FormDefinitions](#21-admin--formdefinitions)
-22. [FormBuilder](#22-admin--formbuilder)
-23. [FormDesigner](#23-admin--formdesigner)
-24. [ApprovalTemplates](#24-admin--approvaltemplates)
-25. [Delegations (admin view)](#25-admin--delegations)
-26. [Settings](#26-admin--settings)
+19. [Users](#19-admin-users)
+20. [Departments](#20-admin-departments)
+21. [FormDefinitions](#21-admin-formdefinitions)
+22. [FormBuilder](#22-admin-formbuilder)
+23. [FormDesigner](#23-admin-formdesigner)
+24. [ApprovalTemplates](#24-admin-approvaltemplates)
+25. [Delegations (admin view)](#25-admin-delegations)
+26. [Settings](#26-admin-settings)
 
 ### Appendix
-- [Page → Endpoint → Table cheat-sheet](#appendix--page--endpoint--table-cheat-sheet)
+- [Page → Endpoint → Table cheat-sheet](#appendix-page--endpoint--table-cheat-sheet)
 
 ---
 
@@ -64,7 +64,7 @@
 | **Guard** | Public (no auth) |
 | **File** | `pages/Login.jsx` |
 
-**Use case** — The front door. Every user (initiator, approver, admin, executive) starts here. Auto-detects organisation from the email domain so users don't pick a tenant.
+**Use case:** The front door. Every user (initiator, approver, admin, executive) starts here. Auto-detects organisation from the email domain so users don't pick a tenant.
 
 **What it does**
 - Email + password form. Optional TOTP code field appears after first 401-with-mfa response.
@@ -91,14 +91,14 @@
 | **Guard** | Has valid JWT but `must_reset_password = true` |
 | **File** | `pages/ForcePasswordReset.jsx` |
 
-**Use case** — A brand-new user (created by Admin with a temp password) is forced to change it on first login before they can do anything else.
+**Use case:** A brand-new user (created by Admin with a temp password) is forced to change it on first login before they can do anything else.
 
 **What it does**
 - Three inputs: current temp password, new password, confirm new password.
 - Client-side validates new password against the 12-char policy (upper/lower/digit/special).
 - On success, clears the `must_reset_password` flag and routes to `/`.
 
-**Data IN** — None (form is self-contained).
+**Data IN:** None (form is self-contained).
 
 **Data OUT**
 - `POST /auth/force-reset-password` → updates `users.password_hash`, `users.must_reset_password = false`; writes `audit_logs` (`PASSWORD_RESET_FORCED`).
@@ -113,18 +113,18 @@
 | **Guard** | Authenticated |
 | **File** | `pages/Dashboard.jsx` |
 
-**Use case** — Landing page. Every user lands here after login and sees the right dashboard for their role.
+**Use case:** Landing page. Every user lands here after login and sees the right dashboard for their role.
 
-**What it does** — Inspects `useAuth()` privilege tiers and renders one of seven variants:
-- `isAdmin` → [AdminDashboard](#12-admindashboard)
-- `isReportManager` → [ReportManagerDashboard](#13-reportmanagerdashboard)
-- `isExecutive` → [ExecutiveDashboard](#14-executivedashboard)
-- `isHod` → [HodDashboard](#15-hoddashboard)
-- `isApprover` → [ApproverDashboard](#16-approverdashboard)
-- `isObserver` → [ObserverDashboard](#18-observerdashboard)
-- default → [InitiatorDashboard](#17-initiatordashboard)
+**What it does:** Inspects `useAuth()` privilege tiers and renders one of seven variants:
+- `isAdmin` → [AdminDashboard](#12-dashboards-admindashboard)
+- `isReportManager` → [ReportManagerDashboard](#13-dashboards-reportmanagerdashboard)
+- `isExecutive` → [ExecutiveDashboard](#14-dashboards-executivedashboard)
+- `isHod` → [HodDashboard](#15-dashboards-hoddashboard)
+- `isApprover` → [ApproverDashboard](#16-dashboards-approverdashboard)
+- `isObserver` → [ObserverDashboard](#18-dashboards-observerdashboard)
+- default → [InitiatorDashboard](#17-dashboards-initiatordashboard)
 
-**Data IN / OUT** — Delegated to the chosen variant (see sections 12–18).
+**Data IN / OUT:** Delegated to the chosen variant (see sections 12–18).
 
 ---
 
@@ -136,7 +136,7 @@
 | **Guard** | Authenticated |
 | **File** | `pages/MyForms.jsx` |
 
-**Use case** — The initiator's command centre — every form they have ever submitted, plus drafts, sorted by status with filters.
+**Use case:** The initiator's command centre, listing every form they have ever submitted, plus drafts, sorted by status with filters.
 
 **What it does**
 - Status tabs: Draft / Submitted+Pending / Returned for Correction / Rejected / Completed.
@@ -147,7 +147,7 @@
 **Data IN**
 - `GET /forms/instances?scope=mine|org&status=…&from=…&to=…&q=…` → reads `form_instances` + `form_versions` + `users` + `form_definitions`.
 
-**Data OUT** — None directly (navigation only).
+**Data OUT:** None directly (navigation only).
 
 ---
 
@@ -159,7 +159,7 @@
 | **Guard** | Authenticated |
 | **File** | `pages/SubmitForm.jsx` |
 
-**Use case** — Where the initiator fills out a form. Used for new submissions, resuming a draft, and correcting a returned form.
+**Use case:** Where the initiator fills out a form. Used for new submissions, resuming a draft, and correcting a returned form.
 
 **What it does**
 - **Step 1** (new only): Pick the form type from a dropdown of forms the user is allowed to initiate.
@@ -193,7 +193,7 @@
 | **Guard** | Authenticated (gated by ownership / approver-on-chain / admin) |
 | **File** | `pages/FormDetail.jsx` |
 
-**Use case** — Read-only audit view of a single form. Initiators check status here; approvers review history; admins inspect and intervene.
+**Use case:** Read-only audit view of a single form. Initiators check status here; approvers review history; admins inspect and intervene.
 
 **What it does**
 - Renders the form values exactly as submitted (using `schema_snapshot`).
@@ -225,7 +225,7 @@
 | **Guard** | Authenticated |
 | **File** | `pages/ApprovalsInbox.jsx` |
 
-**Use case** — The approver's inbox. Everything waiting for them, plus a history of what they've already decided.
+**Use case:** The approver's inbox. Everything waiting for them, plus a history of what they've already decided.
 
 **What it does**
 - Two tabs: **Pending** (active steps assigned to me) and **History** (my past decisions).
@@ -237,7 +237,7 @@
 - `GET /approvals/pending` → reads `approval_instances` where `approver_user_id = me AND status = Active`, joined to `form_instances`, `form_versions`, `users` (initiator).
 - `GET /approvals/history?action=…&from=…&to=…` → reads same tables filtered to terminal statuses.
 
-**Data OUT** — None (navigation only).
+**Data OUT:** None (navigation only).
 
 ---
 
@@ -249,13 +249,13 @@
 | **Guard** | Authenticated (gated to active approver / admin) |
 | **File** | `pages/ApprovalAction.jsx` |
 
-**Use case** — Where an approver makes a decision on a single form.
+**Use case:** Where an approver makes a decision on a single form.
 
 **What it does**
 - Two-column layout: form contents on the left (rendered identically to FormDetail), action panel on the right.
 - Buttons: **Approve**, **Reject**, **Send Back**. Reject/Send Back require notes.
-- Signature pad (typed or drawn) — required on Approve.
-- Date input (`signed_on`) defaults to today, capped at today — lets an approver backdate to when they actually decided.
+- Signature pad (typed or drawn), required on Approve.
+- Date input (`signed_on`) defaults to today, capped at today, which lets an approver backdate to when they actually decided.
 - Admin override buttons (when admin viewing): Admin Cancel, Admin Send Back, Reassign Step.
 
 **Data IN**
@@ -278,7 +278,7 @@
 | **Guard** | Authenticated |
 | **File** | `pages/Delegations.jsx` |
 
-**Use case** — Personal delegation manager. Lets a user delegate their approval authority for a window (vacation, sick leave) or see who has delegated TO them.
+**Use case:** Personal delegation manager. Lets a user delegate their approval authority for a window (vacation, sick leave) or see who has delegated TO them.
 
 **What it does**
 - Two lists: **Delegations I created** and **Delegations granted to me**.
@@ -304,7 +304,7 @@
 | **Guard** | Authenticated |
 | **File** | `pages/Documents.jsx` |
 
-**Use case** — Archive of completed/approved forms. Where you go to find the signed PDF of something that finished last month.
+**Use case:** Archive of completed/approved forms. Where you go to find the signed PDF of something that finished last month.
 
 **What it does**
 - Searchable list of completed documents.
@@ -327,7 +327,7 @@
 | **Guard** | Admin only |
 | **File** | `pages/Logs.jsx` |
 
-**Use case** — The audit trail. Investigations, compliance, debugging "who deleted that?".
+**Use case:** The audit trail. Investigations, compliance, debugging "who deleted that?".
 
 **What it does**
 - Paginated table of every audit event in the org.
@@ -337,17 +337,17 @@
 **Data IN**
 - `GET /dashboard/logs?user_id=…&action=…&from=…&to=…&page=…` → reads `audit_logs` joined to `users`.
 
-**Data OUT** — None. Read-only.
+**Data OUT:** None. Read-only.
 
 ---
 
-## 12. Dashboards — AdminDashboard
+## 12. Dashboards: AdminDashboard
 
 | | |
 |---|---|
 | **File** | `pages/dashboards/AdminDashboard.jsx` |
 
-**Use case** — System operator's overview. KPIs, recent activity, drill-down filters.
+**Use case:** System operator's overview. KPIs, recent activity, drill-down filters.
 
 **What it does**
 - Cards: total forms by status, users by status, average approval time, top form types.
@@ -357,17 +357,17 @@
 **Data IN**
 - `GET /dashboard/admin?from=…&to=…&form_def_id=…` → reads `form_instances` + `users` + `audit_logs` (recent events).
 
-**Data OUT** — None.
+**Data OUT:** None.
 
 ---
 
-## 13. Dashboards — ReportManagerDashboard
+## 13. Dashboards: ReportManagerDashboard
 
 | | |
 |---|---|
 | **File** | `pages/dashboards/ReportManagerDashboard.jsx` |
 
-**Use case** — Department managers with reporting privileges — own department's submissions and stats.
+**Use case:** Department managers with reporting privileges, covering their own department's submissions and stats.
 
 **What it does**
 - Department-scoped KPIs.
@@ -382,34 +382,34 @@
 
 ---
 
-## 14. Dashboards — ExecutiveDashboard
+## 14. Dashboards: ExecutiveDashboard
 
 | | |
 |---|---|
 | **File** | `pages/dashboards/ExecutiveDashboard.jsx` |
 
-**Use case** — C-suite (CEO/CFO/Directors). Org-wide trends + only the executive-tier approvals they're personally on.
+**Use case:** C-suite (CEO/CFO/Directors). Org-wide trends + only the executive-tier approvals they're personally on.
 
 **What it does**
 - Trend charts (forms over time, by department, by form type).
 - Personal approval queue for forms requiring executive sign-off.
-- Read-only — no creation/editing actions.
+- Read-only, no creation/editing actions.
 
 **Data IN**
 - `GET /dashboard/admin` (read-only slice).
 - `GET /approvals/pending` → personal queue.
 
-**Data OUT** — None directly (approval actions happen on `ApprovalAction`).
+**Data OUT:** None directly (approval actions happen on `ApprovalAction`).
 
 ---
 
-## 15. Dashboards — HodDashboard
+## 15. Dashboards: HodDashboard
 
 | | |
 |---|---|
 | **File** | `pages/dashboards/HodDashboard.jsx` |
 
-**Use case** — Head of Department. Combines initiator and approver views, scoped to their department.
+**Use case:** Head of Department. Combines initiator and approver views, scoped to their department.
 
 **What it does**
 - Own submissions summary + pending approvals from their department's members.
@@ -420,17 +420,17 @@
 - `GET /dashboard/approver` → my pending.
 - `GET /forms/instances?scope=org&department=...` → department-scoped list.
 
-**Data OUT** — None directly.
+**Data OUT:** None directly.
 
 ---
 
-## 16. Dashboards — ApproverDashboard
+## 16. Dashboards: ApproverDashboard
 
 | | |
 |---|---|
 | **File** | `pages/dashboards/ApproverDashboard.jsx` |
 
-**Use case** — Functional approvers (HR, Finance, IT…). Their queue + recent history.
+**Use case:** Functional approvers (HR, Finance, IT…). Their queue + recent history.
 
 **What it does**
 - Pending count card, average decision time, oldest pending.
@@ -439,17 +439,17 @@
 **Data IN**
 - `GET /dashboard/approver` → reads `approval_instances` for me, aggregates counts/timings.
 
-**Data OUT** — None.
+**Data OUT:** None.
 
 ---
 
-## 17. Dashboards — InitiatorDashboard
+## 17. Dashboards: InitiatorDashboard
 
 | | |
 |---|---|
 | **File** | `pages/dashboards/InitiatorDashboard.jsx` |
 
-**Use case** — Default for every employee. "What have I submitted, what's pending, what's done".
+**Use case:** Default for every employee. "What have I submitted, what's pending, what's done".
 
 **What it does**
 - Status counters (Draft / Pending / Returned / Approved).
@@ -459,17 +459,17 @@
 **Data IN**
 - `GET /dashboard/initiator` → reads `form_instances` where `created_by = me`, aggregated by status.
 
-**Data OUT** — None.
+**Data OUT:** None.
 
 ---
 
-## 18. Dashboards — ObserverDashboard
+## 18. Dashboards: ObserverDashboard
 
 | | |
 |---|---|
 | **File** | `pages/dashboards/ObserverDashboard.jsx` |
 
-**Use case** — Read-only auditor/compliance role. Org-wide visibility, zero write.
+**Use case:** Read-only auditor/compliance role. Org-wide visibility, zero write.
 
 **What it does**
 - Org-wide completed-documents browser.
@@ -478,11 +478,11 @@
 **Data IN**
 - `GET /documents` (organisation scope).
 
-**Data OUT** — None.
+**Data OUT:** None.
 
 ---
 
-## 19. Admin — Users
+## 19. Admin: Users
 
 | | |
 |---|---|
@@ -490,7 +490,7 @@
 | **Guard** | Admin only |
 | **File** | `pages/admin/Users.jsx` |
 
-**Use case** — User lifecycle: create, edit, assign roles + department + manager hierarchy, deactivate.
+**Use case:** User lifecycle: create, edit, assign roles + department + manager hierarchy, deactivate.
 
 **What it does**
 - Table of all org users with role badges, status, last login.
@@ -510,7 +510,7 @@
 
 ---
 
-## 20. Admin — Departments
+## 20. Admin: Departments
 
 | | |
 |---|---|
@@ -518,7 +518,7 @@
 | **Guard** | Admin only |
 | **File** | `pages/admin/Departments.jsx` |
 
-**Use case** — Org structure setup. Drives "Department" auto-fill in forms and dept-scoped reports.
+**Use case:** Org structure setup. Drives "Department" auto-fill in forms and dept-scoped reports.
 
 **What it does**
 - Tree view of departments + sub-departments.
@@ -534,7 +534,7 @@
 
 ---
 
-## 21. Admin — FormDefinitions
+## 21. Admin: FormDefinitions
 
 | | |
 |---|---|
@@ -542,7 +542,7 @@
 | **Guard** | Admin only |
 | **File** | `pages/admin/FormDefinitions.jsx` |
 
-**Use case** — Manage the catalogue of forms users can submit. List, create, edit metadata, route to designer/builder, soft-delete.
+**Use case:** Manage the catalogue of forms users can submit. List, create, edit metadata, route to designer/builder, soft-delete.
 
 **What it does**
 - Table of all form definitions: name, code suffix, attached approval template, visibility, status.
@@ -563,7 +563,7 @@
 
 ---
 
-## 22. Admin — FormBuilder
+## 22. Admin: FormBuilder
 
 | | |
 |---|---|
@@ -571,7 +571,7 @@
 | **Guard** | Admin only (full-screen, no sidebar) |
 | **File** | `pages/admin/FormBuilder.jsx` |
 
-**Use case** — Map form fields onto a pre-existing PDF (e.g., a regulator's mandated layout). For forms that need pixel-perfect output.
+**Use case:** Map form fields onto a pre-existing PDF (e.g., a regulator's mandated layout). For forms that need pixel-perfect output.
 
 **What it does**
 - Upload a PDF as the background.
@@ -590,7 +590,7 @@
 
 ---
 
-## 23. Admin — FormDesigner
+## 23. Admin: FormDesigner
 
 | | |
 |---|---|
@@ -598,12 +598,12 @@
 | **Guard** | Admin only (full-screen) |
 | **File** | `pages/admin/FormDesigner.jsx` |
 
-**Use case** — Drag-and-drop schema designer. The general-purpose alternative to FormBuilder — for forms that don't need a fixed PDF background.
+**Use case:** Drag-and-drop schema designer. The general-purpose alternative to FormBuilder, for forms that don't need a fixed PDF background.
 
 **What it does**
 - Toolbox (left) of field types: text, textarea, number, date, dropdown, checkbox, radio, currency, calculated, file, signature, table.
 - Canvas (centre) renders the current layout with section grouping + grid-width picker (`1/4`, `1/2`, `full`, etc.).
-- Property panel (right) edits the selected field — label, required, validation rules, auto-fill source, calculation formula, options for dropdowns.
+- Property panel (right) edits the selected field: label, required, validation rules, auto-fill source, calculation formula, options for dropdowns.
 - Approval chain editor + initiator-roles/users editor live alongside.
 
 **Data IN**
@@ -616,7 +616,7 @@
 
 ---
 
-## 24. Admin — ApprovalTemplates
+## 24. Admin: ApprovalTemplates
 
 | | |
 |---|---|
@@ -624,14 +624,14 @@
 | **Guard** | Admin only |
 | **File** | `pages/admin/ApprovalTemplates.jsx` |
 
-**Use case** — Build reusable approval workflows. Once an approval template is defined, any form can attach it.
+**Use case:** Build reusable approval workflows. Once an approval template is defined, any form can attach it.
 
 **What it does**
 - List of templates with step counts.
 - Editor: add steps in order; per step pick role type (Hierarchy / Functional / Executive / Specific User / Selected at Submission / Email), specific role/user, optional/required, delegation allowed.
 - CC recipients editor: people copied on completion (role-based or named users or free-text emails).
 - Reorder steps with ↑/↓ buttons.
-- Toggle "restart on correction" — whether send-back resets the chain to step 1.
+- Toggle "restart on correction", controlling whether send-back resets the chain to step 1.
 
 **Data IN**
 - `GET /approval-templates` → reads `approval_templates` with step counts.
@@ -645,7 +645,7 @@
 
 ---
 
-## 25. Admin — Delegations
+## 25. Admin: Delegations
 
 | | |
 |---|---|
@@ -653,7 +653,7 @@
 | **Guard** | Admin only |
 | **File** | `pages/admin/Delegations.jsx` |
 
-**Use case** — Org-wide delegation visibility + the ability to force delegations on behalf of someone (e.g., when they're suddenly unreachable).
+**Use case:** Org-wide delegation visibility + the ability to force delegations on behalf of someone (e.g., when they're suddenly unreachable).
 
 **What it does**
 - Table of every active delegation in the org.
@@ -671,7 +671,7 @@
 
 ---
 
-## 26. Admin — Settings
+## 26. Admin: Settings
 
 | | |
 |---|---|
@@ -679,7 +679,7 @@
 | **Guard** | Admin only |
 | **File** | `pages/admin/Settings.jsx` |
 
-**Use case** — Organisation profile + branding. Header/footer letterhead images, accent colour, classification label palette.
+**Use case:** Organisation profile + branding. Header/footer letterhead images, accent colour, classification label palette.
 
 **What it does**
 - Org profile form: name, subdomain, email_domain, subscription plan.
@@ -700,21 +700,21 @@
 
 ---
 
-## Appendix — Page → Endpoint → Table cheat-sheet
+## Appendix: Page → Endpoint → Table cheat-sheet
 
 | Page | Reads from | Writes to |
 |---|---|---|
 | Login | `users`, `organizations`, `user_roles`, `roles` | `audit_logs`, `users.last_login`, `password_reset_tokens` |
-| ForcePasswordReset | — | `users.password_hash`, `audit_logs` |
+| ForcePasswordReset | None | `users.password_hash`, `audit_logs` |
 | Dashboard router | (delegates) | (delegates) |
-| MyForms | `form_instances`, `form_versions`, `form_definitions`, `users` | — |
+| MyForms | `form_instances`, `form_versions`, `form_definitions`, `users` | None |
 | SubmitForm | `form_definitions`, `form_fields`, `form_instances`, `form_versions`, `form_field_values`, `organizations`, `users` | `form_instances`, `form_versions`, `form_field_values`, `form_attachments`, `approval_instances`, `signatures`, `audit_logs` |
 | FormDetail | `form_instances`, `form_versions`, `form_field_values`, `approval_instances`, `signatures`, `form_attachments`, `form_definitions`, `generated_documents` | (admin only) `form_instances`, `approval_instances`, `audit_logs` |
-| ApprovalsInbox | `approval_instances`, `form_instances`, `form_versions`, `users` | — |
+| ApprovalsInbox | `approval_instances`, `form_instances`, `form_versions`, `users` | None |
 | ApprovalAction | `form_instances`, `form_versions`, `form_field_values`, `approval_instances`, `form_attachments` | `approval_instances`, `signatures`, `form_instances`, `generated_documents`, `document_shares`, `audit_logs` |
 | Delegations | `delegations`, `users`, `roles` | `delegations`, `audit_logs` |
-| Documents | `generated_documents`, `document_shares` | — |
-| Logs | `audit_logs`, `users` | — |
+| Documents | `generated_documents`, `document_shares` | None |
+| Logs | `audit_logs`, `users` | None |
 | Admin Users | `users`, `user_roles`, `roles`, `departments` | `users`, `user_roles`, `audit_logs` |
 | Admin Departments | `departments` | `departments`, `audit_logs` |
 | Admin FormDefinitions | `form_definitions`, `approval_templates`, `departments`, `organizations` | `form_definitions`, `form_definition_initiator_roles`, `form_definition_initiator_users`, `audit_logs` |

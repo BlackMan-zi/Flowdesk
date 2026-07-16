@@ -1,28 +1,45 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from database import get_db
-from models.user import User, UserStatus, PasswordResetToken
+from models.user import User, UserStatus
 from models.organization import Organization
 from schemas.auth import (
     LoginRequest, TokenResponse, ForgotPasswordRequest,
-    ForcePasswordResetRequest, PasswordResetRequest,
+    ForcePasswordResetRequest,
     MFASetupResponse, MFAVerifyRequest
 )
 from core.security import (
-    create_access_token, create_refresh_token, get_current_active_user
+    create_access_token, create_refresh_token, get_current_active_user,
+    create_mfa_pending_token, get_mfa_pending_user
 )
 from core.ratelimit import limiter
 from services.auth_service import (
-    verify_password, hash_password, generate_reset_token,
+    verify_password, hash_password, generate_temp_password,
     generate_mfa_secret, get_totp_uri, generate_qr_code_base64, verify_totp,
     validate_password_strength
 )
-from services.email_service import send_password_reset_email
+from services.email_service import send_password_reset_code_email
 from services import audit_service
 from config import settings
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+
+
+def _complete_login(db: Session, user: User, org_id: str) -> str:
+    """Shared tail for every path that finishes a login (plain, or after MFA
+    enrollment/verification): activate a pending user, stamp last_login,
+    audit USER_LOGIN, and issue a real access token. A login that never
+    completes MFA never reaches here, so it's never logged as successful."""
+    if user.status == UserStatus.pending:
+        user.status = UserStatus.active
+    user.last_login = datetime.utcnow()
+    db.commit()
+    audit_service.log_event(
+        db, org_id, "USER_LOGIN", user_id=user.id,
+        entity_type="User", entity_id=user.id
+    )
+    return create_access_token({"sub": user.id, "org_id": org_id})
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -55,42 +72,100 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
     if user.status == UserStatus.not_active:
         raise HTTPException(status_code=403, detail="Account is deactivated")
 
-    # MFA check
-    if user.mfa_enabled and user.mfa_secret:
+    # MFA check: gated on the admin-set intent flag alone, not on whether a
+    # secret already exists — see models.user.User.mfa_required docstring.
+    if user.mfa_required:
+        pending_token = create_mfa_pending_token({"sub": user.id, "org_id": org.id})
         return TokenResponse(
             access_token="",
             must_reset_password=False,
-            mfa_required=True
+            mfa_required=True,
+            mfa_pending_token=pending_token,
+            mfa_enrolled=bool(user.mfa_enabled and user.mfa_secret),
         )
 
-    token_data = {"sub": user.id, "org_id": org.id}
-    access_token = create_access_token(token_data)
-
-    # First login – activate user
-    if user.status == UserStatus.pending:
-        user.status = UserStatus.active
-
-    user.last_login = datetime.utcnow()
-    db.commit()
-
-    audit_service.log_event(
-        db, org.id, "USER_LOGIN", user_id=user.id,
-        entity_type="User", entity_id=user.id
-    )
-
+    access_token = _complete_login(db, user, org.id)
     return TokenResponse(
         access_token=access_token,
         must_reset_password=user.must_reset_password
     )
 
 
-@router.post("/mfa/verify")
-def verify_mfa(payload: MFAVerifyRequest, db: Session = Depends(get_db)):
-    """Verify TOTP code during login (called after /login returns mfa_required=True)."""
-    raise HTTPException(
-        status_code=400,
-        detail="Please supply email/password alongside TOTP for full MFA verification"
+@router.post("/mfa/setup", response_model=MFASetupResponse)
+@limiter.limit("10/minute")
+def setup_mfa(
+    request: Request,
+    current_user: User = Depends(get_mfa_pending_user),
+    db: Session = Depends(get_db)
+):
+    """Called during login (with the mfa_pending token) when a user with
+    mfa_required=true hasn't finished enrollment yet."""
+    if current_user.mfa_enabled and current_user.mfa_secret:
+        raise HTTPException(status_code=400, detail="MFA is already set up for this account. Enter your code instead.")
+
+    # Reuse an in-progress, unconfirmed secret across refreshes so re-scanning
+    # doesn't invalidate a QR the user already has open.
+    if not current_user.mfa_secret:
+        current_user.mfa_secret = generate_mfa_secret()
+        db.commit()
+
+    uri = get_totp_uri(current_user.mfa_secret, current_user.email)
+    qr_base64 = generate_qr_code_base64(uri)
+    return MFASetupResponse(qr_code_url=f"data:image/png;base64,{qr_base64}", secret=current_user.mfa_secret)
+
+
+@router.post("/mfa/enable", response_model=TokenResponse)
+@limiter.limit("5/minute")
+def enable_mfa(
+    request: Request,
+    payload: MFAVerifyRequest,
+    current_user: User = Depends(get_mfa_pending_user),
+    db: Session = Depends(get_db)
+):
+    """Confirms first-time enrollment AND completes the login that triggered
+    it, in one call."""
+    if not current_user.mfa_secret:
+        raise HTTPException(status_code=400, detail="Call /auth/mfa/setup first.")
+    if current_user.mfa_enabled:
+        raise HTTPException(status_code=400, detail="MFA is already enabled. Use /auth/mfa/verify instead.")
+    if not verify_totp(current_user.mfa_secret, payload.totp_code):
+        # 400, not 401: this is a wrong-guess on an otherwise-valid pending
+        # session, not an invalid/expired session — a 401 here would trip the
+        # frontend's global interceptor (which force-redirects to /login on
+        # any 401, treating it as a dead session) and wipe the in-progress
+        # MFA state instead of showing an inline error.
+        raise HTTPException(status_code=400, detail="Invalid verification code.")
+
+    current_user.mfa_enabled = True
+    db.commit()
+    audit_service.log_event(
+        db, current_user.organization_id, "MFA_ENABLED",
+        user_id=current_user.id, entity_type="User", entity_id=current_user.id
     )
+    access_token = _complete_login(db, current_user, current_user.organization_id)
+    return TokenResponse(access_token=access_token, must_reset_password=current_user.must_reset_password)
+
+
+@router.post("/mfa/verify", response_model=TokenResponse)
+@limiter.limit("5/minute")
+def verify_mfa(
+    request: Request,
+    payload: MFAVerifyRequest,
+    current_user: User = Depends(get_mfa_pending_user),
+    db: Session = Depends(get_db)
+):
+    """Completes login for a user who is already enrolled."""
+    if not (current_user.mfa_enabled and current_user.mfa_secret):
+        raise HTTPException(status_code=400, detail="MFA is not set up for this account yet.")
+    # Wrong, expired, and replayed codes all return the same generic message,
+    # so a caller can never learn *why* verification failed. 400, not 401 —
+    # see the matching comment in enable_mfa: a 401 here would trip the
+    # frontend's global interceptor and force a full session-expired redirect.
+    if not verify_totp(current_user.mfa_secret, payload.totp_code):
+        raise HTTPException(status_code=400, detail="Invalid verification code.")
+
+    access_token = _complete_login(db, current_user, current_user.organization_id)
+    return TokenResponse(access_token=access_token, must_reset_password=current_user.must_reset_password)
 
 
 @router.post("/force-reset-password")
@@ -131,6 +206,8 @@ def force_reset_password(
 @router.post("/forgot-password")
 @limiter.limit("5/minute")
 def forgot_password(request: Request, payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    generic = {"message": "If that email is registered, a temporary password will be sent."}
+
     email_lower = payload.email.lower()
     email_domain = email_lower.split('@')[-1]
     org = db.query(Organization).filter(
@@ -138,93 +215,34 @@ def forgot_password(request: Request, payload: ForgotPasswordRequest, db: Sessio
         Organization.is_active == True
     ).first()
     if not org:
-        return {"message": "If that email is registered, a reset link will be sent."}
+        return generic
 
     user = db.query(User).filter(
         User.email == email_lower,
         User.organization_id == org.id
     ).first()
     if not user:
-        return {"message": "If that email is registered, a reset link will be sent."}
+        return generic
 
-    token_str = generate_reset_token()
-    reset_token = PasswordResetToken(
-        user_id=user.id,
-        token=token_str,
-        expires_at=datetime.utcnow() + timedelta(hours=1)
-    )
-    db.add(reset_token)
-    db.commit()
+    temp_code = generate_temp_password()
 
-    send_password_reset_email(user.email, user.name, token_str)
-    return {"message": "If that email is registered, a reset link will be sent."}
+    # Email-first: only overwrite the account's password once the send has
+    # actually succeeded, so an SMTP outage can never invalidate a still-
+    # working password. Same generic response either way (anti-enumeration).
+    if not send_password_reset_code_email(user.email, user.name, temp_code):
+        return generic
 
-
-@router.post("/reset-password")
-@limiter.limit("10/minute")
-def reset_password(request: Request, payload: PasswordResetRequest, db: Session = Depends(get_db)):
-    reset_token = db.query(PasswordResetToken).filter(
-        PasswordResetToken.token == payload.token,
-        PasswordResetToken.used == False,
-        PasswordResetToken.expires_at > datetime.utcnow()
-    ).first()
-    if not reset_token:
-        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
-
-    user = db.query(User).filter(User.id == reset_token.user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    is_valid, error_msg = validate_password_strength(payload.new_password)
-    if not is_valid:
-        raise HTTPException(status_code=400, detail=error_msg)
-
-    user.password_hash = hash_password(payload.new_password)
-    user.must_reset_password = False
+    user.password_hash = hash_password(temp_code)
+    user.temp_password = temp_code
+    user.must_reset_password = True
     user.password_changed_at = datetime.utcnow()
-    reset_token.used = True
     db.commit()
 
     audit_service.log_event(
-        db, user.organization_id, "PASSWORD_RESET",
+        db, org.id, "PASSWORD_RESET_REQUESTED",
         user_id=user.id, entity_type="User", entity_id=user.id
     )
-    return {"message": "Password reset successfully"}
-
-
-@router.post("/mfa/setup", response_model=MFASetupResponse)
-def setup_mfa(
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
-):
-    secret = generate_mfa_secret()
-    uri = get_totp_uri(secret, current_user.email)
-    qr_base64 = generate_qr_code_base64(uri)
-
-    current_user.mfa_secret = secret
-    db.commit()
-
-    return MFASetupResponse(qr_code_url=f"data:image/png;base64,{qr_base64}", secret=secret)
-
-
-@router.post("/mfa/enable")
-def enable_mfa(
-    payload: MFAVerifyRequest,
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
-):
-    if not current_user.mfa_secret:
-        raise HTTPException(status_code=400, detail="MFA not set up. Call /mfa/setup first.")
-    if not verify_totp(current_user.mfa_secret, payload.totp_code):
-        raise HTTPException(status_code=400, detail="Invalid TOTP code")
-
-    current_user.mfa_enabled = True
-    db.commit()
-    audit_service.log_event(
-        db, current_user.organization_id, "MFA_ENABLED",
-        user_id=current_user.id, entity_type="User", entity_id=current_user.id
-    )
-    return {"message": "MFA enabled successfully"}
+    return generic
 
 
 @router.get("/me")

@@ -151,7 +151,7 @@ function ApprovalRows({ steps, accent, users, roles }) {
   )
 }
 
-// ── Field cell body — what the cell renders inside the grid ───────────────────
+// ── Field cell body: what the cell renders inside the grid ───────────────────
 
 // ── Column-letter helper (A, B, C, ..., Z, AA, AB...) ────────────────────────
 
@@ -168,7 +168,7 @@ export function columnLetter(idx) {
 // Build a per-row context map for formula evaluation that includes BOTH
 // the user's column keys AND Excel-style cell-letter aliases (A, A2, B, B2,
 // ...). For per-row formulas, EVERY numbered reference resolves to *this
-// row's* value in the named column — admins write `=B2*C2` once in the
+// row's* value in the named column, admins write `=B2*C2` once in the
 // formula bar and expect that formula to apply identically to row 2,
 // row 3, row 17, and any user-added rows. Restricting B2 to literal row 2
 // breaks formulas on every row after the first, which is the most common
@@ -211,7 +211,7 @@ function TablePreview({ field, accent, isSelected, onUpdate, selectedColumnIdx, 
     }
     return row
   })
-  // Custom totals — each column with show_total or a custom total_formula
+  // Custom totals: each column with show_total or a custom total_formula
   // gets evaluated through the formula engine, so admins can write
   // `=SUM(D2:D5)`, `=AVG(D)`, `=MAX(D)`, etc. Defaults to SUM(<letter>).
   const tableCtx = tableFormulaContext(sampleRows, cols)
@@ -290,7 +290,7 @@ function TablePreview({ field, accent, isSelected, onUpdate, selectedColumnIdx, 
                       'text-center px-1 py-0.5 border-b border-slate-300 font-mono font-bold cursor-pointer select-none',
                       selectedColumnIdx === i ? 'bg-primary text-primary-foreground' : 'hover:bg-slate-300'
                     )}
-                    title={`Column ${columnLetter(i)} — click to select`}
+                    title={`Column ${columnLetter(i)}: click to select`}
                   >
                     {columnLetter(i)}
                   </th>
@@ -337,7 +337,7 @@ function TablePreview({ field, accent, isSelected, onUpdate, selectedColumnIdx, 
                   return (
                     <td
                       key={ci}
-                      title={clickable ? `${addr} — click to insert into formula` : addr}
+                      title={clickable ? `${addr}: click to insert into formula` : addr}
                       onClick={clickable ? (e) => { e.stopPropagation(); onCellClick(addr) } : undefined}
                       className={cn(
                         'px-2 py-1 text-slate-500 italic border-b border-slate-100 truncate',
@@ -398,7 +398,7 @@ function FieldCellBody({ field, accent, formDef, classification, approvalSteps, 
       {field.field_type === 'text_static' && (
         <div className="text-[11px] text-slate-700 whitespace-pre-wrap leading-snug py-1">
           {field.default_value || (
-            <span className="text-slate-400 italic">Click to edit static text — write instructions, headings, or any copy you want on the form.</span>
+            <span className="text-slate-400 italic">Click to edit static text: write instructions, headings, or any copy you want on the form.</span>
           )}
         </div>
       )}
@@ -835,7 +835,7 @@ function SectionBlock({
         )}
         <div className="flex-1 h-px bg-slate-200" />
 
-        {/* Quick layout selector (always visible — this is the "decide horizontal vs stack" control) */}
+        {/* Quick layout selector (always visible: this is the "decide horizontal vs stack" control) */}
         <div className="relative">
           <button
             type="button"
@@ -936,7 +936,7 @@ function SectionBlock({
                 'text-center py-3 text-[11px] text-muted-foreground italic border border-dashed border-border rounded-md',
                 layout === 'grid' ? 'col-span-12' : ''
               )}>
-                Empty — pick a field type from the toolbox on the left.
+                Empty. Pick a field type from the toolbox on the left.
               </div>
             )}
           </div>
@@ -1007,7 +1007,7 @@ export default function FormDesignerCanvas({
       })
       setPageHeight(ph)
       setPageCount(pageNum)
-      // Bail if breaks content unchanged — a new object reference with
+      // Bail if breaks content unchanged: a new object reference with
       // identical content would otherwise re-trigger the effect via deps.
       setBreakAfterIdx(prev => {
         const aKeys = Object.keys(prev)
@@ -1024,7 +1024,7 @@ export default function FormDesignerCanvas({
   }, [sections, fields, sectionLayouts, minBodyPx])
 
   // Body grows to N full pages so admins always see a fresh page area below
-  // the last break — chrome already takes its own vertical space, so we just
+  // the last break: chrome already takes its own vertical space, so we just
   // add pageHeight for any "empty" page below the last section.
   const bodyMinHeightPx = Math.max(minBodyPx, pageCount * pageHeight)
 
@@ -1049,7 +1049,7 @@ export default function FormDesignerCanvas({
         {headerUrl ? (
           <img src={headerUrl} alt="Header" className="max-h-full max-w-full object-contain" />
         ) : (
-          <div className="text-xs text-slate-400 italic">No header — upload in Settings.</div>
+          <div className="text-xs text-slate-400 italic">No header. Upload in Settings.</div>
         )}
       </div>
 
@@ -1079,7 +1079,7 @@ export default function FormDesignerCanvas({
           />
         ))}
 
-        {/* Title — and the auto-generated reference number below it. The
+        {/* Title, and the auto-generated reference number below it. The
             reference is system-generated on instance creation, so admins
             don't need (and can no longer) place it manually. */}
         <div className="text-center mb-4">
@@ -1092,11 +1092,11 @@ export default function FormDesignerCanvas({
           </div>
         </div>
 
-        {/* Sections (flow only — free fields rendered above).
+        {/* Sections (flow only: free fields rendered above).
             Each section is wrapped so we can measure its position and insert
             an inline PageBreakChrome between sections that span an A4 page
             boundary. Inline chrome takes its own vertical space, so content
-            never overlaps with it — it just pushes the next section onto a
+            never overlaps with it, it just pushes the next section onto a
             fresh page area. */}
         {sections.map((s, idx) => {
           const inSection = flowFields.filter(f => (f.section_name || DEFAULT_SECTION) === s)
@@ -1155,7 +1155,7 @@ export default function FormDesignerCanvas({
         {sections.every(s => fields.filter(f => (f.section_name || DEFAULT_SECTION) === s).length === 0) && (
           <div className="mt-6 p-4 rounded-md border border-dashed border-primary/30 bg-primary/5 text-[11px] text-primary/80">
             <p className="font-medium mb-1 flex items-center gap-1.5"><ClipboardList size={11} /> Tip</p>
-            <p>Reference, Date, Classification, and Approval are now <strong>placeable blocks</strong> — find them under <strong>System</strong> in the Add-field menu. Drop them anywhere on the page.</p>
+            <p>Reference, Date, Classification, and Approval are now <strong>placeable blocks</strong>: find them under <strong>System</strong> in the Add-field menu. Drop them anywhere on the page.</p>
           </div>
         )}
       </div>
@@ -1165,7 +1165,7 @@ export default function FormDesignerCanvas({
         {footerUrl ? (
           <img src={footerUrl} alt="Footer" className="max-h-full max-w-full object-contain" />
         ) : (
-          <div className="text-xs text-slate-400 italic mb-1">No footer — upload in Settings.</div>
+          <div className="text-xs text-slate-400 italic mb-1">No footer. Upload in Settings.</div>
         )}
       </div>
     </div>

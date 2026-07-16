@@ -2,7 +2,7 @@
 //
 // The Form Definitions admin page lets an admin tag a form with a
 // classification label. If the org hasn't customised labels yet, the admin
-// picked from this fallback set — so submit / view callers need the same
+// picked from this fallback set, so submit / view callers need the same
 // fallback when they look up a label by name. Without it, the form renders
 // "Unclassified" even when a label was set.
 

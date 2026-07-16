@@ -8,7 +8,7 @@ Implementation notes:
 - Queues are bounded (max_queue). If a slow consumer falls behind we drop
   the oldest event for that consumer rather than blocking publishers or
   letting the process OOM.
-- `publish` is plain-sync and thread-safe — callable from anywhere in
+- `publish` is plain-sync and thread-safe: callable from anywhere in
   the codebase (request handlers, BackgroundTasks, scheduler jobs).
 - The SSE generator reads with `await asyncio.to_thread(q.get, ...)` so
   the asyncio event loop is never blocked on the queue.
@@ -51,7 +51,7 @@ class EventBus:
                 q.put_nowait(event)
             except queue.Full:
                 # Drop oldest, then try again. If still full, give up on this
-                # one — better to skip an event than block the publisher.
+                # one; better to skip an event than block the publisher.
                 try:
                     q.get_nowait()
                 except queue.Empty:

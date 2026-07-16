@@ -19,7 +19,7 @@ class RoleType(str, enum.Enum):
     executive = "Executive"          # CFO, CEO, Chief Corporate
     specific_user = "SpecificUser"   # Fixed user defined in template
     selected_at_submission = "SelectedAtSubmission"  # Initiator picks at submit
-    email = "Email"                  # CC recipients only — free-text address
+    email = "Email"                  # CC recipients only, free-text address
 
 
 class ApprovalStepStatus(str, enum.Enum):

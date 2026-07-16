@@ -60,7 +60,11 @@ INSERT INTO user_roles (id, user_id, role_id) VALUES
 ON DUPLICATE KEY UPDATE role_id = VALUES(role_id);
 
 -- ── Standard Users ───────────────────────────────────────────
+-- usr-corp-004 (William Manzi) also holds Admin, granted directly against
+-- the live DB since SUPER_ADMIN_EMAIL in .env isn't wired to any bootstrap
+-- code path; kept here too so a fresh re-seed reflects the same state.
 INSERT INTO user_roles (id, user_id, role_id) VALUES
   (UUID(), 'usr-corp-004', 'role-standard'),
-  (UUID(), 'usr-corp-004', 'role-hr')
+  (UUID(), 'usr-corp-004', 'role-hr'),
+  (UUID(), 'usr-corp-004', 'role-admin')
 ON DUPLICATE KEY UPDATE role_id = VALUES(role_id);

@@ -33,7 +33,7 @@ export const uploadAttachment = (id, file) => {
   return client.post(`/forms/instances/${id}/attachments`, fd)
 }
 
-// Auth-gated download — fetch as blob, open in a new tab via object URL.
+// Auth-gated download: fetch as blob, open in a new tab via object URL.
 export const downloadAttachment = async (attachmentId, originalFilename) => {
   const res = await client.get(`/forms/attachments/${attachmentId}`, { responseType: 'blob' })
   const url = URL.createObjectURL(res.data)

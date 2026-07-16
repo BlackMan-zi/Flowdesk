@@ -10,16 +10,17 @@ import {
 import {
   listBackups, createBackup, downloadBackup, deleteBackup,
 } from '../../api/backup'
+import { listUsers, adminResetPassword } from '../../api/users'
 import { Card, CardContent } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
-import { Input } from '../../components/ui/Input'
+import { Input, Select } from '../../components/ui/Input'
 import { Alert } from '../../components/ui/alert'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/Modal'
 import { cn } from '../../lib/utils'
 import {
   Upload, Trash2, Image as ImageIcon, Building2, Palette, Shield,
   Plus, X, Save, AlertCircle, Check, Eye,
-  Database, Download, RefreshCw, Clock,
+  Database, Download, RefreshCw, Clock, KeyRound, Copy,
 } from 'lucide-react'
 import LetterheadPage from '../../components/letterhead/LetterheadPage'
 import SampleFormBody from '../../components/letterhead/SampleFormBody'
@@ -124,7 +125,7 @@ function LetterheadImageCard({ kind, hasImage, onUpload, onDelete, fetchObjectUr
               {isHeader ? 'Header (top of every form PDF)' : 'Footer (bottom of every form PDF)'}
             </h3>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Any image format — PNG, JPG, WEBP, GIF, BMP, TIFF, ICO, AVIF. Max&nbsp;8&nbsp;MB.
+              Any image format: PNG, JPG, WEBP, GIF, BMP, TIFF, ICO, AVIF. Max&nbsp;8&nbsp;MB.
               Wide aspect ratio recommended ({isHeader ? '~ 1600×200' : '~ 1600×100'}).
             </p>
           </div>
@@ -246,7 +247,7 @@ function ClassificationLabelsEditor({ labels, onChange }) {
             Document Classification Labels
           </h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            These show up when an admin creates or edits a form — they pick which one applies. Click a label's color dot to change its color.
+            These show up when an admin creates or edits a form. They pick which one applies. Click a label's color dot to change its color.
           </p>
         </div>
 
@@ -260,7 +261,7 @@ function ClassificationLabelsEditor({ labels, onChange }) {
             />
           ))}
           {!list.length && (
-            <p className="text-xs text-muted-foreground italic">No labels — forms will not show a classification field.</p>
+            <p className="text-xs text-muted-foreground italic">No labels. Forms will not show a classification field.</p>
           )}
         </div>
 
@@ -363,7 +364,7 @@ function DatabaseBackupCard() {
 
         <div className="flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-500/10 border border-emerald-500/20 rounded-md px-2 py-1.5 w-fit">
           <Clock size={12} />
-          Automatic nightly backup scheduled — runs every day at 00:00 server time.
+          Automatic nightly backup scheduled: runs every day at 00:00 server time.
         </div>
 
         {isLoading ? (
@@ -424,13 +425,104 @@ function DatabaseBackupCard() {
   )
 }
 
+// ── Reset user password card ──────────────────────────────────────────────────
+
+function ResetUserPasswordCard() {
+  const [userId, setUserId] = useState('')
+  const [sendEmail, setSendEmail] = useState(true)
+  const [result, setResult] = useState(null)
+
+  const { data: users = [] } = useQuery({
+    queryKey: ['users'],
+    queryFn: () => listUsers().then(r => r.data),
+  })
+
+  const resetMut = useMutation({
+    mutationFn: () => adminResetPassword(userId, { send_email: sendEmail }),
+    onSuccess: (res) => {
+      const u = users.find(x => x.id === userId)
+      setResult({ ...res.data, userName: u?.name || 'this user' })
+    },
+    onError: (err) => toast.error(err?.response?.data?.detail || 'Reset failed.'),
+  })
+
+  const copyPassword = () => {
+    navigator.clipboard.writeText(result.temp_password)
+    toast.success('Copied to clipboard.')
+  }
+
+  return (
+    <Card>
+      <CardContent className="p-5 space-y-4">
+        <div>
+          <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+            <KeyRound size={14} className="text-muted-foreground" />
+            Reset User Password
+          </h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Generate a new temporary password for a user. They're prompted to
+            choose a real one at their next login.
+          </p>
+        </div>
+
+        <Select value={userId} onChange={e => setUserId(e.target.value)}>
+          <option value="">Select a user…</option>
+          {users.map(u => <option key={u.id} value={u.id}>{u.name} — {u.email}</option>)}
+        </Select>
+
+        <label className="flex items-center gap-2 text-sm text-foreground">
+          <input type="checkbox" checked={sendEmail} onChange={e => setSendEmail(e.target.checked)} />
+          Email the new password to the user
+        </label>
+
+        <Button
+          size="sm"
+          disabled={!userId}
+          loading={resetMut.isPending}
+          onClick={() => resetMut.mutate()}
+        >
+          Reset Password
+        </Button>
+      </CardContent>
+
+      <Dialog open={!!result} onOpenChange={(v) => !v && setResult(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Password reset</DialogTitle>
+          </DialogHeader>
+          {result && (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                New temporary password for <strong>{result.userName}</strong>:
+              </p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 bg-muted px-3 py-2 rounded-md font-mono text-sm break-all">{result.temp_password}</code>
+                <Button size="sm" variant="outline" onClick={copyPassword}>
+                  <Copy size={13} className="mr-1" /> Copy
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {result.email_sent
+                  ? 'An email with this password was also sent to the user.'
+                  : sendEmail
+                    ? 'Email sending failed — share this password with the user manually.'
+                    : 'No email was sent — share this password with the user manually.'}
+              </p>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </Card>
+  )
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function Settings() {
   const qc = useQueryClient()
   // Other pages (Dashboard, FormDetail, SubmitForm, ApprovalAction) all
   // share the same ['my-organization'] queryKey but unwrap the axios
-  // response inside their queryFn — so the cached value is the org data
+  // response inside their queryFn, so the cached value is the org data
   // object itself, not a full response. Calling getMyOrganization directly
   // here returned the raw response, which collided with the unwrapped
   // shape and surfaced as "Could not load organization settings." whenever
@@ -630,9 +722,11 @@ export default function Settings() {
 
       <ClassificationLabelsEditor labels={labels} onChange={setLabels} />
 
+      <ResetUserPasswordCard />
+
       <DatabaseBackupCard />
 
-      {/* Letterhead preview — shows what every generated form will look like
+      {/* Letterhead preview: shows what every generated form will look like
           inside the org letterhead frame. Reused later by the fill page
           and the PDF export. */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
@@ -644,7 +738,7 @@ export default function Settings() {
           </DialogHeader>
           <p className="text-xs text-muted-foreground -mt-1 mb-3">
             This is how every generated form will be framed by your letterhead.
-            The body content is a placeholder — the real form schema will live here once Phase&nbsp;C ships.
+            The body content is a placeholder. The real form schema will live here once Phase&nbsp;C ships.
           </p>
           <div className="bg-muted/30 rounded-lg p-4 max-h-[70vh] overflow-y-auto">
             <div className="mx-auto" style={{ width: 'min(640px, 100%)' }}>

@@ -10,9 +10,9 @@ import { cn } from '../../lib/utils'
  *   - Phase E HTML→PDF render (same DOM, just printed)
  *
  * Layout (fractions of page height):
- *   - top 12%  — header image strip (object-fit: contain, centered)
- *   - 12 → 88% — body region (children, with horizontal padding ~8%)
- *   - bottom 12% — footer image strip
+ *   - top 12%: header image strip (object-fit: contain, centered)
+ *   - 12 → 88%: body region (children, with horizontal padding ~8%)
+ *   - bottom 12%: footer image strip
  *
  * The classification chip pins to the top-right of the body region above
  * any title supplied by the caller.
@@ -50,7 +50,7 @@ export default function LetterheadPage({
           />
         ) : (
           <div className="text-xs text-slate-400 italic">
-            No header uploaded — set one in Settings.
+            No header uploaded. Set one in Settings.
           </div>
         )}
       </div>
@@ -69,7 +69,7 @@ export default function LetterheadPage({
           />
         ) : (
           <div className="text-xs text-slate-400 italic">
-            No footer uploaded — set one in Settings.
+            No footer uploaded. Set one in Settings.
           </div>
         )}
       </div>
@@ -94,7 +94,7 @@ export default function LetterheadPage({
           </div>
         )}
 
-        {/* Accent rule under the title — callers can opt out by passing
+        {/* Accent rule under the title: callers can opt out by passing
             a child <div data-accent-rule="false"> if they prefer. */}
         <div className="relative h-full overflow-hidden" style={{ '--accent': accent }}>
           {children}
