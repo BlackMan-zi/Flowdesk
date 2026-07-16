@@ -137,4 +137,21 @@ class PasswordResetToken(Base):
     used = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+
+class TrustedDevice(Base):
+    """A browser/device that skipped MFA after the user chose to trust it.
+
+    Expiry is computed live as created_at + org.mfa_reauth_days (see
+    routers/auth.py's login), not stored, so an admin changing that org
+    setting takes effect immediately on already-trusted devices."""
+    __tablename__ = "trusted_devices"
+
+    id = Column(String(36), primary_key=True, default=gen_uuid)
+    organization_id = Column(String(36), ForeignKey("organizations.id"), nullable=False)
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
+    token_hash = Column(String(64), nullable=False, unique=True)
+    label = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_used_at = Column(DateTime, nullable=True)
+
     user = relationship("User")

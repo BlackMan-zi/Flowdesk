@@ -1,16 +1,21 @@
 import React, { useState, useEffect } from 'react'
-import { setupMfa, enableMfa, verifyMfaLogin } from '../../api/auth'
-import { ShieldCheck, AlertCircle, ArrowLeft } from 'lucide-react'
+import { setupMfa, enableMfa, verifyMfaLogin, trustDevice } from '../../api/auth'
+import { ShieldCheck, AlertCircle, ArrowLeft, Laptop } from 'lucide-react'
 import { Button } from '../ui/Button'
 import Input from '../ui/Input'
 import { Alert, AlertDescription } from '../ui/alert'
 
-export default function MfaChallenge({ mfaPendingToken, mfaEnrolled, onSuccess, onBack }) {
+export default function MfaChallenge({ email, mfaPendingToken, mfaEnrolled, onSuccess, onBack }) {
   const [code, setCode] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [qr, setQr] = useState(null)
   const [qrLoading, setQrLoading] = useState(!mfaEnrolled)
+  // Set once verification succeeds, only if the org has a re-auth window
+  // configured — holds what's needed to finish login after the user
+  // answers the "trust this device?" prompt.
+  const [pendingSuccess, setPendingSuccess] = useState(null)
+  const [trustLoading, setTrustLoading] = useState(false)
 
   useEffect(() => {
     if (mfaEnrolled) return
@@ -31,12 +36,77 @@ export default function MfaChallenge({ mfaPendingToken, mfaEnrolled, onSuccess, 
       const { data } = mfaEnrolled
         ? await verifyMfaLogin(mfaPendingToken, code)
         : await enableMfa(mfaPendingToken, code)
-      onSuccess(data.access_token, data.must_reset_password)
+      if (data.mfa_reauth_days) {
+        // Org has a re-auth window configured — worth asking. Otherwise
+        // there'd be nothing to trust into, so skip straight to onSuccess.
+        setPendingSuccess({ accessToken: data.access_token, mustReset: data.must_reset_password })
+      } else {
+        onSuccess(data.access_token, data.must_reset_password)
+      }
     } catch (err) {
       setError(err.response?.data?.detail || 'Invalid verification code.')
     } finally {
       setLoading(false)
     }
+  }
+
+  const finishLogin = () => onSuccess(pendingSuccess.accessToken, pendingSuccess.mustReset)
+
+  const handleTrustDevice = async (trust) => {
+    if (!trust) {
+      finishLogin()
+      return
+    }
+    setTrustLoading(true)
+    try {
+      const { data } = await trustDevice(pendingSuccess.accessToken)
+      if (email) {
+        localStorage.setItem(`fd_trusted_device_${email.toLowerCase().trim()}`, data.device_token)
+      }
+    } catch {
+      // Trusting the device is a convenience, not a login requirement —
+      // never block completing login over it.
+    } finally {
+      setTrustLoading(false)
+      finishLogin()
+    }
+  }
+
+  if (pendingSuccess) {
+    return (
+      <>
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-14 h-14 bg-primary rounded-2xl shadow-lg mb-4">
+            <Laptop size={24} className="text-primary-foreground" />
+          </div>
+          <h1 className="text-2xl font-bold text-foreground">Trust this device?</h1>
+          <p className="text-muted-foreground mt-1.5 text-sm max-w-xs mx-auto">
+            You won't be asked for your code again on this browser for a while.
+            Only do this on a device you use regularly and don't share.
+          </p>
+        </div>
+
+        <div className="bg-card rounded-xl border border-border shadow-sm p-7 space-y-3">
+          <Button
+            type="button"
+            loading={trustLoading}
+            className="w-full"
+            onClick={() => handleTrustDevice(true)}
+          >
+            Yes, trust this device
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={trustLoading}
+            className="w-full"
+            onClick={() => handleTrustDevice(false)}
+          >
+            No, ask every time
+          </Button>
+        </div>
+      </>
+    )
   }
 
   return (

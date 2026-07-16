@@ -1,13 +1,15 @@
+import hashlib
+import secrets
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from database import get_db
-from models.user import User, UserStatus
+from models.user import User, UserStatus, TrustedDevice
 from models.organization import Organization
 from schemas.auth import (
     LoginRequest, TokenResponse, ForgotPasswordRequest,
     ForcePasswordResetRequest,
-    MFASetupResponse, MFAVerifyRequest
+    MFASetupResponse, MFAVerifyRequest, TrustDeviceResponse
 )
 from core.security import (
     create_access_token, create_refresh_token, get_current_active_user,
@@ -74,12 +76,23 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
 
     # MFA check: gated on the admin-set intent flag OR the org-wide policy
     # toggle, not on whether a secret already exists — see
-    # models.user.User.mfa_required docstring. A positive org.mfa_reauth_days
-    # skips the challenge if this user verified a code within that window.
+    # models.user.User.mfa_required docstring. A trusted device (this exact
+    # browser, previously opted in via /auth/mfa/trust-device) skips the
+    # challenge if it's still within org.mfa_reauth_days — computed live
+    # from the device's created_at, not a stored expiry, so an admin
+    # shortening/lengthening the window applies immediately. Any other
+    # device is always challenged, same as if trust were never configured.
     mfa_required = user.mfa_required or org.require_mfa_for_all
-    if mfa_required and org.mfa_reauth_days and user.mfa_verified_at:
-        if (datetime.utcnow() - user.mfa_verified_at).days < org.mfa_reauth_days:
+    if mfa_required and payload.trusted_device_token and org.mfa_reauth_days:
+        token_hash = hashlib.sha256(payload.trusted_device_token.encode()).hexdigest()
+        device = db.query(TrustedDevice).filter(
+            TrustedDevice.user_id == user.id,
+            TrustedDevice.token_hash == token_hash
+        ).first()
+        if device and (datetime.utcnow() - device.created_at).days < org.mfa_reauth_days:
             mfa_required = False
+            device.last_used_at = datetime.utcnow()
+            db.commit()
 
     if mfa_required:
         pending_token = create_mfa_pending_token({"sub": user.id, "org_id": org.id})
@@ -151,7 +164,12 @@ def enable_mfa(
         user_id=current_user.id, entity_type="User", entity_id=current_user.id
     )
     access_token = _complete_login(db, current_user, current_user.organization_id)
-    return TokenResponse(access_token=access_token, must_reset_password=current_user.must_reset_password)
+    org = db.query(Organization).filter(Organization.id == current_user.organization_id).first()
+    return TokenResponse(
+        access_token=access_token,
+        must_reset_password=current_user.must_reset_password,
+        mfa_reauth_days=org.mfa_reauth_days if org else None,
+    )
 
 
 @router.post("/mfa/verify", response_model=TokenResponse)
@@ -176,7 +194,39 @@ def verify_mfa(
     db.commit()
 
     access_token = _complete_login(db, current_user, current_user.organization_id)
-    return TokenResponse(access_token=access_token, must_reset_password=current_user.must_reset_password)
+    org = db.query(Organization).filter(Organization.id == current_user.organization_id).first()
+    return TokenResponse(
+        access_token=access_token,
+        must_reset_password=current_user.must_reset_password,
+        mfa_reauth_days=org.mfa_reauth_days if org else None,
+    )
+
+
+@router.post("/mfa/trust-device", response_model=TrustDeviceResponse)
+@limiter.limit("10/minute")
+def trust_device(
+    request: Request,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Called right after a successful MFA verification, if the user opts
+    in. Issues an opaque token and stores only its hash — the raw token is
+    returned once and never persisted server-side, same principle as a
+    password."""
+    raw_token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+    device = TrustedDevice(
+        organization_id=current_user.organization_id,
+        user_id=current_user.id,
+        token_hash=token_hash,
+    )
+    db.add(device)
+    db.commit()
+    audit_service.log_event(
+        db, current_user.organization_id, "MFA_DEVICE_TRUSTED",
+        user_id=current_user.id, entity_type="User", entity_id=current_user.id
+    )
+    return TrustDeviceResponse(device_token=raw_token)
 
 
 @router.post("/force-reset-password")

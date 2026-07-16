@@ -63,7 +63,8 @@ export default function Login() {
     setError('')
     setLoading(true)
     try {
-      const { data } = await login(form)
+      const trustedToken = localStorage.getItem(`fd_trusted_device_${form.email.toLowerCase().trim()}`)
+      const { data } = await login(trustedToken ? { ...form, trusted_device_token: trustedToken } : form)
       if (data.mfa_required) {
         setMfaPendingToken(data.mfa_pending_token)
         setMfaEnrolled(!!data.mfa_enrolled)
@@ -136,6 +137,7 @@ export default function Login() {
 
           {stage === 'mfa' ? (
             <MfaChallenge
+              email={form.email}
               mfaPendingToken={mfaPendingToken}
               mfaEnrolled={mfaEnrolled}
               onSuccess={completeLogin}

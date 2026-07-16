@@ -15,6 +15,9 @@ class LoginRequest(BaseModel):
     email: EmailStr
     password: str = Field(max_length=128)
     # Organisation is auto-detected from the email domain (e.g. @bsc.rw → BSC Rwanda)
+    # Set when the browser previously trusted this device (see
+    # POST /auth/mfa/trust-device) - lets login skip MFA if it's still valid.
+    trusted_device_token: Optional[str] = Field(default=None, max_length=128)
 
 
 class TokenResponse(BaseModel):
@@ -24,6 +27,14 @@ class TokenResponse(BaseModel):
     mfa_required: bool = False
     mfa_pending_token: Optional[str] = None
     mfa_enrolled: Optional[bool] = None
+    # Org's configured MFA re-auth window, only meaningful right after a
+    # successful MFA verification - tells the frontend whether it's worth
+    # offering to trust this device at all.
+    mfa_reauth_days: Optional[int] = None
+
+
+class TrustDeviceResponse(BaseModel):
+    device_token: str
 
 
 class ForcePasswordResetRequest(BaseModel):
