@@ -72,9 +72,16 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
     if user.status == UserStatus.not_active:
         raise HTTPException(status_code=403, detail="Account is deactivated")
 
-    # MFA check: gated on the admin-set intent flag alone, not on whether a
-    # secret already exists — see models.user.User.mfa_required docstring.
-    if user.mfa_required:
+    # MFA check: gated on the admin-set intent flag OR the org-wide policy
+    # toggle, not on whether a secret already exists — see
+    # models.user.User.mfa_required docstring. A positive org.mfa_reauth_days
+    # skips the challenge if this user verified a code within that window.
+    mfa_required = user.mfa_required or org.require_mfa_for_all
+    if mfa_required and org.mfa_reauth_days and user.mfa_verified_at:
+        if (datetime.utcnow() - user.mfa_verified_at).days < org.mfa_reauth_days:
+            mfa_required = False
+
+    if mfa_required:
         pending_token = create_mfa_pending_token({"sub": user.id, "org_id": org.id})
         return TokenResponse(
             access_token="",
@@ -137,6 +144,7 @@ def enable_mfa(
         raise HTTPException(status_code=400, detail="Invalid verification code.")
 
     current_user.mfa_enabled = True
+    current_user.mfa_verified_at = datetime.utcnow()
     db.commit()
     audit_service.log_event(
         db, current_user.organization_id, "MFA_ENABLED",
@@ -163,6 +171,9 @@ def verify_mfa(
     # frontend's global interceptor and force a full session-expired redirect.
     if not verify_totp(current_user.mfa_secret, payload.totp_code):
         raise HTTPException(status_code=400, detail="Invalid verification code.")
+
+    current_user.mfa_verified_at = datetime.utcnow()
+    db.commit()
 
     access_token = _complete_login(db, current_user, current_user.organization_id)
     return TokenResponse(access_token=access_token, must_reset_password=current_user.must_reset_password)

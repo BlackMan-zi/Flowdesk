@@ -91,6 +91,10 @@ class User(Base):
     mfa_required = Column(Boolean, default=False, nullable=False)
     mfa_enabled = Column(Boolean, default=False)
     mfa_secret = Column(String(100), nullable=True)
+    # Stamped only when a TOTP code is actually verified (enable_mfa /
+    # verify_mfa in routers/auth.py), not on every login - drives the org's
+    # mfa_reauth_days grace period.
+    mfa_verified_at = Column(DateTime, nullable=True)
     must_reset_password = Column(Boolean, default=True)
     temp_password = Column(String(255), nullable=True)
     # Set whenever the password changes; tokens issued before this instant

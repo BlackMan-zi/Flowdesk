@@ -10,7 +10,6 @@ export const adminResetPassword = (id, data) => client.post(`/users/${id}/reset-
 
 export const setMfaRequired = (id, mfa_required) => client.patch(`/users/${id}/mfa-required`, { mfa_required })
 export const resetUserMfa = (id) => client.post(`/users/${id}/mfa-reset`)
-export const applyMfaToAll = (mfa_required) => client.post('/users/mfa/apply-all', { mfa_required })
 
 export const listRoles = () => client.get('/roles')
 export const createRole = (data) => client.post('/roles', data)

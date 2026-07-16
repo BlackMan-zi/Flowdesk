@@ -16,9 +16,11 @@ import { Button } from '../../components/ui/Button'
 import { Input, Select } from '../../components/ui/Input'
 import { Alert } from '../../components/ui/alert'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/Modal'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../components/ui/tabs'
+import { Switch } from '../../components/ui/switch'
 import { cn } from '../../lib/utils'
 import {
-  Upload, Trash2, Image as ImageIcon, Building2, Palette, Shield,
+  Upload, Trash2, Image as ImageIcon, Building2, Palette, Shield, ShieldCheck,
   Plus, X, Save, AlertCircle, Check, Eye,
   Database, Download, RefreshCw, Clock, KeyRound, Copy,
 } from 'lucide-react'
@@ -425,6 +427,54 @@ function DatabaseBackupCard() {
   )
 }
 
+// ── MFA policy card ────────────────────────────────────────────────────────────
+
+function MfaPolicyCard({ requireMfaForAll, onRequireMfaForAllChange, reauthDays, onReauthDaysChange }) {
+  return (
+    <Card>
+      <CardContent className="p-5 space-y-4">
+        <div>
+          <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+            <ShieldCheck size={14} className="text-muted-foreground" />
+            Multi-Factor Authentication Policy
+          </h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Organization-wide MFA rules. Individual per-user MFA requirements
+            (set on the Users page) still apply on top of this.
+          </p>
+        </div>
+
+        <div className="flex items-center justify-between gap-4 py-1">
+          <div>
+            <p className="text-sm font-medium text-foreground">Require MFA for everyone</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              When on, every user in this organization must complete MFA at
+              login, regardless of their individual setting.
+            </p>
+          </div>
+          <Switch checked={requireMfaForAll} onCheckedChange={onRequireMfaForAllChange} />
+        </div>
+
+        <div className="pt-1">
+          <label className="text-sm font-medium text-foreground">Days before MFA is asked again</label>
+          <p className="text-xs text-muted-foreground mt-0.5 mb-2">
+            Once a user verifies their code, they won't be re-challenged for
+            this many days. Leave blank to always ask, every login.
+          </p>
+          <Input
+            type="number"
+            min="0"
+            value={reauthDays}
+            onChange={e => onReauthDaysChange(e.target.value)}
+            placeholder="Always ask"
+            className="w-32"
+          />
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 // ── Reset user password card ──────────────────────────────────────────────────
 
 function ResetUserPasswordCard() {
@@ -535,6 +585,8 @@ export default function Settings() {
 
   const [accent, setAccent] = useState('')
   const [labels, setLabels] = useState(DEFAULT_LABELS)
+  const [requireMfaForAll, setRequireMfaForAll] = useState(false)
+  const [reauthDays, setReauthDays] = useState('')
   const [previewOpen, setPreviewOpen] = useState(false)
   const [previewUrls, setPreviewUrls] = useState({ header: null, footer: null })
   const initRef = useRef(false)
@@ -571,6 +623,8 @@ export default function Settings() {
           ? org.classification_labels
           : DEFAULT_LABELS
       )
+      setRequireMfaForAll(!!org.require_mfa_for_all)
+      setReauthDays(org.mfa_reauth_days != null ? String(org.mfa_reauth_days) : '')
       initRef.current = true
     }
   }, [org])
@@ -581,13 +635,18 @@ export default function Settings() {
     const orgLabels = org.classification_labels && org.classification_labels.length
       ? org.classification_labels : DEFAULT_LABELS
     const labelsChanged = JSON.stringify(orgLabels) !== JSON.stringify(labels)
-    return accentChanged || labelsChanged
-  }, [org, accent, labels])
+    const mfaToggleChanged = !!org.require_mfa_for_all !== requireMfaForAll
+    const orgReauthDays = org.mfa_reauth_days != null ? String(org.mfa_reauth_days) : ''
+    const reauthDaysChanged = orgReauthDays !== reauthDays
+    return accentChanged || labelsChanged || mfaToggleChanged || reauthDaysChanged
+  }, [org, accent, labels, requireMfaForAll, reauthDays])
 
   const updateMut = useMutation({
     mutationFn: () => updateMyOrganization({
       letterhead_accent: accent || null,
       classification_labels: labels,
+      require_mfa_for_all: requireMfaForAll,
+      mfa_reauth_days: reauthDays === '' ? null : parseInt(reauthDays, 10),
     }),
     onSuccess: () => {
       toast.success('Settings saved.')
@@ -667,64 +726,81 @@ export default function Settings() {
       {dirty && (
         <Alert>
           <AlertCircle size={14} className="inline mr-1.5" />
-          You have unsaved changes to accent color and/or classification labels. Image uploads save automatically.
+          You have unsaved changes. Image uploads save automatically.
         </Alert>
       )}
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <LetterheadImageCard
-          kind="header"
-          hasImage={org.has_header_image}
-          onUpload={uploadHeaderMut.mutateAsync}
-          onDelete={deleteHeaderMut.mutateAsync}
-          fetchObjectUrl={fetchHeaderImageObjectUrl}
-          accentColor={accent}
-        />
-        <LetterheadImageCard
-          kind="footer"
-          hasImage={org.has_footer_image}
-          onUpload={uploadFooterMut.mutateAsync}
-          onDelete={deleteFooterMut.mutateAsync}
-          fetchObjectUrl={fetchFooterImageObjectUrl}
-          accentColor={accent}
-        />
-      </div>
+      <Tabs defaultValue="general">
+        <TabsList>
+          <TabsTrigger value="general">General</TabsTrigger>
+          <TabsTrigger value="mfa">MFA &amp; Password Reset</TabsTrigger>
+        </TabsList>
 
-      <Card>
-        <CardContent className="p-5 space-y-3">
-          <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-            <Palette size={14} className="text-muted-foreground" />
-            Letterhead Accent Color
-          </h3>
-          <p className="text-xs text-muted-foreground">
-            Used for the title bar and section dividers on PDF exports. Leave blank to use the system default.
-          </p>
-          <div className="flex items-center gap-3">
-            <input
-              type="color"
-              value={accent || '#0066B3'}
-              onChange={e => setAccent(e.target.value.toUpperCase())}
-              className="h-10 w-16 rounded border border-border cursor-pointer bg-transparent"
+        <TabsContent value="general" className="mt-5 space-y-6">
+          <div className="grid gap-4 md:grid-cols-2">
+            <LetterheadImageCard
+              kind="header"
+              hasImage={org.has_header_image}
+              onUpload={uploadHeaderMut.mutateAsync}
+              onDelete={deleteHeaderMut.mutateAsync}
+              fetchObjectUrl={fetchHeaderImageObjectUrl}
+              accentColor={accent}
             />
-            <Input
-              value={accent}
-              onChange={e => setAccent(e.target.value.toUpperCase())}
-              placeholder="#0066B3"
-              className="font-mono text-sm w-40"
-              maxLength={9}
+            <LetterheadImageCard
+              kind="footer"
+              hasImage={org.has_footer_image}
+              onUpload={uploadFooterMut.mutateAsync}
+              onDelete={deleteFooterMut.mutateAsync}
+              fetchObjectUrl={fetchFooterImageObjectUrl}
+              accentColor={accent}
             />
-            {accent && (
-              <Button size="sm" variant="ghost" onClick={() => setAccent('')}>Clear</Button>
-            )}
           </div>
-        </CardContent>
-      </Card>
 
-      <ClassificationLabelsEditor labels={labels} onChange={setLabels} />
+          <Card>
+            <CardContent className="p-5 space-y-3">
+              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Palette size={14} className="text-muted-foreground" />
+                Letterhead Accent Color
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                Used for the title bar and section dividers on PDF exports. Leave blank to use the system default.
+              </p>
+              <div className="flex items-center gap-3">
+                <input
+                  type="color"
+                  value={accent || '#0066B3'}
+                  onChange={e => setAccent(e.target.value.toUpperCase())}
+                  className="h-10 w-16 rounded border border-border cursor-pointer bg-transparent"
+                />
+                <Input
+                  value={accent}
+                  onChange={e => setAccent(e.target.value.toUpperCase())}
+                  placeholder="#0066B3"
+                  className="font-mono text-sm w-40"
+                  maxLength={9}
+                />
+                {accent && (
+                  <Button size="sm" variant="ghost" onClick={() => setAccent('')}>Clear</Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
 
-      <ResetUserPasswordCard />
+          <ClassificationLabelsEditor labels={labels} onChange={setLabels} />
 
-      <DatabaseBackupCard />
+          <DatabaseBackupCard />
+        </TabsContent>
+
+        <TabsContent value="mfa" className="mt-5 space-y-6">
+          <MfaPolicyCard
+            requireMfaForAll={requireMfaForAll}
+            onRequireMfaForAllChange={setRequireMfaForAll}
+            reauthDays={reauthDays}
+            onReauthDaysChange={setReauthDays}
+          />
+          <ResetUserPasswordCard />
+        </TabsContent>
+      </Tabs>
 
       {/* Letterhead preview: shows what every generated form will look like
           inside the org letterhead frame. Reused later by the fill page

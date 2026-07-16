@@ -7,7 +7,7 @@ from models.organization import Organization
 from schemas.user import (
     UserCreate, UserUpdate, UserResponse, RoleCreate, RoleUpdate, RoleResponse,
     AdminPasswordResetRequest, AdminPasswordResetResponse,
-    MFARequiredUpdate, MFABulkApplyRequest
+    MFARequiredUpdate
 )
 from core.security import get_current_active_user
 from core.permissions import require_roles
@@ -424,21 +424,3 @@ def reset_user_mfa(
         details={"target_email": user.email}
     )
     return {"message": "MFA reset. The user will be prompted to re-enroll at next login."}
-
-
-@router.post("/mfa/apply-all")
-def apply_mfa_to_all(
-    payload: MFABulkApplyRequest,
-    current_user: User = Depends(require_roles(RoleName.admin)),
-    db: Session = Depends(get_db)
-):
-    count = db.query(User).filter(
-        User.organization_id == current_user.organization_id
-    ).update({"mfa_required": payload.mfa_required}, synchronize_session=False)
-    db.commit()
-    audit_service.log_event(
-        db, current_user.organization_id, "MFA_REQUIRED_BULK_APPLIED",
-        user_id=current_user.id, entity_type="Organization", entity_id=current_user.organization_id,
-        details={"mfa_required": payload.mfa_required, "affected_count": count}
-    )
-    return {"message": f"MFA requirement updated for {count} user(s).", "affected_count": count}

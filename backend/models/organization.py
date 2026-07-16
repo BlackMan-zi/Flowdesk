@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Boolean, DateTime, Text, ForeignKey, JSON
+from sqlalchemy import Column, String, Boolean, DateTime, Text, ForeignKey, JSON, Integer
 from sqlalchemy.orm import relationship
 from database import Base
 
@@ -42,6 +42,12 @@ class Organization(Base):
     email_domain = Column(String(255), unique=True, nullable=True)  # e.g. bsc.rw → auto-detects org on login
     subscription_plan = Column(String(50), default="starter")
     is_active = Column(Boolean, default=True)
+    # MFA policy: require_mfa_for_all is checked live at login alongside the
+    # per-user mfa_required flag (see routers/auth.py), so new users are
+    # covered automatically without needing to touch every user row.
+    # mfa_reauth_days is NULL by default: always challenge (today's behavior).
+    require_mfa_for_all = Column(Boolean, default=False, nullable=False)
+    mfa_reauth_days = Column(Integer, nullable=True)
     # Branding, used as letterhead on every form's PDF export
     header_image_path = Column(String(500), nullable=True)
     footer_image_path = Column(String(500), nullable=True)

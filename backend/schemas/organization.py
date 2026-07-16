@@ -33,6 +33,8 @@ class OrganizationUpdate(BaseModel):
     is_active: Optional[bool] = None
     letterhead_accent: Optional[str] = None
     classification_labels: Optional[List[Union[ClassificationLabel, str]]] = None
+    require_mfa_for_all: Optional[bool] = None
+    mfa_reauth_days: Optional[int] = None
 
     @field_validator("classification_labels", mode="before")
     @classmethod
@@ -51,6 +53,8 @@ class OrganizationResponse(BaseModel):
     has_footer_image: bool = False
     letterhead_accent: Optional[str] = None
     classification_labels: Optional[List[ClassificationLabel]] = None
+    require_mfa_for_all: bool = False
+    mfa_reauth_days: Optional[int] = None
 
     class Config:
         from_attributes = True

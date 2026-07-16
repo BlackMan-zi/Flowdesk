@@ -94,7 +94,3 @@ class AdminPasswordResetResponse(BaseModel):
 
 class MFARequiredUpdate(BaseModel):
     mfa_required: bool
-
-
-class MFABulkApplyRequest(BaseModel):
-    mfa_required: bool
