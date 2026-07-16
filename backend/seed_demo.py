@@ -29,10 +29,10 @@ if db.query(Organization).count() > 0:
     exit(0)
 
 # ── Organizations ─────────────────────────────────────────────────────────────
-org_demo = Organization(id="org-demo-001", name="FlowDesk Demo", subdomain="demo",
+org_demo = Organization(id="org-demo-001", name="FlowDesk Demo",
                         email_domain="demo.com", subscription_plan="enterprise",
                         is_active=True, created_at=NOW, updated_at=NOW)
-org_bsc = Organization(id="org-bsc-001", name="BSC Rwanda", subdomain="bsc",
+org_bsc = Organization(id="org-bsc-001", name="BSC Rwanda",
                        email_domain="bsc.rw", subscription_plan="enterprise",
                        is_active=True, created_at=NOW, updated_at=NOW)
 db.add_all([org_demo, org_bsc])

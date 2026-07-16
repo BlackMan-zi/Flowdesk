@@ -23,7 +23,6 @@ def _normalize_labels(value) -> Optional[List[dict]]:
 
 class OrganizationCreate(BaseModel):
     name: str
-    subdomain: str
     # subscription_plan is intentionally NOT accepted from the client: it is
     # set server-side so a caller can't self-provision on a higher tier.
 
@@ -44,7 +43,6 @@ class OrganizationUpdate(BaseModel):
 class OrganizationResponse(BaseModel):
     id: str
     name: str
-    subdomain: str
     subscription_plan: str
     is_active: bool
     created_at: datetime

@@ -270,9 +270,6 @@ def main():
     db = SessionLocal()
     org = db.query(Organization).filter(Organization.email_domain == 'bsc.rw').first()
     if not org:
-        # fallback: first non-demo org
-        org = db.query(Organization).filter(Organization.subdomain != 'demo').first()
-    if not org:
         print("ERROR: No BSC organisation found.")
         return
 

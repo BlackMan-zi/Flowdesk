@@ -7,14 +7,13 @@
 
 -- ── Organizations ────────────────────────────────────────────
 -- email_domain drives auto-org-detection on login (no org field needed)
-INSERT INTO organizations (id, name, subdomain, email_domain, subscription_plan, created_at, updated_at)
+INSERT INTO organizations (id, name, email_domain, subscription_plan, created_at, updated_at)
 VALUES
-  ('org-demo-001', 'FlowDesk Demo', 'demo', 'demo.com', 'enterprise', NOW(), NOW()),
-  ('org-bsc-001',  'BSC Rwanda',    'bsc',  'bsc.rw',   'enterprise', NOW(), NOW())
+  ('org-demo-001', 'FlowDesk Demo', 'demo.com', 'enterprise', NOW(), NOW()),
+  ('org-bsc-001',  'BSC Rwanda',    'bsc.rw',   'enterprise', NOW(), NOW())
 ON DUPLICATE KEY UPDATE
   name         = VALUES(name),
-  email_domain = VALUES(email_domain),
-  subdomain    = VALUES(subdomain);
+  email_domain = VALUES(email_domain);
 
 -- ── BSC Rwanda: Top-level Departments ────────────────────────
 INSERT INTO departments (id, organization_id, name, parent_department_id, is_active, created_at)

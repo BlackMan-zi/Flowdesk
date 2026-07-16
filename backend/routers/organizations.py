@@ -26,15 +26,8 @@ def create_organization(
     all, letting any anonymous caller self-provision unlimited organizations
     on any billing tier. Bootstrap/seeding goes through direct DB scripts
     (seed_bsc_users.py etc.), not this endpoint, so gating it is safe."""
-    existing = db.query(Organization).filter(
-        Organization.subdomain == payload.subdomain
-    ).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="Subdomain already taken")
-
     org = Organization(
         name=payload.name,
-        subdomain=payload.subdomain,
         subscription_plan="starter",
     )
     db.add(org)

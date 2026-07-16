@@ -380,7 +380,7 @@ erDiagram
 
 | Table | Purpose | Key Columns |
 |---|---|---|
-| **organizations** | The tenant. Each one is fully isolated. | `id`, `name`, `subdomain`, `email_domain`, `header_image_path`, `footer_image_path`, `letterhead_accent`, `classification_labels` (JSON) |
+| **organizations** | The tenant. Each one is fully isolated. | `id`, `name`, `email_domain`, `header_image_path`, `footer_image_path`, `letterhead_accent`, `classification_labels` (JSON) |
 | **departments** | Hierarchical org structure. Departments can have sub-departments. | `id`, `organization_id`, `name`, `parent_department_id` |
 | **users** | Every person who can log in. | `id`, `organization_id`, `name`, `email`, `password_hash`, `department_id`, `manager_id`, `sn_manager_id`, `hod_id`, `status`, `mfa_enabled`, `must_reset_password` |
 | **roles** | Functional + system + executive + hierarchy roles. | `id`, `organization_id`, `name`, `role_category` |
@@ -426,8 +426,8 @@ These run **automatically** when the API container starts. Each is idempotent (o
 
 | # | What it added |
 |---|---|
-| 001 | Initial BSC org fixtures (subdomain, emails) |
-| 002 | `email_domain` on orgs: auto-detects tenant from login email |
+| 001 | Retired - was initial BSC org fixtures, superseded by seeds |
+| 002 | Retired - never ran (MySQL syntax against Postgres); `email_domain` reached prod some other way |
 | 003 | Performance indexes (10× faster auth + approval lookups) |
 | 004 | `role_id` on delegations: scope delegations to specific roles |
 | 005 | Initiator-roles junction; email CC recipients |

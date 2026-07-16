@@ -682,7 +682,7 @@
 **Use case:** Organisation profile + branding. Header/footer letterhead images, accent colour, classification label palette.
 
 **What it does**
-- Org profile form: name, subdomain, email_domain, subscription plan.
+- Org profile form: name, email_domain, subscription plan.
 - Header + footer image upload (replaces existing).
 - Letterhead accent colour picker.
 - Classification labels editor (add/remove/rename Public/Internal/Confidential/Restricted-style labels).
