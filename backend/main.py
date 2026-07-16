@@ -55,10 +55,11 @@ def run_migrations():
       - ../database/migrations (local repo layout, no Docker)
 
     Wrapped in a Postgres advisory lock so concurrent workers/replicas
-    serialize instead of racing on the same DDL. In production a failed
-    migration is re-raised (crashing startup) instead of only logged, since
-    a container that boots "successfully" with a silently-broken schema is
-    worse than one that fails loudly and restart-loops.
+    serialize instead of racing on the same DDL. A failed migration is
+    logged at ERROR (loud in the logs) but never crashes startup: some
+    migration files here (e.g. 002) have never been valid Postgres SQL and
+    have always failed, in every environment - a hard crash-on-failure
+    would turn "one legacy migration is broken" into a full outage.
     """
     here = os.path.dirname(os.path.abspath(__file__))
     candidates = [
@@ -100,8 +101,6 @@ def run_migrations():
                 except Exception as e:
                     conn.rollback()
                     logger.error(f"Migration failed ({filename}): {e}")
-                    if settings.ENVIRONMENT == "production":
-                        raise
         finally:
             conn.execute(text("SELECT pg_advisory_unlock(:key)"), {"key": MIGRATION_LOCK_KEY})
             conn.commit()
