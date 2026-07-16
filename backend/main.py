@@ -53,6 +53,12 @@ def run_migrations():
     Tries two locations so the same code works in dev and prod:
       - backend/migrations (Dockerfile copies database/migrations here)
       - ../database/migrations (local repo layout, no Docker)
+
+    Wrapped in a Postgres advisory lock so concurrent workers/replicas
+    serialize instead of racing on the same DDL. In production a failed
+    migration is re-raised (crashing startup) instead of only logged, since
+    a container that boots "successfully" with a silently-broken schema is
+    worse than one that fails loudly and restart-loops.
     """
     here = os.path.dirname(os.path.abspath(__file__))
     candidates = [
@@ -61,34 +67,44 @@ def run_migrations():
     ]
     migrations_dir = next((p for p in candidates if os.path.isdir(p)), None)
     if not migrations_dir:
+        logger.warning(f"No migrations directory found (checked {candidates}) - skipping migrations")
         return
 
     from sqlalchemy import text
+    MIGRATION_LOCK_KEY = 851917732  # arbitrary constant, must stay identical across all instances
+
     with engine.connect() as conn:
-        conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS schema_migrations (
-                filename VARCHAR(255) PRIMARY KEY,
-                applied_at TIMESTAMP DEFAULT NOW()
-            )
-        """))
-        conn.commit()
+        conn.execute(text("SELECT pg_advisory_lock(:key)"), {"key": MIGRATION_LOCK_KEY})
+        try:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS schema_migrations (
+                    filename VARCHAR(255) PRIMARY KEY,
+                    applied_at TIMESTAMP DEFAULT NOW()
+                )
+            """))
+            conn.commit()
 
-        applied = {row[0] for row in conn.execute(text("SELECT filename FROM schema_migrations")).fetchall()}
+            applied = {row[0] for row in conn.execute(text("SELECT filename FROM schema_migrations")).fetchall()}
 
-        files = sorted(f for f in os.listdir(migrations_dir) if f.endswith(".sql"))
-        for filename in files:
-            if filename in applied:
-                continue
-            path = os.path.join(migrations_dir, filename)
-            sql = open(path).read()
-            try:
-                conn.execute(text(sql))
-                conn.execute(text("INSERT INTO schema_migrations (filename) VALUES (:f)"), {"f": filename})
-                conn.commit()
-                logger.info(f"Migration applied: {filename}")
-            except Exception as e:
-                conn.rollback()
-                logger.warning(f"Migration skipped ({filename}): {e}")
+            files = sorted(f for f in os.listdir(migrations_dir) if f.endswith(".sql"))
+            for filename in files:
+                if filename in applied:
+                    continue
+                path = os.path.join(migrations_dir, filename)
+                sql = open(path).read()
+                try:
+                    conn.execute(text(sql))
+                    conn.execute(text("INSERT INTO schema_migrations (filename) VALUES (:f)"), {"f": filename})
+                    conn.commit()
+                    logger.info(f"Migration applied: {filename}")
+                except Exception as e:
+                    conn.rollback()
+                    logger.error(f"Migration failed ({filename}): {e}")
+                    if settings.ENVIRONMENT == "production":
+                        raise
+        finally:
+            conn.execute(text("SELECT pg_advisory_unlock(:key)"), {"key": MIGRATION_LOCK_KEY})
+            conn.commit()
 
 
 @asynccontextmanager
