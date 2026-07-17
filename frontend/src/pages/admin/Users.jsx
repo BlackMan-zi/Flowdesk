@@ -577,13 +577,13 @@ export default function AdminUsers() {
               Reactivate
             </Button>
           )}
-          {r.id !== currentUser?.id && (
+          {isDeactivated(r) && r.id !== currentUser?.id && (
             <Button size="sm" variant="ghost"
               className="text-destructive hover:text-destructive/80"
               loading={deleteMutation.isPending}
               onClick={() => {
                 if (window.confirm(
-                  `Permanently delete ${r.name}? This cannot be undone. Only works if they have no submitted forms, approvals, or other history — otherwise deactivate them instead.`
+                  `Permanently delete ${r.name}? This cannot be undone. Only works if they have no submitted forms, approvals, or other history.`
                 )) {
                   deleteMutation.mutate(r.id)
                 }

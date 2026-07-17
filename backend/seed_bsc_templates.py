@@ -288,7 +288,12 @@ def main():
                 step_order=order,
                 step_label=label,
                 role_type=rt,
-                skip_if_missing=False,
+                # Only the senior-manager link is legitimately optional -
+                # not every unit has one. Manager/HOD always exist, and a
+                # missing Functional/Executive approver (nobody assigned to
+                # that role yet) should still block submission rather than
+                # silently skip.
+                skip_if_missing=(rt == RoleType.hierarchy and target == "sn_manager"),
                 delegation_allowed=True,
             )
             if rt == RoleType.hierarchy:
