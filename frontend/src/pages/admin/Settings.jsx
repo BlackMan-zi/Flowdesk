@@ -18,7 +18,7 @@ import { Alert } from '../../components/ui/alert'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/Modal'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../components/ui/tabs'
 import { Switch } from '../../components/ui/switch'
-import { cn } from '../../lib/utils'
+import { cn, copyToClipboard } from '../../lib/utils'
 import {
   Upload, Trash2, Image as ImageIcon, Building2, Palette, Shield, ShieldCheck,
   Plus, X, Save, AlertCircle, Check, Eye,
@@ -496,9 +496,13 @@ function ResetUserPasswordCard() {
     onError: (err) => toast.error(err?.response?.data?.detail || 'Reset failed.'),
   })
 
-  const copyPassword = () => {
-    navigator.clipboard.writeText(result.temp_password)
-    toast.success('Copied to clipboard.')
+  const copyPassword = async () => {
+    try {
+      await copyToClipboard(result.temp_password)
+      toast.success('Copied to clipboard.')
+    } catch {
+      toast.error('Could not copy automatically — select and copy the password manually.')
+    }
   }
 
   return (

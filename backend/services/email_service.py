@@ -31,6 +31,10 @@ def _send_email(
 ) -> bool:
     """Send email via Microsoft Exchange Online (or any SMTP with STARTTLS).
     Returns True on success, False on failure (never raises)."""
+    if not settings.EMAIL_NOTIFICATIONS_ENABLED:
+        print("[EMAIL SKIPPED] EMAIL_NOTIFICATIONS_ENABLED=false")
+        return False
+
     to_email = _clean_header(to_email)
     subject = _clean_header(subject)
 

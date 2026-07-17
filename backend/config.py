@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     SMTP_PASS: str = ""
     SMTP_FROM: str = "noreply@flowdesk.app"
     SMTP_TLS: bool = True
+    # Kill switch for testing against real user data without actually
+    # notifying anyone — every send is skipped (treated the same as a
+    # failed send, which every caller already handles gracefully).
+    EMAIL_NOTIFICATIONS_ENABLED: bool = True
 
     # Application
     APP_NAME: str = "FlowDesk"
