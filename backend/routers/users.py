@@ -216,17 +216,21 @@ def list_users_directory(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    """Minimal user listing for picker UIs (delegation, CC, etc.).
+    """Minimal user listing for picker UIs (delegation, CC, approval
+    assignment, reassignment, etc.).
 
-    Any authenticated user in the org can call this. Returns only id/name/email
-    for active users, no roles, no admin-only fields. Use the full GET /users
-    (admin-only) when you need the complete profile.
+    Any authenticated user in the org can call this. Returns id/name/email/
+    department_id for every non-deactivated user (active or pending - a
+    brand-new user who hasn't logged in yet is still assignable; only
+    not_active is excluded), no roles, no admin-only fields. Use the full
+    GET /users (admin-only) when you need the complete profile or need to
+    see deactivated users (e.g. the admin Users page itself).
     """
     users = db.query(User).filter(
         User.organization_id == current_user.organization_id,
-        User.status == UserStatus.active,
+        User.status != UserStatus.not_active,
     ).order_by(User.name).all()
-    return [{"id": u.id, "name": u.name, "email": u.email} for u in users]
+    return [{"id": u.id, "name": u.name, "email": u.email, "department_id": u.department_id} for u in users]
 
 
 @router.get("", response_model=List[UserResponse])

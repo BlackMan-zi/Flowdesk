@@ -10,7 +10,7 @@ import {
 import {
   listBackups, createBackup, downloadBackup, deleteBackup,
 } from '../../api/backup'
-import { listUsers, adminResetPassword } from '../../api/users'
+import { listUsersDirectory, adminResetPassword } from '../../api/users'
 import { Card, CardContent } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Input, Select } from '../../components/ui/Input'
@@ -483,8 +483,8 @@ function ResetUserPasswordCard() {
   const [result, setResult] = useState(null)
 
   const { data: users = [] } = useQuery({
-    queryKey: ['users'],
-    queryFn: () => listUsers().then(r => r.data),
+    queryKey: ['users', 'directory'],
+    queryFn: () => listUsersDirectory().then(r => r.data),
   })
 
   const resetMut = useMutation({

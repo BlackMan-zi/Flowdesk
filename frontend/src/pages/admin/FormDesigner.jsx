@@ -15,7 +15,7 @@ import {
   getFormDefinition, replaceFormFields, createApprovalTemplate, updateApprovalTemplate,
   updateFormDefinition, deleteFormDefinition,
 } from '../../api/forms'
-import { listUsers, listRoles } from '../../api/users'
+import { listUsersDirectory, listRoles } from '../../api/users'
 import { getMyOrganization } from '../../api/settings'
 import { Card, CardContent } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
@@ -839,8 +839,8 @@ export default function FormDesigner() {
     queryFn: () => getMyOrganization().then(r => r.data),
   })
   const { data: users = [] } = useQuery({
-    queryKey: ['users'],
-    queryFn: () => listUsers().then(r => r.data),
+    queryKey: ['users', 'directory'],
+    queryFn: () => listUsersDirectory().then(r => r.data),
   })
   const { data: roles = [] } = useQuery({
     queryKey: ['roles'],

@@ -6,7 +6,7 @@ from datetime import datetime
 from database import get_db, SessionLocal
 
 logger = logging.getLogger(__name__)
-from models.user import User, RoleName, UserRole
+from models.user import User, RoleName, UserRole, UserStatus
 from models.form import FormInstance, FormVersion, FormStatus, FormFieldValue, FormField
 from models.approval import ApprovalInstance, ApprovalStepStatus, ApprovalTemplateCCRecipient, RoleType
 from models.document import Signature, SignatureType, DocumentShare
@@ -796,6 +796,8 @@ def reassign_step(
     ).first()
     if not new_approver:
         raise HTTPException(status_code=404, detail="New approver not found")
+    if new_approver.status == UserStatus.not_active:
+        raise HTTPException(status_code=400, detail="Cannot reassign to a deactivated user")
 
     old_approver_id = active_step.approver_user_id
     active_step.approver_user_id = payload.new_approver_user_id

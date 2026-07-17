@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { getFormInstance, getFormDefinition, downloadAttachment, fetchAttachmentBlobUrl, downloadFormPdf } from '../api/forms'
 import { adminCancelForm, adminSendBackForm, reassignStep } from '../api/approvals'
-import { listUsers } from '../api/users'
+import { listUsersDirectory } from '../api/users'
 import { getMyOrganization, fetchHeaderImageObjectUrl, fetchFooterImageObjectUrl } from '../api/settings'
 import { useAuth } from '../context/AuthContext'
 import Card, { CardHeader } from '../components/ui/Card'
@@ -108,8 +108,8 @@ export default function FormDetail() {
   })
 
   const { data: users = [] } = useQuery({
-    queryKey: ['users'],
-    queryFn: () => listUsers().then(r => r.data),
+    queryKey: ['users', 'directory'],
+    queryFn: () => listUsersDirectory().then(r => r.data),
     staleTime: 60_000
   })
 

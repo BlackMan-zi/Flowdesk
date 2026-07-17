@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List
 from database import get_db
 from models.organization import Organization, Department
-from models.user import User
+from models.user import User, UserStatus
 from schemas.organization import (
     OrganizationCreate, OrganizationUpdate, OrganizationResponse,
     DepartmentCreate, DepartmentUpdate, DepartmentResponse
@@ -110,10 +110,13 @@ def list_departments(
         Department.organization_id == current_user.organization_id,
         Department.is_active == True
     ).all()
-    # Attach member counts
+    # Attach member counts - deactivated users don't count as current staff
     counts = dict(
         db.query(User.department_id, func.count(User.id))
-        .filter(User.organization_id == current_user.organization_id)
+        .filter(
+            User.organization_id == current_user.organization_id,
+            User.status != UserStatus.not_active
+        )
         .group_by(User.department_id)
         .all()
     )
@@ -158,8 +161,11 @@ def delete_department(
     ).first()
     if not dept:
         raise HTTPException(status_code=404, detail="Department not found")
-    # Check if any users are assigned
-    member_count = db.query(User).filter(User.department_id == dept_id).count()
+    # Check if any current (non-deactivated) users are assigned
+    member_count = db.query(User).filter(
+        User.department_id == dept_id,
+        User.status != UserStatus.not_active
+    ).count()
     if member_count > 0:
         raise HTTPException(
             status_code=400,

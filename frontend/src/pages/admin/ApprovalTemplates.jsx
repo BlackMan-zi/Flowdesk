@@ -4,7 +4,7 @@ import {
   listApprovalTemplates, createApprovalTemplate,
   updateApprovalTemplate, deleteApprovalTemplate
 } from '../../api/forms'
-import { listUsers, listRoles, listDepartments } from '../../api/users'
+import { listUsersDirectory, listRoles, listDepartments } from '../../api/users'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import Card from '../../components/ui/Card'
@@ -416,8 +416,8 @@ export default function AdminApprovalTemplates() {
     enabled: modalOpen
   })
   const { data: users = [] } = useQuery({
-    queryKey: ['users'],
-    queryFn: () => listUsers().then(r => r.data),
+    queryKey: ['users', 'directory'],
+    queryFn: () => listUsersDirectory().then(r => r.data),
     enabled: modalOpen
   })
   const { data: departments = [] } = useQuery({

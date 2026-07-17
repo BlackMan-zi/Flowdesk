@@ -6,7 +6,7 @@ import {
   getFormDefinition, replaceFormFields, deleteFormDefinition,
   updateFormDefinition, createApprovalTemplate, updateApprovalTemplate,
 } from '../../api/forms'
-import { listUsers, listRoles } from '../../api/users'
+import { listUsersDirectory, listRoles } from '../../api/users'
 import PDFFormBuilder from '../../components/pdf/PDFFormBuilder'
 import Spinner from '../../components/ui/Spinner'
 import Modal from '../../components/ui/Modal'
@@ -27,8 +27,8 @@ export default function FormBuilder() {
 
   // For the approval step configuration UI
   const { data: users = [] } = useQuery({
-    queryKey: ['users'],
-    queryFn: () => listUsers().then(r => r.data),
+    queryKey: ['users', 'directory'],
+    queryFn: () => listUsersDirectory().then(r => r.data),
   })
   const { data: roles = [] } = useQuery({
     queryKey: ['roles'],

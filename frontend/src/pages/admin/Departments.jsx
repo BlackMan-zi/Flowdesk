@@ -235,8 +235,14 @@ export default function AdminDepartments() {
     queryFn: () => listDepartments().then(r => r.data)
   })
   const { data: users = [], isLoading: userLoading } = useQuery({
-    queryKey: ['users'],
-    queryFn: () => listUsers().then(r => r.data)
+    // Distinct key from the plain ['users'] used elsewhere (e.g. Users.jsx's
+    // main table, SubmitForm.jsx's historical name resolution) - those need
+    // every status, this query is pre-filtered and would otherwise corrupt
+    // their shared cache entry.
+    queryKey: ['users', 'active-only'],
+    // Deactivated users don't show as department members or get dragged
+    // between departments - they're only visible on the admin Users page.
+    queryFn: () => listUsers().then(r => r.data.filter(u => u.status !== 'Not Active' && u.status !== 'not_active'))
   })
 
   const isLoading = deptLoading || userLoading

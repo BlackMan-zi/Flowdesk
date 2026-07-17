@@ -298,6 +298,12 @@ export default function AdminUsers() {
     queryKey: ['users'],
     queryFn: () => listUsers().then(r => r.data)
   })
+  // Deactivated users stay visible in the main table (below) but shouldn't
+  // be pickable as a manager/HOD or appear in the org chart.
+  const activeUsers = useMemo(
+    () => users.filter(u => u.status !== 'Not Active' && u.status !== 'not_active'),
+    [users]
+  )
   const { data: roles = [] } = useQuery({
     queryKey: ['roles'],
     queryFn: () => listRoles().then(r => r.data)
@@ -782,7 +788,7 @@ export default function AdminUsers() {
         </Card>
       ) : (
         <OrgChartView
-          users={search ? filteredUsers : users}
+          users={(search ? filteredUsers : users).filter(u => u.status !== 'Not Active' && u.status !== 'not_active')}
           deptMap={deptMap}
           topDepts={topDepts}
           onEdit={openEdit}
@@ -821,15 +827,15 @@ export default function AdminUsers() {
           <div className="grid grid-cols-3 gap-3">
             <Select label="Manager" value={form.manager_id} onChange={set('manager_id')}>
               <option value="">None</option>
-              {users.filter(u => u.id !== editing?.id).map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+              {activeUsers.filter(u => u.id !== editing?.id).map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
             </Select>
             <Select label="SN Manager" value={form.sn_manager_id} onChange={set('sn_manager_id')}>
               <option value="">None</option>
-              {users.filter(u => u.id !== editing?.id).map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+              {activeUsers.filter(u => u.id !== editing?.id).map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
             </Select>
             <Select label="HOD" value={form.hod_id} onChange={set('hod_id')}>
               <option value="">None</option>
-              {users.filter(u => u.id !== editing?.id).map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+              {activeUsers.filter(u => u.id !== editing?.id).map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
             </Select>
           </div>
 
