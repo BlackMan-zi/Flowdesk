@@ -310,7 +310,7 @@ function StepCard({ step, onStepChange, onRemove, users, roles, deptMap,
             type="text"
             value={step.step_label}
             onChange={e => onStepChange({ step_label: e.target.value })}
-            placeholder="e.g. CFO Sign-off, HR Clearance…"
+            placeholder="Leave blank to auto-fill from approver"
             className="w-full border border-input rounded-md px-3 py-2 text-sm bg-background text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           />
         </div>
@@ -335,6 +335,33 @@ function StepCard({ step, onStepChange, onRemove, users, roles, deptMap,
 // ── CC Recipient row ──────────────────────────────────────────────────────────
 
 function CCRow({ cc, onCCChange, onRemove, users, roles, deptMap }) {
+  if (cc.role_type === 'Email') {
+    return (
+      <div className="flex items-start gap-2">
+        <div className="flex-1 grid grid-cols-2 gap-2">
+          <input
+            type="email"
+            value={cc.email}
+            onChange={e => onCCChange({ email: e.target.value })}
+            placeholder="distribution-list@bsc.rw"
+            className="border border-input rounded-md px-3 py-2 text-sm bg-background text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          />
+          <input
+            type="text"
+            value={cc.label}
+            onChange={e => onCCChange({ label: e.target.value })}
+            placeholder="Label (optional) e.g. Finance Distribution"
+            className="border border-input rounded-md px-3 py-2 text-sm bg-background text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          />
+        </div>
+        <button type="button" onClick={onRemove}
+          className="mt-1 p-1.5 text-muted-foreground/50 hover:text-destructive rounded transition-colors flex-shrink-0">
+          <Trash2 size={13} />
+        </button>
+      </div>
+    )
+  }
+
   return (
     <div className="flex items-start gap-2">
       <div className="flex-1">
@@ -373,12 +400,13 @@ function buildPayload(form) {
         delegation_allowed: s.delegation_allowed,
       })),
     cc_recipients: form.cc_recipients
-      .filter(cc => cc.role_type)
+      .filter(cc => cc.role_type === 'Email' ? cc.email : cc.role_type)
       .map(cc => ({
         role_type:        cc.role_type,
         hierarchy_level:  cc.role_type === 'Hierarchy' ? cc.hierarchy_level : null,
         role_id:          ['Functional', 'Executive'].includes(cc.role_type) ? (cc.role_id || null) : null,
         specific_user_id: cc.role_type === 'SpecificUser' ? (cc.specific_user_id || null) : null,
+        email:            cc.role_type === 'Email' ? (cc.email || null) : null,
         label:            cc.label || null,
       }))
   }
@@ -390,7 +418,8 @@ const EMPTY_STEP = {
   role_type: '', hierarchy_level: '', role_id: '', specific_user_id: '',
   skip_if_missing: false, delegation_allowed: true,
 }
-const EMPTY_CC = { role_type: '', hierarchy_level: '', role_id: '', specific_user_id: '', label: '' }
+const EMPTY_CC = { role_type: '', hierarchy_level: '', role_id: '', specific_user_id: '', email: '', label: '' }
+const EMPTY_CC_EMAIL = { ...EMPTY_CC, role_type: 'Email' }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
@@ -446,7 +475,8 @@ export default function AdminApprovalTemplates() {
     return { ...p, steps }
   })
 
-  const addCC    = () => setForm(p => ({ ...p, cc_recipients: [...p.cc_recipients, { ...EMPTY_CC }] }))
+  const addCC      = () => setForm(p => ({ ...p, cc_recipients: [...p.cc_recipients, { ...EMPTY_CC }] }))
+  const addCCEmail = () => setForm(p => ({ ...p, cc_recipients: [...p.cc_recipients, { ...EMPTY_CC_EMAIL }] }))
   const removeCC = (i) => setForm(p => ({ ...p, cc_recipients: p.cc_recipients.filter((_, idx) => idx !== i) }))
   const makeCCUpdater = (i) => (patch) => setForm(p => {
     const cc_recipients = p.cc_recipients.map((c, idx) => idx === i ? { ...c, ...patch } : c)
@@ -491,6 +521,7 @@ export default function AdminApprovalTemplates() {
         hierarchy_level:  cc.hierarchy_level || '',
         role_id:          cc.role_id || '',
         specific_user_id: cc.specific_user_id || '',
+        email:            cc.email || '',
         label:            cc.label || '',
       }))
     })
@@ -718,14 +749,26 @@ export default function AdminApprovalTemplates() {
               )}
             </div>
 
-            <button
-              type="button"
-              onClick={addCC}
-              className="mt-2 flex items-center gap-1.5 text-sm text-muted-foreground hover:text-primary transition-colors"
-            >
-              <Plus size={14} /> Add recipient
-            </button>
-            {form.cc_recipients.some(cc => !cc.role_type) && (
+            <div className="mt-2 flex items-center gap-4">
+              <button
+                type="button"
+                onClick={addCC}
+                className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-primary transition-colors"
+              >
+                <Plus size={14} /> Add recipient
+              </button>
+              <button
+                type="button"
+                onClick={addCCEmail}
+                className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-primary transition-colors"
+              >
+                <Plus size={14} /> Add email address
+              </button>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              "Add recipient" picks a position or person; "Add email address" is for distribution lists or anyone without a FlowDesk account.
+            </p>
+            {form.cc_recipients.some(cc => cc.role_type === 'Email' ? !cc.email : !cc.role_type) && (
               <p className="mt-1.5 text-xs text-amber-500">Rows with no selection will be ignored on save.</p>
             )}
           </div>
