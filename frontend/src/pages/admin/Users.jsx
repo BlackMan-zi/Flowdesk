@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  listUsers, createUser, updateUser, deactivateUser, listRoles, createRole, updateRole, deleteRole, listDepartments,
+  listUsers, createUser, updateUser, deactivateUser, deleteUserPermanently, listRoles, createRole, updateRole, deleteRole, listDepartments,
   setMfaRequired, resetUserMfa
 } from '../../api/users'
 import { toast } from 'sonner'
@@ -405,6 +405,15 @@ export default function AdminUsers() {
     onError: () => toast.error('Failed to deactivate user.')
   })
 
+  const deleteMutation = useMutation({
+    mutationFn: (id) => deleteUserPermanently(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['users'] })
+      toast.success('User permanently deleted.')
+    },
+    onError: (err) => toast.error(err.response?.data?.detail || 'Failed to delete user.')
+  })
+
   const mfaRequiredMutation = useMutation({
     mutationFn: ({ id, required }) => setMfaRequired(id, required),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
@@ -538,6 +547,21 @@ export default function AdminUsers() {
               onClick={() => deactivateMutation.mutate(r.id)}
             >
               Deactivate
+            </Button>
+          )}
+          {r.id !== currentUser?.id && (
+            <Button size="sm" variant="ghost"
+              className="text-destructive hover:text-destructive/80"
+              loading={deleteMutation.isPending}
+              onClick={() => {
+                if (window.confirm(
+                  `Permanently delete ${r.name}? This cannot be undone. Only works if they have no submitted forms, approvals, or other history — otherwise deactivate them instead.`
+                )) {
+                  deleteMutation.mutate(r.id)
+                }
+              }}
+            >
+              Delete
             </Button>
           )}
         </div>

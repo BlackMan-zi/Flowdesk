@@ -2,8 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 from database import get_db
-from models.user import User, Role, UserRole, UserStatus, RoleName, RoleCategory
+from models.user import User, Role, UserRole, UserStatus, RoleName, RoleCategory, TrustedDevice, PasswordResetToken
 from models.organization import Organization
+from models.approval import ApprovalInstance, ApprovalTemplate, ApprovalTemplateCCRecipient, ApprovalTemplateStep
+from models.delegation import Delegation
+from models.document import Signature, GeneratedDocument, DocumentShare
+from models.form import FormDefinition, FormInstance, FormVersion, FormAttachment
+from models.audit import AuditLog
 from schemas.user import (
     UserCreate, UserUpdate, UserResponse, RoleCreate, RoleUpdate, RoleResponse,
     AdminPasswordResetRequest, AdminPasswordResetResponse,
@@ -336,6 +341,81 @@ def deactivate_user(
         user_id=current_user.id, entity_type="User", entity_id=user.id
     )
     return {"message": "User deactivated"}
+
+
+@router.delete("/{user_id}/permanent")
+def delete_user_permanently(
+    user_id: str,
+    current_user: User = Depends(require_roles(RoleName.admin)),
+    db: Session = Depends(get_db)
+):
+    """Hard delete, only allowed when the user has zero historical activity.
+    Anyone who has ever submitted a form, approved a step, signed, designed
+    a form/template, or has any audit trail entry must be deactivated
+    instead — hard-deleting them would either break foreign keys or silently
+    erase audit history, and this system's audit trail must stay intact.
+    For genuinely unused accounts (duplicates, test/placeholder users)."""
+    user = db.query(User).filter(
+        User.id == user_id,
+        User.organization_id == current_user.organization_id
+    ).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.id == current_user.id:
+        raise HTTPException(status_code=400, detail="Cannot delete yourself")
+
+    blockers = []
+
+    def check(model, column, label):
+        count = db.query(model).filter(column == user.id).count()
+        if count:
+            blockers.append(f"{count} {label}")
+
+    check(FormInstance, FormInstance.created_by, "submitted form(s)")
+    check(FormVersion, FormVersion.created_by, "form version(s)")
+    check(FormDefinition, FormDefinition.created_by, "form definition(s) designed")
+    check(FormAttachment, FormAttachment.uploaded_by, "attachment(s) uploaded")
+    check(ApprovalInstance, ApprovalInstance.approver_user_id, "approval step(s) as approver")
+    check(ApprovalInstance, ApprovalInstance.delegated_from_user_id, "approval step(s) delegated from them")
+    check(ApprovalTemplate, ApprovalTemplate.created_by, "approval template(s) designed")
+    check(ApprovalTemplateCCRecipient, ApprovalTemplateCCRecipient.specific_user_id, "approval template CC assignment(s)")
+    check(ApprovalTemplateStep, ApprovalTemplateStep.specific_user_id, "approval template step assignment(s)")
+    check(Signature, Signature.user_id, "signature(s)")
+    check(GeneratedDocument, GeneratedDocument.generated_by, "generated document(s)")
+    check(DocumentShare, DocumentShare.user_id, "document share(s)")
+    check(Delegation, Delegation.original_approver_id, "delegation(s) as original approver")
+    check(Delegation, Delegation.delegate_user_id, "delegation(s) as delegate")
+    check(Delegation, Delegation.created_by, "delegation(s) created by them")
+    check(AuditLog, AuditLog.user_id, "audit log entries")
+    check(User, User.manager_id, "direct report(s) (as manager)")
+    check(User, User.sn_manager_id, "direct report(s) (as senior manager)")
+    check(User, User.hod_id, "direct report(s) (as HOD)")
+
+    if blockers:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Cannot permanently delete {user.name}: they have "
+                f"{', '.join(blockers)}. Deactivate them instead to preserve history."
+            )
+        )
+
+    # Clean, no history anywhere - safe to hard-delete. Clear join-table and
+    # token rows first (no historical significance of their own), then the
+    # user row itself.
+    db.query(UserRole).filter(UserRole.user_id == user.id).delete()
+    db.query(PasswordResetToken).filter(PasswordResetToken.user_id == user.id).delete()
+    db.query(TrustedDevice).filter(TrustedDevice.user_id == user.id).delete()
+    deleted_name, deleted_email = user.name, user.email
+    db.delete(user)
+    db.commit()
+
+    audit_service.log_event(
+        db, current_user.organization_id, "USER_DELETED_PERMANENTLY",
+        user_id=current_user.id, entity_type="User", entity_id=user_id,
+        details={"deleted_name": deleted_name, "deleted_email": deleted_email}
+    )
+    return {"message": "User permanently deleted"}
 
 
 @router.post("/{user_id}/reset-password", response_model=AdminPasswordResetResponse)
