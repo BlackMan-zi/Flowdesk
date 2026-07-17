@@ -347,6 +347,29 @@ def deactivate_user(
     return {"message": "User deactivated"}
 
 
+@router.post("/{user_id}/reactivate")
+def reactivate_user(
+    user_id: str,
+    current_user: User = Depends(require_roles(RoleName.admin)),
+    db: Session = Depends(get_db)
+):
+    user = db.query(User).filter(
+        User.id == user_id,
+        User.organization_id == current_user.organization_id
+    ).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user.status = UserStatus.active
+    db.commit()
+
+    audit_service.log_event(
+        db, current_user.organization_id, "USER_REACTIVATED",
+        user_id=current_user.id, entity_type="User", entity_id=user.id
+    )
+    return {"message": "User reactivated"}
+
+
 @router.delete("/{user_id}/permanent")
 def delete_user_permanently(
     user_id: str,

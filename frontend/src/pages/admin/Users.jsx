@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  listUsers, createUser, updateUser, deactivateUser, deleteUserPermanently, listRoles, createRole, updateRole, deleteRole, listDepartments,
+  listUsers, createUser, updateUser, deactivateUser, reactivateUser, deleteUserPermanently, listRoles, createRole, updateRole, deleteRole, listDepartments,
   setMfaRequired, resetUserMfa
 } from '../../api/users'
 import { toast } from 'sonner'
@@ -14,6 +14,7 @@ import Button from '../../components/ui/Button'
 import Modal, { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/Modal'
 import Input, { Select } from '../../components/ui/Input'
 import Spinner from '../../components/ui/Spinner'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../components/ui/tabs'
 import {
   Search, X, Users, Plus, LayoutList, Network,
   ChevronDown, ChevronRight, Mail, Building2, UserCheck, ShieldCheck, ShieldAlert, Trash2, Pencil, Check
@@ -283,6 +284,7 @@ export default function AdminUsers() {
   const qc = useQueryClient()
   const { user: currentUser } = useAuth()
   const [view, setView]         = useState('list')   // 'list' | 'tree'
+  const [activeUserTab, setActiveUserTab] = useState('active')   // 'active' | 'deactivated'
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing]     = useState(null)
   const [form, setForm]           = useState(EMPTY)
@@ -411,6 +413,15 @@ export default function AdminUsers() {
     onError: () => toast.error('Failed to deactivate user.')
   })
 
+  const reactivateMutation = useMutation({
+    mutationFn: (id) => reactivateUser(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['users'] })
+      toast.success('User reactivated.')
+    },
+    onError: () => toast.error('Failed to reactivate user.')
+  })
+
   const deleteMutation = useMutation({
     mutationFn: (id) => deleteUserPermanently(id),
     onSuccess: () => {
@@ -452,6 +463,10 @@ export default function AdminUsers() {
       return tokens.every(t => haystack.includes(t))
     })
   }, [users, search, deptMap])
+
+  const isDeactivated = (u) => u.status === 'Not Active' || u.status === 'not_active'
+  const activeTabUsers = useMemo(() => filteredUsers.filter(u => !isDeactivated(u)), [filteredUsers])
+  const deactivatedTabUsers = useMemo(() => filteredUsers.filter(isDeactivated), [filteredUsers])
 
   const selectedUnit   = useMemo(() => {
     if (!form.dept_top_id || !form.department_id) return ''
@@ -547,12 +562,19 @@ export default function AdminUsers() {
               Reset MFA
             </Button>
           )}
-          {r.status !== 'Not Active' && r.status !== 'not_active' && (
+          {r.status !== 'Not Active' && r.status !== 'not_active' ? (
             <Button size="sm" variant="ghost"
               className="text-destructive hover:text-destructive/80"
               onClick={() => deactivateMutation.mutate(r.id)}
             >
               Deactivate
+            </Button>
+          ) : (
+            <Button size="sm" variant="ghost"
+              loading={reactivateMutation.isPending}
+              onClick={() => reactivateMutation.mutate(r.id)}
+            >
+              Reactivate
             </Button>
           )}
           {r.id !== currentUser?.id && (
@@ -783,9 +805,22 @@ export default function AdminUsers() {
       {isLoading ? (
         <div className="flex justify-center py-16"><Spinner /></div>
       ) : view === 'list' ? (
-        <Card>
-          <Table columns={columns} rows={filteredUsers} emptyMessage="No users match your search." />
-        </Card>
+        <Tabs value={activeUserTab} onValueChange={setActiveUserTab}>
+          <TabsList>
+            <TabsTrigger value="active">Active ({activeTabUsers.length})</TabsTrigger>
+            <TabsTrigger value="deactivated">Deactivated ({deactivatedTabUsers.length})</TabsTrigger>
+          </TabsList>
+          <TabsContent value="active" className="mt-4">
+            <Card>
+              <Table columns={columns} rows={activeTabUsers} emptyMessage="No users match your search." />
+            </Card>
+          </TabsContent>
+          <TabsContent value="deactivated" className="mt-4">
+            <Card>
+              <Table columns={columns} rows={deactivatedTabUsers} emptyMessage="No deactivated users." />
+            </Card>
+          </TabsContent>
+        </Tabs>
       ) : (
         <OrgChartView
           users={(search ? filteredUsers : users).filter(u => u.status !== 'Not Active' && u.status !== 'not_active')}
