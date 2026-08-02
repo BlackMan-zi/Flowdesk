@@ -191,7 +191,12 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 # Business routers require a user who has already rotated their starter
 # password. The auth router is exempt so /auth/me and
-# /auth/force-reset-password still work for a user who owes a reset.
+# /auth/force-reset-password still work for a user who owes a reset. The
+# events router is also exempt: EventSource can't send an Authorization
+# header, so its token travels as a query param instead (see
+# routers/events.py), and require_password_reset_complete authenticates via
+# the header-based oauth2_scheme — applying it here would 401 every SSE
+# connection before the route's own query-param auth ever runs.
 _password_gate = [Depends(require_password_reset_complete)]
 
 app.include_router(auth_router)
@@ -207,7 +212,7 @@ app.include_router(documents_router, dependencies=_password_gate)
 app.include_router(dashboard_router, dependencies=_password_gate)
 app.include_router(settings_router, dependencies=_password_gate)
 app.include_router(backup_router, dependencies=_password_gate)
-app.include_router(events_router, dependencies=_password_gate)
+app.include_router(events_router)
 
 # frontend/dist is at repo root level, one level up from backend/
 frontend_dist = os.path.join(REPO_ROOT, "frontend", "dist")

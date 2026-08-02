@@ -49,7 +49,12 @@ Nginx reverse proxy, all in Docker Compose. Hosted on-prem at
 
 ## In Progress
 
-Nothing is mid-change in tracked code as of this writing.
+Nothing is mid-change in tracked code as of this writing. Three real bugs
+were found during 2026-08-02 QA testing; the two code bugs (SSE realtime
+broken, login-error-swallowed-by-redirect) were fixed the same session —
+see Next Steps for root cause + fix details. The third (`mfa_enabled`
+schema fragility) was left as a data-only fix per user decision; the
+schema itself is still fragile.
 
 ## Active File(s)
 
@@ -57,6 +62,65 @@ None currently being edited.
 
 ## Changes Made (most recent session first)
 
+- 2026-08-02: Full end-to-end regression test session via live browser
+  (`claude-in-chrome`), covering everything merged since the 2026-07-16
+  session (10 commits: permanent user delete, Active/Deactivated tabs +
+  reactivation, deactivated-user confinement, structure-dependent one-form
+  workflow, approval-template CC recipients, per-device MFA trust, org-wide
+  MFA policy, email kill-switch). Found three real bugs; fixed two in code
+  (SSE realtime completely broken, login error message swallowed by a
+  redirect — both detailed in Next Steps) plus one data issue, and
+  confirmed the rest of the surface works as designed.
+  - **Environment fix, not a bug**: `flowdesk-nginx` and `flowdesk-api`
+    containers were running images built 2026-07-16, a full day *before*
+    the six most recent commits — none of that frontend/backend code was
+    actually deployed (Users page showed no Active/Deactivated tabs, old
+    "Bulk MFA" button still present, etc.). Fixed with `docker compose
+    build && docker compose up -d` from repo root. Also discovered the
+    browser's HTTP cache intermittently re-served the pre-rebuild
+    `index.html`/JS bundle after plain `navigate()` calls even post-rebuild
+    — a hard refresh (ctrl+shift+r) after every navigation was needed to
+    guarantee the current bundle. Worth remembering for any future
+    container-rebuild-mid-session workflow.
+  - **Data fix**: `GET /users` (Admin → Users page) was 500ing because
+    `UserResponse.mfa_enabled` (`backend/schemas/user.py:66`) is a
+    non-nullable `bool`, but 11 of the 12 `demo.*@bsc.rw` accounts had
+    `mfa_enabled = NULL` (the raw-SQL demo-user creation script never set
+    it, and the column has no DB-level default, unlike `mfa_required`
+    which does). Backfilled with `UPDATE users SET mfa_enabled = false
+    WHERE mfa_enabled IS NULL` — data-only fix, schema left as-is per user
+    decision (didn't want the code touched this session, just data
+    corrected). **The schema fragility is still there** — any future path
+    that inserts a `User` row without explicitly setting `mfa_enabled`
+    will reproduce this 500. See Next Steps.
+  - Verified working correctly, live, end-to-end: plain login incl.
+    anti-enumeration and deactivated-account 403; MFA enrollment + verify
+    + wrong-code inline error (no regression on the 401→400 fix from
+    2026-07-16); per-device MFA trust (trust → same browser skips MFA →
+    different/cleared session re-challenges); org-wide "Require MFA for
+    everyone" + reauth-days Settings tab; Active/Deactivated tabs with
+    counts; Reactivate; self-deactivate block (400, toast shown correctly);
+    Delete button only rendering on the Deactivated tab; deactivated-user
+    admin-picker exclusion (confirmed via a display-only issue below, not
+    a functional break); non-admin correctly redirected away from
+    `/admin/settings`; full form submit → route-to-manager → approve →
+    "Approved" status → PDF generated (`generated_documents` row, 10.8KB)
+    happy path; Approval Templates CC recipients UI (position/person +
+    plain email + label, round-trips correctly, "CC" column count updates,
+    correct `ApprovalTemplateCCRecipient` row with `role_type=email`
+    persisted and linked to the right template).
+  - Demo-data changes made for testing (all reversible, isolated from real
+    seeded users): granted `demo.it@bsc.rw` the `Admin` role (in addition
+    to its existing `IT` role) so admin-surface testing didn't require
+    William's or Gilbert's real password; set `demo.finance@bsc.rw`'s
+    `manager_id` to `usr-demo-cfo` so a Hierarchy-based approval chain
+    could be exercised entirely with demo accounts; two real Site Report
+    submissions now exist (`FD-SR-2026-0001`, `-0002`), both fully approved
+    with generated PDFs; added a `test-distro@bsc.rw` / "QA Test Distro" CC
+    recipient to the "Site Report Approval" template (left in place —
+    harmless, but worth removing before any real rollout). Org
+    `require_mfa_for_all` was turned on then back off during MFA testing;
+    currently **off** (left as it was found).
 - 2026-07-16 (latest session): William Manzi promoted to Admin (see below).
   Four pieces of work, all behind that new Admin access:
   1. **Admin manual password reset.** New `POST /users/{id}/reset-password`
@@ -205,10 +269,101 @@ one-line reason so it isn't retried blindly:
 
 ## Next Steps
 
-- **Verify the admin UI** for the MFA/password-reset work above: Users page
-  (MFA toggle per row, Enrolled/Pending badge, Reset MFA button, Bulk MFA
-  dialog) and Settings page ("Reset User Password" card). Not yet clicked
-  through this session.
+- ~~[BUG, high severity] SSE realtime is completely broken~~ — **fixed**
+  same session, right after being found. Root cause:
+  `app.include_router(events_router, dependencies=_password_gate)` in
+  `backend/main.py:210` applied `require_password_reset_complete` →
+  `get_current_active_user` → `get_current_user`, which authenticates via
+  `Depends(oauth2_scheme)` (an `Authorization: Bearer` header). But
+  `GET /events/stream` is opened by the browser's native `EventSource`,
+  which **cannot send custom headers** — the token travels as
+  `?token=<jwt>` instead, and `events.py`'s own `stream()` handler already
+  manually decodes that query param (see its docstring). The router-level
+  dependency ran *before* the handler body, so every SSE connection 401ed
+  with FastAPI's generic "Not authenticated" (confirmed live via curl to
+  the API container directly, bypassing both nginx layers — same 401, so
+  it wasn't a proxy issue). Net effect before the fix: no user had been
+  able to open a live event stream since whatever commit added this
+  router-wide dependency (`2940b8c` security-hardening is the likely
+  culprit). Compounding it: commit `98da419` removed the old
+  `refetchInterval: 1_000` polling fallback from `MyForms.jsx`/
+  `ApprovalsInbox.jsx`, leaving only `refetchOnMount`/`refetchOnWindowFocus`
+  — so the UI was only updating on manual navigation or window refocus,
+  never live. **Fix applied**: dropped `dependencies=_password_gate` from
+  the `events_router` registration (`backend/main.py:210`) — the route's
+  own manual token/user/active-status check in `stream()` is sufficient and
+  was already designed for exactly this. Verified live: `curl` straight to
+  `/api/events/stream?token=...` now returns 200 and stays open instead of
+  401; the browser's real `EventSource` connection now shows `pending`
+  (open/streaming) in the network log instead of instant-401. Two-session
+  live cross-tab update propagation (approve in one tab → other tab updates
+  without refresh) was not separately re-verified after the fix — worth a
+  quick look next session, though the connection succeeding is the part
+  that was actually broken.
+- ~~[BUG, medium severity] Wrong password on login silently discards the
+  error message~~ — **fixed** same session. Root cause:
+  `frontend/src/api/client.js`'s response interceptor did
+  `window.location.href = SUBPATH + '/login'` on *any* 401, including
+  `POST /auth/login`'s own "Invalid email or password" 401 for a
+  wrong-password attempt. That full page navigation fired before
+  `Login.jsx`'s `catch` block ever rendered its inline `<Alert>` —
+  confirmed via network log: `POST /auth/login → 401` was immediately
+  followed by `GET /login` (document reload), every time, reproducibly.
+  Same bug class the 2026-07-16 session fixed for the MFA endpoints
+  (changed 401→400 there specifically to dodge this interceptor) — but the
+  interceptor itself was never fixed, so the plain login endpoint stayed
+  exposed. Same applied to the unknown-email-domain 401 path. The
+  deactivated-account path was never affected (uses 403, not 401). **Fix
+  applied**: the interceptor now checks `err.config?.url?.includes
+  ('/auth/login')` and skips the hard redirect for that request specifically
+  (`frontend/src/api/client.js`), leaving the "Invalid email or password"
+  alert intact for the user to see. Verified live: wrong password now shows
+  the inline red alert with fields still populated, no redirect; correct
+  password still logs in and redirects to the dashboard normally
+  (regression-checked).
+- **[Bug, low severity / data-integrity fragility, NOT fixed]**
+  `backend/schemas/user.py:66`'s `UserResponse.mfa_enabled: bool` is
+  non-nullable but the DB column allows NULL with no default. Backfilled
+  the 11 affected demo rows to `false` this session (see Changes Made), but
+  the schema itself is still one un-set `mfa_enabled` away from breaking
+  `GET /users` again for any future user row inserted without it explicitly
+  set (e.g. any other raw-SQL seed/import script). Fix: either
+  `Optional[bool] = False` in the schema, or `server_default=false()` on
+  the DB column (ideally both).
+- **[Minor UX gap, not a functional bug]** Admin → Users → Edit modal shows
+  "Manager"/"SN Manager"/"HOD" as **"None"** whenever the actually-assigned
+  person is deactivated, because the `<Select>`'s option list is filtered
+  to `activeUsers` only (`frontend/src/pages/admin/Users.jsx:863-874`, part
+  of the `c434351` deactivated-user-confinement work) but `form.manager_id`
+  itself is still correctly populated from the real (deactivated) value
+  underneath — confirmed via DB: William's `manager_id`/`hod_id` are set to
+  two of the 22 deactivated staff, yet his Edit modal shows both as "None".
+  Not destructive (the underlying value isn't cleared unless the admin
+  actually interacts with that dropdown), but misleading — an admin can't
+  tell "genuinely unset" from "set to someone now deactivated" without
+  checking the DB. Worth showing the deactivated name (e.g. greyed out,
+  "(deactivated)") instead of silently falling back to the "None" option.
+- **Deactivated-manager approval-chain edge case, observed not exploited**:
+  this session avoided testing what happens when a Hierarchy approval step
+  (Manager/SN Manager/HOD) resolves to a *deactivated* user (e.g. William
+  submitting a form, since his real manager/HOD are among the 22
+  deactivated staff) — used demo-account hierarchy links instead to keep
+  the happy-path test clean. Still an open question whether
+  `initialize_approval_steps` / `resolve_approver_for_step`
+  (`backend/services/approval_service.py`) has any check for this, or
+  whether it would silently create a step assigned to someone who can never
+  log in to approve it (a permanent deadlock). Worth a dedicated look
+  before real rollout, given 20 of the 22 deactivated staff were real
+  managers/HODs for other real (currently also deactivated, but will be
+  reactivated) staff.
+- ~~Verify the admin UI for the MFA/password-reset work~~ — done in the
+  2026-08-02 session: Users page tabs/MFA controls and Settings "MFA &
+  Password Reset" tab all confirmed present and working (the old one-time
+  "Bulk MFA" dialog referenced here is correctly gone, replaced by the
+  org-wide toggle, once the container was rebuilt with current code — see
+  Changes Made). Did not click "Reset MFA" or the Settings "Reset User
+  Password" button specifically this session (both are simple, low-risk UI
+  affordances backed by endpoints already exercised via other means).
 - Once the system is approved for real rollout: flip the 22 deactivated
   real seeded BSC Rwanda staff back to `active`
   (`UPDATE users SET status='active' WHERE organization_id='org-bsc-001'

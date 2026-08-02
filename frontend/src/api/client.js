@@ -20,7 +20,13 @@ client.interceptors.request.use(cfg => {
 client.interceptors.response.use(
   res => res,
   err => {
-    if (err.response?.status === 401) {
+    // A 401 from the login request itself is a wrong-password/unknown-email
+    // rejection, not an expired session — hard-redirecting here would wipe
+    // Login.jsx's in-progress form state before its own catch block can
+    // show the inline error. Same rationale as the MFA endpoints returning
+    // 400 instead of 401 for a bad code.
+    const isLoginRequest = err.config?.url?.includes('/auth/login')
+    if (err.response?.status === 401 && !isLoginRequest) {
       localStorage.removeItem('fd_token')
       localStorage.removeItem('fd_user')
       window.location.href = SUBPATH + '/login'
