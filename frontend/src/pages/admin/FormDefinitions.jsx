@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
   listFormDefinitions, createFormDefinition, updateFormDefinition, deleteFormDefinition,
@@ -633,7 +633,10 @@ export default function AdminFormDefinitions() {
                 })}
               </div>
               <p className="text-xs text-muted-foreground">
-                Manage available labels in <strong>Configuration → Organization</strong>.
+                Manage available labels in{' '}
+                <Link to="/admin/settings?tab=classification" target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:underline">
+                  Settings → Classification
+                </Link>.
               </p>
             </div>
 

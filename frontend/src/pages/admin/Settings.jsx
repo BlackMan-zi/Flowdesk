@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
@@ -14,15 +15,16 @@ import { listUsersDirectory, adminResetPassword } from '../../api/users'
 import { Card, CardContent } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Input, Select } from '../../components/ui/Input'
-import { Alert } from '../../components/ui/alert'
+import { Alert, AlertDescription } from '../../components/ui/alert'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/Modal'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../components/ui/tabs'
 import { Switch } from '../../components/ui/switch'
 import { cn, copyToClipboard } from '../../lib/utils'
 import {
-  Upload, Trash2, Image as ImageIcon, Building2, Palette, Shield, ShieldCheck,
+  Upload, Trash2, Image as ImageIcon, Palette, Shield, ShieldCheck,
   Plus, X, Save, AlertCircle, Check, Eye,
   Database, Download, RefreshCw, Clock, KeyRound, Copy,
+  Settings as SettingsIcon, FileImage, Tag,
 } from 'lucide-react'
 import LetterheadPage from '../../components/letterhead/LetterheadPage'
 import SampleFormBody from '../../components/letterhead/SampleFormBody'
@@ -572,8 +574,25 @@ function ResetUserPasswordCard() {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
+// Tabs group related settings. The active tab lives in the URL (?tab=...)
+// so other pages can deep-link (e.g. Form Definitions → Classification).
+const TABS = [
+  { value: 'letterhead',     label: 'Letterhead',     icon: FileImage },
+  { value: 'classification', label: 'Classification', icon: Tag },
+  { value: 'security',       label: 'Security',       icon: ShieldCheck },
+  { value: 'backups',        label: 'Backups',        icon: Database },
+]
+
 export default function Settings() {
   const qc = useQueryClient()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const requestedTab = searchParams.get('tab')
+  const tab = TABS.some(t => t.value === requestedTab) ? requestedTab : TABS[0].value
+  const setTab = (value) => setSearchParams(prev => {
+    const next = new URLSearchParams(prev)
+    next.set('tab', value)
+    return next
+  }, { replace: true })
   // Other pages (Dashboard, FormDetail, SubmitForm, ApprovalAction) all
   // share the same ['my-organization'] queryKey but unwrap the axios
   // response inside their queryFn, so the cached value is the org data
@@ -633,17 +652,21 @@ export default function Settings() {
     }
   }, [org])
 
-  const dirty = useMemo(() => {
-    if (!org) return false
-    const accentChanged = (org.letterhead_accent || '') !== accent
+  // Which tabs hold unsaved edits. One Save button covers all of them, so
+  // each tab trigger shows a dot when its own fields have changed.
+  const dirtyTabs = useMemo(() => {
+    if (!org) return {}
     const orgLabels = org.classification_labels && org.classification_labels.length
       ? org.classification_labels : DEFAULT_LABELS
-    const labelsChanged = JSON.stringify(orgLabels) !== JSON.stringify(labels)
-    const mfaToggleChanged = !!org.require_mfa_for_all !== requireMfaForAll
     const orgReauthDays = org.mfa_reauth_days != null ? String(org.mfa_reauth_days) : ''
-    const reauthDaysChanged = orgReauthDays !== reauthDays
-    return accentChanged || labelsChanged || mfaToggleChanged || reauthDaysChanged
+    return {
+      letterhead: (org.letterhead_accent || '') !== accent,
+      classification: JSON.stringify(orgLabels) !== JSON.stringify(labels),
+      security: !!org.require_mfa_for_all !== requireMfaForAll || orgReauthDays !== reauthDays,
+    }
   }, [org, accent, labels, requireMfaForAll, reauthDays])
+  const dirty = Object.values(dirtyTabs).some(Boolean)
+  const dirtyTabLabels = TABS.filter(t => dirtyTabs[t.value]).map(t => t.label)
 
   const updateMut = useMutation({
     mutationFn: () => updateMyOrganization({
@@ -691,7 +714,7 @@ export default function Settings() {
   if (!org) {
     return (
       <div className="p-6">
-        <Alert variant="destructive">Could not load organization settings.</Alert>
+        <Alert variant="destructive">Could not load settings.</Alert>
       </div>
     )
   }
@@ -701,19 +724,15 @@ export default function Settings() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
-            <Building2 size={18} className="text-muted-foreground" />
-            Organization Settings
+            <SettingsIcon size={18} className="text-muted-foreground" />
+            Settings
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Letterhead and classification options applied to every form created in <strong>{org.name}</strong>.
+            Organization-wide configuration for <strong>{org.name}</strong>.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setPreviewOpen(true)}>
-            <Eye size={14} className="mr-1.5" />
-            Preview letterhead
-          </Button>
+        <div className="flex items-center gap-2 shrink-0">
           {dirty ? (
             <Button onClick={() => updateMut.mutate()} disabled={updateMut.isPending}>
               <Save size={14} className="mr-1.5" />
@@ -728,19 +747,46 @@ export default function Settings() {
       </div>
 
       {dirty && (
-        <Alert>
-          <AlertCircle size={14} className="inline mr-1.5" />
-          You have unsaved changes. Image uploads save automatically.
+        <Alert variant="warning">
+          <AlertCircle size={14} />
+          <AlertDescription>
+            Unsaved changes in <strong>{dirtyTabLabels.join(', ')}</strong>.
+            Image uploads, password resets and snapshots take effect immediately.
+          </AlertDescription>
         </Alert>
       )}
 
-      <Tabs defaultValue="general">
-        <TabsList>
-          <TabsTrigger value="general">General</TabsTrigger>
-          <TabsTrigger value="mfa">MFA &amp; Password Reset</TabsTrigger>
-        </TabsList>
+      <Tabs value={tab} onValueChange={setTab}>
+        <div className="overflow-x-auto -mx-1 px-1">
+          <TabsList>
+            {TABS.map(({ value, label, icon: Icon }) => (
+              <TabsTrigger key={value} value={value} className="gap-1.5">
+                <Icon size={13} />
+                {label}
+                {dirtyTabs[value] && (
+                  <span
+                    className="h-1.5 w-1.5 rounded-full bg-amber-500"
+                    aria-label="unsaved changes"
+                    title="Unsaved changes"
+                  />
+                )}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </div>
 
-        <TabsContent value="general" className="mt-5 space-y-6">
+        {/* Letterhead: everything that shapes how generated PDFs look */}
+        <TabsContent value="letterhead" className="mt-5 space-y-6">
+          <div className="flex items-start justify-between gap-4">
+            <p className="text-sm text-muted-foreground">
+              Applied to every form PDF generated in your organization.
+            </p>
+            <Button variant="outline" size="sm" className="shrink-0" onClick={() => setPreviewOpen(true)}>
+              <Eye size={14} className="mr-1.5" />
+              Preview letterhead
+            </Button>
+          </div>
+
           <div className="grid gap-4 md:grid-cols-2">
             <LetterheadImageCard
               kind="header"
@@ -790,12 +836,15 @@ export default function Settings() {
             </CardContent>
           </Card>
 
-          <ClassificationLabelsEditor labels={labels} onChange={setLabels} />
-
-          <DatabaseBackupCard />
         </TabsContent>
 
-        <TabsContent value="mfa" className="mt-5 space-y-6">
+        {/* Classification: the labels admins pick from when building forms */}
+        <TabsContent value="classification" className="mt-5 space-y-6">
+          <ClassificationLabelsEditor labels={labels} onChange={setLabels} />
+        </TabsContent>
+
+        {/* Security: login policy and account recovery */}
+        <TabsContent value="security" className="mt-5 space-y-6">
           <MfaPolicyCard
             requireMfaForAll={requireMfaForAll}
             onRequireMfaForAllChange={setRequireMfaForAll}
@@ -803,6 +852,11 @@ export default function Settings() {
             onReauthDaysChange={setReauthDays}
           />
           <ResetUserPasswordCard />
+        </TabsContent>
+
+        {/* Backups: data protection, kept apart from day-to-day settings */}
+        <TabsContent value="backups" className="mt-5 space-y-6">
+          <DatabaseBackupCard />
         </TabsContent>
       </Tabs>
 

@@ -62,6 +62,19 @@ None currently being edited.
 
 ## Changes Made (most recent session first)
 
+- 2026-11-07 (later): Admin "Organization" page renamed **Settings**
+  (sidebar + `pages/admin/Settings.jsx`) and regrouped into four tabs:
+  Letterhead (header/footer images, accent, preview button), Classification
+  (labels), Security (MFA policy, reset user password), Backups (Excel
+  snapshots). Active tab is in the URL (`?tab=...`); an amber dot marks tabs
+  with unsaved edits (one Save button spans tabs). Form Definitions' labels
+  hint now links to `/admin/settings?tab=classification` (new browser tab,
+  since it sits inside the edit dialog). Verified in the browser on a local
+  build. **Local `bsc-proxy` is crash-looping** (1000+ restarts:
+  "duplicate default server for 0.0.0.0:80" in `C:\dev\bsc-proxy\conf`), so
+  `http://localhost/flowdesk/` is down locally; this predates this work and
+  was not touched. Tested via a throwaway nginx on port 8097 instead.
+
 - 2026-11-07: Preparing a second deployment on the new BG apps server
   (Ubuntu, Traefik, subdomains, `flowdesk.apps.bonusgroup.rw`). Runbook and
   chunked roadmap live in `bg-apps-server-setup.md` (section 9).
