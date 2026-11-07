@@ -62,6 +62,15 @@ None currently being edited.
 
 ## Changes Made (most recent session first)
 
+- 2026-11-07: Preparing a second deployment on the new BG apps server
+  (Ubuntu, Traefik, subdomains, `flowdesk.apps.bonusgroup.rw`). Runbook and
+  chunked roadmap live in `bg-apps-server-setup.md` (section 9).
+  `Dockerfile.nginx`: `VITE_BASE_PATH` is now a build `ARG` (default
+  `/flowdesk/`, so BSC Hub builds are unchanged); the BG server builds with
+  `VITE_BASE_PATH=/`. No other code change was needed: `App.jsx`,
+  `api/client.js` and `RealtimeContext.jsx` already detect `/flowdesk` from
+  `window.location` at runtime, and the PDF worker uses
+  `import.meta.env.BASE_URL`.
 - 2026-08-02: Full end-to-end regression test session via live browser
   (`claude-in-chrome`), covering everything merged since the 2026-07-16
   session (10 commits: permanent user delete, Active/Deactivated tabs +

@@ -7,7 +7,11 @@ COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 
 COPY frontend/ ./
-ENV VITE_BASE_PATH=/flowdesk/
+# Base path the app is served under. Default suits the BSC Hub
+# (10.20.26.47/flowdesk/). For subdomain hosting (e.g. the BG apps server,
+# flowdesk.apps.bonusgroup.rw) build with: --build-arg VITE_BASE_PATH=/
+ARG VITE_BASE_PATH=/flowdesk/
+ENV VITE_BASE_PATH=${VITE_BASE_PATH}
 RUN npm run build
 
 # ── Stage 2: Serve with nginx ─────────────────────────────────
