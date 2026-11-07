@@ -17,9 +17,9 @@ docker compose up -d --build
 echo "==> Removing old unused images"
 docker image prune -f > /dev/null
 
-echo "==> Waiting for the API to start"
+echo "==> Waiting for the API to answer through nginx"
 for _ in $(seq 1 30); do
-  if docker logs --since 2m flowdesk-api 2>&1 | grep -q "Application startup complete"; then
+  if docker exec flowdesk-nginx wget -qO- http://127.0.0.1/api/health 2>/dev/null | grep -q healthy; then
     docker compose ps
     echo "==> Deployed $(git log -1 --format='%h %s')"
     exit 0
@@ -27,6 +27,6 @@ for _ in $(seq 1 30); do
   sleep 2
 done
 
-echo "!! API did not report startup within 60s. Last log lines:"
+echo "!! API not healthy after 60s. Last log lines:"
 docker logs --tail 30 flowdesk-api
 exit 1
