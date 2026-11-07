@@ -2,7 +2,7 @@
 #
 # Separate client and separate install from the BSC Hub deployment
 # (docker-compose.yml). Served at https://flowdesk.apps.bonusgroup.rw
-# (public URL carries :8443 until the office router forwards 443).
+# (public URL carries :9443 until the office router forwards 443).
 #
 # On the server, in /opt/apps/flowdesk:
 #   cp bonusgroup.env.example .env   # then fill in real values
