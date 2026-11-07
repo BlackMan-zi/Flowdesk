@@ -60,6 +60,45 @@ schema itself is still fragile.
 
 None currently being edited.
 
+## Resume here: Bonus Group (paused 2026-11-07)
+
+Server runbook and status: `bg-apps-server-setup.md` (section 9). FlowDesk is
+live at `https://flowdesk.apps.bonusgroup.rw:9443`; deploy with
+`ssh william@apps /opt/apps/flowdesk/deploy-bonusgroup.sh` (or
+`cd /opt/apps/flowdesk && ./deploy-bonusgroup.sh` on the server). Settings
+page rework (`781fd07`) pushed; confirm it was deployed.
+
+**Was in the middle of:** designing Bonus Group's setup in FlowDesk.
+- Org: MD, CEO, Chief Finance, HR, Marketing Manager, Production Manager,
+  Logistics, factory storekeepers, sales point operatives; 10 sales points,
+  2 factories (paper bags; A4 reams + boxes), warehouse, a few trucks
+  (one truck often serves several sales points).
+- Proposed departments: Executive, Finance, HR, Marketing & Sales (units:
+  Sales Point 1-10), Production (units: two factories), Logistics (units:
+  Warehouse, Transport). Individual logins, no shared accounts.
+- Proposed flow: Stock Requisition (one form per factory, items table,
+  storekeeper signs) → Dispatch → Goods Received Note (qty received/short,
+  photo, storekeeper acknowledges, Logistics CC) replacing WhatsApp/calls;
+  optional Trip Sheet per truck run.
+- Gaps found: login needs an `@bonusgroup.rw` email (org detected by
+  domain; only ~25 mailboxes exist); role list fixed in code (no
+  Storekeeper/Sales Point roles); approver can't fill a "qty issued" table
+  column; GRN not linked to its requisition; no stock balances; email-only
+  notifications; mobile use untested.
+- Open questions for the user: who supervises the sales points; any
+  approval beyond the storekeeper (Production Manager / Finance threshold);
+  do sales point staff and storekeepers have company email; is the
+  warehouse separate from the factories; a photo of the current paper form.
+- Still recommended before creating users: replace "initial password =
+  user's email" (`routers/users.py` create_user) with a random temp
+  password, since the server is internet-facing.
+
+Other open items: hairpin NAT (check at office), real SMTP settings
+(emails are off), off-server backups (deferred), monitoring (on hold),
+5 tracked docs deleted in the working tree (user to decide), runbook
+`bg-apps-server-setup.md` not committed (user to decide), local
+`bsc-proxy` crash-looping (not touched).
+
 ## Changes Made (most recent session first)
 
 - 2026-11-07 (later): Admin "Organization" page renamed **Settings**
