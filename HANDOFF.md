@@ -71,6 +71,15 @@ None currently being edited.
   `api/client.js` and `RealtimeContext.jsx` already detect `/flowdesk` from
   `window.location` at runtime, and the PDF worker uses
   `import.meta.env.BASE_URL`.
+  Bonus Group is a **separate client**, fresh install, nothing shared with the
+  BSC Hub. Added `docker-compose.bonusgroup.yml` (db/api on a private network,
+  only nginx on the external `proxy` network with Traefik labels),
+  `bonusgroup.env.example` (template; `.env.*` is gitignored so the name is
+  deliberate), and `backend/scripts/bootstrap_org.py` (generic: creates an org,
+  all 15 roles and a first Admin with a temporary password; refuses if the
+  domain exists). Tested on a throwaway fresh Postgres; note the local dev DB
+  has a legacy NOT NULL `organizations.subdomain` column absent from the model,
+  so the script fails there (fresh installs are fine).
 - 2026-08-02: Full end-to-end regression test session via live browser
   (`claude-in-chrome`), covering everything merged since the 2026-07-16
   session (10 commits: permanent user delete, Active/Deactivated tabs +

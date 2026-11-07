@@ -1,0 +1,86 @@
+# FlowDesk: Bonus Group deployment (BG apps server, Traefik + subdomain)
+#
+# Separate client and separate install from the BSC Hub deployment
+# (docker-compose.yml). Served at https://flowdesk.apps.bonusgroup.rw
+# (public URL carries :8443 until the office router forwards 443).
+#
+# On the server, in /opt/apps/flowdesk:
+#   cp bonusgroup.env.example .env   # then fill in real values
+#   docker compose -f docker-compose.bonusgroup.yml up -d --build
+#
+# Requires the shared external `proxy` network and Traefik
+# (/opt/apps/traefik), which holds the *.apps.bonusgroup.rw certificate.
+
+name: flowdesk
+
+services:
+
+  # ── PostgreSQL ─────────────────────────────────────────────
+  # Private network only: never reachable from Traefik or the host.
+  db:
+    image: postgres:16-alpine
+    container_name: flowdesk-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - internal
+
+  # ── FastAPI backend ────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: flowdesk-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - media:/app/media
+    networks:
+      - internal
+
+  # ── Nginx + React frontend ─────────────────────────────────
+  # The only container Traefik can reach. nginx.conf proxies /api/ to
+  # `flowdesk-api` over the private network.
+  nginx:
+    build:
+      context: .
+      dockerfile: Dockerfile.nginx
+      args:
+        VITE_BASE_PATH: /
+    container_name: flowdesk-nginx
+    restart: unless-stopped
+    depends_on:
+      - api
+    networks:
+      - internal
+      - proxy
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=proxy
+      - traefik.http.routers.flowdesk.rule=Host(`flowdesk.apps.bonusgroup.rw`)
+      - traefik.http.routers.flowdesk.entrypoints=websecure
+      - traefik.http.services.flowdesk.loadbalancer.server.port=80
+
+volumes:
+  pgdata:
+  media:
+
+networks:
+  internal: {}
+  proxy:
+    external: true
