@@ -93,6 +93,41 @@ page rework (`781fd07`) pushed; confirm it was deployed.
   user's email" (`routers/users.py` create_user) with a random temp
   password, since the server is internet-facing.
 
+**Where we stopped (2026-11-09): brainstorm only, user will come back to
+it.** Bonus Group wants a factory operations system (two factories: Nyanza =
+paper bags, Rwamagana = A4 paper): per-machine production / waste / damage,
+production runs approved before posting to inventory, corrective maintenance
+cost per machine, preventive maintenance scheduling with checklists,
+consumable-change counts, plus a company-wide asset register. Asked: one
+system or many systems sharing data over APIs?
+
+Recommendation given (not yet accepted or rejected): **one new modular app,
+"BG Ops"**, same stack and deployment as FlowDesk, at
+`ops.apps.bonusgroup.rw`, one database, modules Assets → Production →
+Maintenance → Inventory → Reports, in that build order. Reason: every report
+the user wants joins production, maintenance and assets on the machine;
+separate apps would mean stitching data over APIs and maintaining users /
+sites / machine lists several times. FlowDesk stays separate as the generic
+people/admin approval product; Ops gets its own simple one-step production
+approval. Login: Ops trusts FlowDesk JWTs at first ("Sign in with FlowDesk"),
+proper SSO later if more apps appear. API links between the two only where
+useful (e.g. work order needing parts → FlowDesk purchase requisition).
+Consequence: the sales-point ↔ factory stock requisition flow sketched
+earlier belongs in Ops Inventory, not FlowDesk (removes most of the gaps
+listed above).
+
+Questions still unanswered by the user (needed before a data model):
+machines per factory and how output is counted today; units (pieces/bundles,
+reams/boxes); who approves a production run; in-house vs vendor maintenance
+and known PM intervals; existing asset list in Excel and whether
+depreciation is needed; whether the BSC Hub Asset Tracker / Inventory
+Tracker code is the user's own and could be forked for the Assets and
+Inventory modules (code only, never BSC data).
+
+Next step when resumed: get those answers, then produce a Phase 1 data
+model and screen list (Assets + Production with approval), still no code
+until the user says so.
+
 Other open items: hairpin NAT (check at office), real SMTP settings
 (emails are off), off-server backups (deferred), monitoring (on hold),
 5 tracked docs deleted in the working tree (user to decide), runbook
